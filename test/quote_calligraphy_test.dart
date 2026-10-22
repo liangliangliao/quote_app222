@@ -37,13 +37,22 @@ void main() {
         .toSet();
     expect(families, contains(quoteChineseSignatureFont));
     expect(families, contains(quoteLatinSignatureFont));
+    expect(
+      span.children!
+          .whereType<TextSpan>()
+          .map((child) => child.style?.fontWeight)
+          .toSet(),
+      {FontWeight.w500},
+    );
   });
 
   test('each body style resolves to its dedicated bundled typeface', () {
     const base = TextStyle(fontSize: 20);
 
     for (final style in QuoteCalligraphyStyle.values) {
-      expect(quoteCalligraphyTextStyle(base, style).fontFamily, style.fontFamily);
+      final resolved = quoteCalligraphyTextStyle(base, style);
+      expect(resolved.fontFamily, style.fontFamily);
+      expect(resolved.fontWeight, FontWeight.w500);
     }
   });
 
@@ -55,10 +64,9 @@ void main() {
       isTrue,
     );
     expect(quotePrefersLiteraryEnglish('知行合一，止于至善。'), isFalse);
-    expect(
-      quoteLiteraryTextStyle(const TextStyle(fontSize: 20)).fontFamily,
-      quoteLiterarySerifFont,
-    );
+    final style = quoteLiteraryTextStyle(const TextStyle(fontSize: 20));
+    expect(style.fontFamily, quoteLiterarySerifFont);
+    expect(style.fontWeight, FontWeight.w600);
   });
 
   testWidgets('writing reveal keeps final paragraph geometry stable',

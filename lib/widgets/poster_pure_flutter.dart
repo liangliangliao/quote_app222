@@ -129,12 +129,13 @@ class _PaperComposition extends StatelessWidget {
             fontSize: (width * .050).clamp(9.0, 15.0),
             height: 1.4,
             color: const Color(0xff544b44),
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           );
           final footerStyle = baseStyle.copyWith(
             fontSize: (width * .047).clamp(9.0, 14.0),
             height: 1.5,
             color: const Color(0xff625c55),
+            fontWeight: FontWeight.w600,
           );
 
           double measure(
@@ -192,18 +193,18 @@ class _PaperComposition extends StatelessWidget {
               math.max(1.0, contentHeight - authorHeight - authorGap);
 
           var quoteSize = isLiteraryEnglish
-              ? (width * .071).clamp(13.0, 23.0).toDouble()
-              : (width * .083).clamp(14.0, 27.0).toDouble();
+              ? (width * .078).clamp(14.0, 25.0).toDouble()
+              : (width * .091).clamp(15.0, 29.0).toDouble();
           final minimumSize = isLiteraryEnglish
-              ? (width * .052).clamp(10.5, 16.0).toDouble()
-              : (width * .062).clamp(11.0, 18.0).toDouble();
+              ? (width * .057).clamp(11.5, 17.5).toDouble()
+              : (width * .067).clamp(12.0, 19.5).toDouble();
 
           TextStyle quoteStyle() {
             final original = baseStyle.copyWith(
               fontSize: quoteSize,
               height: 1.47,
               letterSpacing: .45,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               color: const Color(0xff25211d),
             );
             if (isLiteraryEnglish) {

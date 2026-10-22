@@ -41,7 +41,7 @@ bool quotePrefersLiteraryEnglish(String text) {
 
 TextStyle quoteLiteraryTextStyle(TextStyle base) => base.copyWith(
       fontFamily: quoteLiterarySerifFont,
-      fontWeight: FontWeight.w400,
+      fontWeight: FontWeight.w600,
       fontStyle: FontStyle.normal,
       height: 1.56,
       letterSpacing: .12,
@@ -73,7 +73,7 @@ TextSpan quoteAuthorSignatureSpan(String text, TextStyle baseStyle) {
       return baseStyle.copyWith(
         fontFamily: quoteChineseSignatureFont,
         fontSize: (baseStyle.fontSize ?? 14) * 1.08,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w500,
         fontStyle: FontStyle.normal,
         letterSpacing: .25,
         height: 1.30,
@@ -82,7 +82,7 @@ TextSpan quoteAuthorSignatureSpan(String text, TextStyle baseStyle) {
     return baseStyle.copyWith(
       fontFamily: quoteLatinSignatureFont,
       fontSize: (baseStyle.fontSize ?? 14) * 1.23,
-      fontWeight: FontWeight.w400,
+      fontWeight: FontWeight.w500,
       fontStyle: FontStyle.normal,
       letterSpacing: .12,
       height: 1.23,
@@ -151,7 +151,7 @@ TextStyle quoteCalligraphyTextStyle(
     fontSize: style == QuoteCalligraphyStyle.caoshu
         ? fontSize * 1.06
         : fontSize,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w500,
     fontStyle: FontStyle.normal,
     height: style == QuoteCalligraphyStyle.kaishu ? 1.50 : 1.47,
     letterSpacing: switch (style) {
