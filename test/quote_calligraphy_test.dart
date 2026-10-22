@@ -47,6 +47,20 @@ void main() {
     }
   });
 
+  test('English quotations use the classical literary serif face', () {
+    expect(
+      quotePrefersLiteraryEnglish(
+        'No man is an island, entire of itself; every man is a piece of the continent.',
+      ),
+      isTrue,
+    );
+    expect(quotePrefersLiteraryEnglish('知行合一，止于至善。'), isFalse);
+    expect(
+      quoteLiteraryTextStyle(const TextStyle(fontSize: 20)).fontFamily,
+      quoteLiterarySerifFont,
+    );
+  });
+
   testWidgets('writing reveal keeps final paragraph geometry stable',
       (tester) async {
     const key = ValueKey('animated-calligraphy');

@@ -34,6 +34,15 @@ class PosterPureFlutter extends StatelessWidget {
   final QuoteCalligraphyStyle calligraphyStyle;
 
   void _openReading(BuildContext context) {
+    final readingQuoteStyle = quotePrefersLiteraryEnglish(quote)
+        ? quoteLiteraryTextStyle(
+            const TextStyle(fontSize: 21, height: 1.65),
+          )
+        : const TextStyle(
+            fontSize: 21,
+            height: 1.65,
+            fontWeight: FontWeight.w600,
+          );
     showModalBottomSheet<void>(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.white, showDragHandle: true,
@@ -45,10 +54,12 @@ class PosterPureFlutter extends StatelessWidget {
           child: SelectionArea(child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(topic, style: const TextStyle(fontSize: 20, height: 1.5)),
-              const SizedBox(height: 20),
-              Text(quote, style: const TextStyle(
-                fontSize: 21, height: 1.65, fontWeight: FontWeight.w600)),
+              if (topic.trim().isNotEmpty) ...[
+                Text(topic,
+                    style: const TextStyle(fontSize: 20, height: 1.5)),
+                const SizedBox(height: 20),
+              ],
+              Text(quote, style: readingQuoteStyle),
               if (author.trim().isNotEmpty) ...[
                 const SizedBox(height: 18),
                 QuoteAuthorSignature(author,
@@ -82,7 +93,7 @@ class PosterPureFlutter extends StatelessWidget {
           QuoteAdaptiveFrame(backgroundAsset: woodBgAsset,
             aiImagePath: aiFramePath, quoteCharacters: quote.runes.length),
           Positioned.fromRect(rect: paper, child: _PaperComposition(
-            topic: topic, quote: quote, author: author, note: note, avatar: avatar,
+            quote: quote, author: author, avatar: avatar,
             animateCalligraphy: animateCalligraphy,
             calligraphyStyle: calligraphyStyle,
             onRead: () => _openReading(context))),
@@ -94,148 +105,226 @@ class PosterPureFlutter extends StatelessWidget {
 
 class _PaperComposition extends StatelessWidget {
   const _PaperComposition({
-    required this.topic, required this.quote, required this.author,
-    required this.note, required this.avatar, required this.onRead,
+    required this.quote, required this.author,
+    required this.avatar, required this.onRead,
     required this.animateCalligraphy, required this.calligraphyStyle,
   });
-  final String topic, quote, author, note, avatar;
+  final String quote, author, avatar;
   final VoidCallback onRead;
   final bool animateCalligraphy;
   final QuoteCalligraphyStyle calligraphyStyle;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (context, bounds) {
-    final width = bounds.maxWidth, height = bounds.maxHeight;
-    final portrait = _posterAvatar(avatar.trim());
-    final hasAvatar = portrait != null;
-    final direction = Directionality.of(context);
-    final baseStyle = DefaultTextStyle.of(context).style;
-    final titleStyle = baseStyle.copyWith(
-      fontSize: (width * .069).clamp(11.0, 21.0), height: 1.35,
-      color: const Color(0xff352c27), letterSpacing: .35);
-    final authorStyle = baseStyle.copyWith(
-      fontSize: (width * .050).clamp(9.0, 15.0), height: 1.4,
-      color: const Color(0xff544b44), fontWeight: FontWeight.w500);
-    final noteStyle = baseStyle.copyWith(
-      fontSize: (width * .047).clamp(9.0, 14.0), height: 1.5,
-      color: const Color(0xff625c55));
-    double measure(String text, TextStyle style, double maxWidth, {int? maxLines}) {
-      if (text.trim().isEmpty) return 0;
-      final painter = TextPainter(
-        text: TextSpan(text: text, style: style), textDirection: direction,
-        textScaler: TextScaler.noScaling, maxLines: maxLines,
-        ellipsis: maxLines == null ? null : '…',
-      )..layout(maxWidth: maxWidth);
-      final result = painter.height;
-      painter.dispose();
-      return result;
-    }
-    double measureSpan(InlineSpan span, double maxWidth, {int? maxLines}) {
-      final painter = TextPainter(
-        text: span, textDirection: direction,
-        textScaler: TextScaler.noScaling, maxLines: maxLines,
-        ellipsis: maxLines == null ? null : '…',
-      )..layout(maxWidth: maxWidth);
-      final result = painter.height;
-      painter.dispose();
-      return result;
-    }
-    // Every source portrait uses the same 39:50 window. BoxFit.cover normalises
-    // the source canvas while ClipRect in QuotePortraitCutout is the final
-    // paint boundary, so neither the photograph nor its feather can overflow.
-    final portraitWidth = (width * .235).clamp(40.0, 76.0);
-    final portraitHeight = portraitWidth / .78;
-    final gap = (width * .041).clamp(5.0, 12.0);
-    final titleWidth = width - (hasAvatar ? portraitWidth + gap : 0);
-    final titleHeight = measure(topic, titleStyle, titleWidth, maxLines: 3);
-    final headerHeight = math.max(titleHeight, hasAvatar ? portraitHeight : 0.0);
-    final authorSpan = quoteAuthorSignatureSpan(author, authorStyle);
-    final authorHeight = measureSpan(authorSpan, width, maxLines: 3);
-    final footerHeight = (width * .105).clamp(22.0, 30.0);
-    final hasNote = note.trim().isNotEmpty;
-    final noteLineHeight = measure('解读', noteStyle, width);
-    final available = math.max(1.0, height - headerHeight - gap -
-      authorHeight - (author.trim().isNotEmpty ? gap : 0) -
-      (hasNote ? noteLineHeight * 2 + gap : 0) - footerHeight - 3);
-    var quoteSize = (width * .083).clamp(14.0, 27.0).toDouble();
-    final minimumSize = (width * .062).clamp(11.0, 18.0).toDouble();
-    TextStyle quoteStyle() {
-      final original = baseStyle.copyWith(
-        fontSize: quoteSize, height: 1.47, letterSpacing: .45,
-        fontWeight: FontWeight.w700, color: const Color(0xff25211d));
-      return animateCalligraphy
-        ? quoteCalligraphyTextStyle(original, calligraphyStyle)
-        : original;
-    }
-    while (quoteSize > minimumSize &&
-        measure(quote, quoteStyle(), width) > available) {
-      quoteSize = math.max(minimumSize, quoteSize - .25);
-    }
-    final fullQuoteHeight = measure(quote, quoteStyle(), width);
-    final quoteLineHeight = measure('名言', quoteStyle(), width);
-    final quoteLines = fullQuoteHeight <= available ? null
-      : math.max(1, (available / quoteLineHeight).floor());
-    final quoteHeight = measure(quote, quoteStyle(), width, maxLines: quoteLines);
-    final noteSpace = math.max(0.0, height - headerHeight - gap - quoteHeight -
-      authorHeight - (author.trim().isNotEmpty ? gap : 0) -
-      gap - footerHeight - 3);
-    final noteLines = hasNote
-      ? math.max(0, (noteSpace / math.max(1, noteLineHeight)).floor()) : 0;
-    final needsReading = quoteLines != null ||
-      measureSpan(authorSpan, width) > authorHeight + .5 ||
-      measure(topic, titleStyle, titleWidth) > titleHeight + .5 ||
-      (hasNote && (noteLines == 0 || measure(note, noteStyle, width) > noteSpace));
-    return MediaQuery(
-      data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        SizedBox(height: headerHeight, child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center, children: [
-            Expanded(child: Text(topic, key: const ValueKey('quote-topic'),
-              maxLines: 3, overflow: TextOverflow.ellipsis, style: titleStyle)),
-            if (hasAvatar) ...[
-              SizedBox(width: gap),
-              QuotePortraitCutout(image: portrait!,
-                width: portraitWidth, height: portraitHeight),
-            ],
-          ])),
-        SizedBox(height: gap),
-        if (animateCalligraphy)
-          CalligraphyWritingText(
-            key: const ValueKey('quote-body'),
-            text: quote,
-            maxLines: quoteLines,
-            overflow: quoteLines == null
-                ? TextOverflow.visible
-                : TextOverflow.ellipsis,
-            style: quoteStyle(),
-            calligraphyStyle: calligraphyStyle,
-          )
-        else
-          Text(quote, key: const ValueKey('quote-body'), maxLines: quoteLines,
-            overflow: quoteLines == null ? TextOverflow.visible : TextOverflow.ellipsis,
-            style: quoteStyle()),
-        if (author.trim().isNotEmpty) ...[
-          SizedBox(height: gap),
-          QuoteAuthorSignature(author, key: const ValueKey('quote-author'),
-            textAlign: TextAlign.right, maxLines: 3,
-            overflow: TextOverflow.ellipsis, style: authorStyle),
-        ],
-        if (hasNote && noteLines > 0) ...[
-          SizedBox(height: gap),
-          Text(note, key: const ValueKey('quote-note'), maxLines: noteLines,
-            overflow: TextOverflow.ellipsis, style: noteStyle),
-        ],
-        const Spacer(),
-        SizedBox(height: footerHeight, child: Align(
-          alignment: Alignment.centerRight,
-          child: InkWell(key: const ValueKey('quote-read-more'), onTap: onRead,
-            child: Padding(padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Text(needsReading ? '阅读全文与解读  ›' : '放大阅读  ›',
-                style: noteStyle.copyWith(
-                  fontSize: math.min(12.0, noteStyle.fontSize!),
-                  color: const Color(0xff776a5d))))),
-        )),
-      ]),
-    );
-  });
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, bounds) {
+          final width = bounds.maxWidth;
+          final height = bounds.maxHeight;
+          final portrait = _posterAvatar(avatar.trim());
+          final hasAvatar = portrait != null;
+          final isLiteraryEnglish = quotePrefersLiteraryEnglish(quote);
+          final direction = Directionality.of(context);
+          final baseStyle = DefaultTextStyle.of(context).style;
+          final gap = (width * .041).clamp(5.0, 12.0).toDouble();
+          final authorStyle = baseStyle.copyWith(
+            fontSize: (width * .050).clamp(9.0, 15.0),
+            height: 1.4,
+            color: const Color(0xff544b44),
+            fontWeight: FontWeight.w500,
+          );
+          final footerStyle = baseStyle.copyWith(
+            fontSize: (width * .047).clamp(9.0, 14.0),
+            height: 1.5,
+            color: const Color(0xff625c55),
+          );
+
+          double measure(
+            String text,
+            TextStyle style,
+            double maxWidth, {
+            int? maxLines,
+          }) {
+            if (text.trim().isEmpty) return 0;
+            final painter = TextPainter(
+              text: TextSpan(text: text, style: style),
+              textDirection: direction,
+              textScaler: TextScaler.noScaling,
+              maxLines: maxLines,
+              ellipsis: maxLines == null ? null : '…',
+            )..layout(maxWidth: maxWidth);
+            final result = painter.height;
+            painter.dispose();
+            return result;
+          }
+
+          double measureSpan(
+            InlineSpan span,
+            double maxWidth, {
+            int? maxLines,
+          }) {
+            final painter = TextPainter(
+              text: span,
+              textDirection: direction,
+              textScaler: TextScaler.noScaling,
+              maxLines: maxLines,
+              ellipsis: maxLines == null ? null : '…',
+            )..layout(maxWidth: maxWidth);
+            final result = painter.height;
+            painter.dispose();
+            return result;
+          }
+
+          // The portrait keeps its fixed clipped window. It reserves only its
+          // own top band; short quotations can still centre naturally below it.
+          final portraitWidth = (width * .235).clamp(40.0, 76.0).toDouble();
+          final portraitHeight = portraitWidth / .78;
+          final topReserve = hasAvatar ? portraitHeight + gap : 0.0;
+          final footerHeight =
+              (width * .105).clamp(22.0, 30.0).toDouble();
+          final contentHeight =
+              math.max(1.0, height - topReserve - footerHeight);
+          final hasAuthor = author.trim().isNotEmpty;
+          final authorSpan = quoteAuthorSignatureSpan(author, authorStyle);
+          final authorHeight = hasAuthor
+              ? measureSpan(authorSpan, width, maxLines: 3)
+              : 0.0;
+          final authorGap = hasAuthor ? gap : 0.0;
+          final quoteCapacity =
+              math.max(1.0, contentHeight - authorHeight - authorGap);
+
+          var quoteSize = isLiteraryEnglish
+              ? (width * .071).clamp(13.0, 23.0).toDouble()
+              : (width * .083).clamp(14.0, 27.0).toDouble();
+          final minimumSize = isLiteraryEnglish
+              ? (width * .052).clamp(10.5, 16.0).toDouble()
+              : (width * .062).clamp(11.0, 18.0).toDouble();
+
+          TextStyle quoteStyle() {
+            final original = baseStyle.copyWith(
+              fontSize: quoteSize,
+              height: 1.47,
+              letterSpacing: .45,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xff25211d),
+            );
+            if (isLiteraryEnglish) {
+              return quoteLiteraryTextStyle(original);
+            }
+            return animateCalligraphy
+                ? quoteCalligraphyTextStyle(original, calligraphyStyle)
+                : original;
+          }
+
+          while (quoteSize > minimumSize &&
+              measure(quote, quoteStyle(), width) > quoteCapacity) {
+            quoteSize = math.max(minimumSize, quoteSize - .25);
+          }
+
+          final fullQuoteHeight = measure(quote, quoteStyle(), width);
+          final lineProbe = isLiteraryEnglish ? 'Ag' : '名言';
+          final quoteLineHeight = measure(lineProbe, quoteStyle(), width);
+          final quoteLines = fullQuoteHeight <= quoteCapacity + .5
+              ? null
+              : math.max(1, (quoteCapacity / quoteLineHeight).floor());
+          final quoteHeight =
+              measure(quote, quoteStyle(), width, maxLines: quoteLines);
+          final blockHeight = quoteHeight + authorGap + authorHeight;
+          final blockTop = topReserve +
+              math.max(0.0, (contentHeight - blockHeight) / 2);
+
+          Widget quoteBody() {
+            if (animateCalligraphy) {
+              return CalligraphyWritingText(
+                key: const ValueKey('quote-body'),
+                text: quote,
+                maxLines: quoteLines,
+                overflow: quoteLines == null
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
+                style: quoteStyle(),
+                calligraphyStyle: calligraphyStyle,
+              );
+            }
+            return Text(
+              quote,
+              key: const ValueKey('quote-body'),
+              maxLines: quoteLines,
+              overflow: quoteLines == null
+                  ? TextOverflow.visible
+                  : TextOverflow.ellipsis,
+              style: quoteStyle(),
+            );
+          }
+
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.noScaling,
+            ),
+            child: Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                if (hasAvatar)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: QuotePortraitCutout(
+                      image: portrait!,
+                      width: portraitWidth,
+                      height: portraitHeight,
+                    ),
+                  ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: blockTop,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      quoteBody(),
+                      if (hasAuthor) ...[
+                        SizedBox(height: authorGap),
+                        QuoteAuthorSignature(
+                          author,
+                          key: const ValueKey('quote-author'),
+                          textAlign: TextAlign.right,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: authorStyle,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: footerHeight,
+                  child: Align(
+                    key: const ValueKey('quote-read-more-region'),
+                    alignment: Alignment.centerRight,
+                    child: InkWell(
+                      key: const ValueKey('quote-read-more'),
+                      onTap: onRead,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Text(
+                          '阅读全文与解读  ›',
+                          style: footerStyle.copyWith(
+                            fontSize: math.min(
+                              12.0,
+                              footerStyle.fontSize!,
+                            ),
+                            color: const Color(0xff776a5d),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
 }

@@ -80,6 +80,9 @@ flutter:
     - family: QuoteSignatureLatin
       fonts:
         - asset: assets/fonts/Allura-Regular.ttf
+    - family: QuoteLiterarySerif
+      fonts:
+        - asset: assets/fonts/LibreBaskerville-Variable.ttf
     - family: QuoteXingShu
       fonts:
         - asset: assets/fonts/ZhiMangXing-Regular.ttf

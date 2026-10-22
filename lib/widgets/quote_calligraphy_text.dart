@@ -7,6 +7,7 @@ import '../services/quote_calligraphy_settings.dart';
 
 const String quoteLatinSignatureFont = 'QuoteSignatureLatin';
 const String quoteChineseSignatureFont = 'QuoteXingShu';
+const String quoteLiterarySerifFont = 'QuoteLiterarySerif';
 
 enum _SignatureScript { latin, han }
 
@@ -22,6 +23,30 @@ bool _isLatinOrDigit(String character) {
   if (character.isEmpty) return false;
   return RegExp(r'[A-Za-z0-9\u00c0-\u024f]').hasMatch(character);
 }
+
+/// Uses the literary face only when Latin letters clearly dominate. Mixed
+/// Chinese quotations therefore retain their Chinese composition.
+bool quotePrefersLiteraryEnglish(String text) {
+  var latin = 0;
+  var han = 0;
+  for (final character in text.characters) {
+    if (_isHan(character)) {
+      han += 1;
+    } else if (_isLatinOrDigit(character)) {
+      latin += 1;
+    }
+  }
+  return latin > 0 && latin >= math.max(3, han * 2);
+}
+
+TextStyle quoteLiteraryTextStyle(TextStyle base) => base.copyWith(
+      fontFamily: quoteLiterarySerifFont,
+      fontWeight: FontWeight.w400,
+      fontStyle: FontStyle.normal,
+      height: 1.56,
+      letterSpacing: .12,
+      color: const Color(0xff211d19),
+    );
 
 /// Builds mixed-script signature spans without changing source order, spaces,
 /// punctuation or explicit line breaks.
