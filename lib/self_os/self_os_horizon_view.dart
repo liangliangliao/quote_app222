@@ -100,6 +100,12 @@ class _SelfOsHorizonViewState extends State<SelfOsHorizonView> {
                               Text(
                                   '条件：${e.text('condition')}\n依据：${e.text('basis')}',
                                   style: const TextStyle(height: 1.6)),
+                              Text(
+                                  '关系置信度：${_certainty[SelfOsV37Rules.evidenceCertainty(s, e.text('label'), e.evidenceIds)]}'),
+                              for (final proof in s.evidence
+                                  .where((v) => e.evidenceIds.contains(v.id)))
+                                Text(
+                                    '关系来源：${proof.text('source')} · ${proof.claim}'),
                               if (e.text('signal').isNotEmpty)
                                 Text('可观察信号：${e.text('signal')}'),
                               if (e.isLoop)
@@ -139,9 +145,10 @@ class _SelfOsHorizonViewState extends State<SelfOsHorizonView> {
     for (final path in paths) {
       for (final n in path.nodes) {
         final previous = certainty[n.id];
+        final nodeCertainty = path.nodeCertainties[n.id] ?? path.certainty;
         if (previous == null ||
-            rank.indexOf(path.certainty) < rank.indexOf(previous))
-          certainty[n.id] = path.certainty;
+            rank.indexOf(nodeCertainty) < rank.indexOf(previous))
+          certainty[n.id] = nodeCertainty;
       }
     }
     final visible = s.nodes.where((n) {

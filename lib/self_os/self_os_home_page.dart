@@ -9,6 +9,7 @@ import 'self_os_engine.dart';
 import 'self_os_models.dart';
 import 'self_os_repository.dart';
 import 'self_os_widgets.dart';
+import 'self_os_workbench_widgets.dart' show osMoment;
 import 'self_os_insights.dart';
 import 'self_os_v37_rules.dart';
 import 'self_os_progress.dart';
@@ -386,6 +387,16 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
           'retrieve': 6,
           'ask': 7,
           'experiment': 8,
+          'alignment': 6,
+          'horizon': 6,
+          'gmrc': 6,
+          'conflict': 7,
+          'routes': 7,
+          'engine': 8,
+          'desire': 8,
+          'cognition': 8,
+          'motivation': 8,
+          'action': 8,
         }[SelfOsProgress.next(c).kind] ??
         9;
     nextCases.sort((a, b) => rank(a).compareTo(rank(b)));
@@ -396,6 +407,25 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
                 c.motives.map((m) => m.toJson()).toList())
             .isNotEmpty)
         .toList();
+    final conflicts = pending.where((c) =>
+        SelfOsV37Rules.conflict(
+            c.v37, c.motives.map((m) => m.toJson()).toList()) !=
+        'unknown');
+    final verifiedStrengths = _profile.strengths
+        .where((s) => SelfOsInsights.strength(s, _cases).verified);
+    String conflictSummary(SelfOsCase c) {
+      final selected = c.motives.where((m) => m.selected);
+      final foreground = selected.where((m) => m.attention == 'foreground');
+      final background = selected.where((m) =>
+          (m.importance ?? 0) >= 60 &&
+          ['background', 'omitted'].contains(m.attention));
+      final type = SelfOsV37Rules.conflict(
+          c.v37, c.motives.map((m) => m.toJson()).toList());
+      return '当前冲突：${SelfOsV37Rules.conflictLabels[type]}\n'
+          '眼前最鲜明：${foreground.isEmpty ? '尚未确认' : foreground.take(2).map((m) => m.title).join('、')}\n'
+          '重要但退到背景：${background.isEmpty ? '尚未发现，仍可补充' : background.take(2).map((m) => m.title).join('、')}';
+    }
+
     Widget card(SelfOsCase c, String title, String detail, int tab,
             IconData icon) =>
         OsSection(title: title, subtitle: detail, children: [
@@ -418,13 +448,37 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
               title: Text(nextCase.problem,
                   maxLines: 2, overflow: TextOverflow.ellipsis),
               trailing: const Icon(Icons.arrow_forward),
-              onTap: () => _open(nextCase, workspace: next.workspace)),
+              onTap: () => _open(nextCase,
+                  workspace: next.workspace, engine: next.engine)),
         ]),
-      if (attention.isNotEmpty)
+      for (final c in pending
+          .where((c) =>
+              c.v37.futureMoment?.isAfter(DateTime.now()) == true &&
+              c.v37.interventions.any((i) => !i.completed))
+          .take(1))
+        card(
+            c,
+            '为未来那一刻做准备',
+            '${osMoment(c.v37.futureMoment)}\n${c.v37.text('futureMissingMotive')}\n'
+                '${c.v37.interventions.where((i) => !i.completed).take(3).map((i) => '${i.text('task')} · 最晚 ${osMoment(i.dueAt(c.v37.futureMoment, DateTime.now()))}').join('\n')}'
+                '${c.v37.text('holdCue').isEmpty ? '' : '\n现场只带一句：${c.v37.text('holdCue')}'}'
+                '${c.text('firstAction').isEmpty ? '' : '\n第一步：${c.text('firstAction')}'}',
+            3,
+            Icons.event_outlined),
+      if (conflicts.isNotEmpty)
+        card(conflicts.first, '看清这次真实的拉扯', conflictSummary(conflicts.first), 2,
+            Icons.balance),
+      if (attention.isNotEmpty && conflicts.isEmpty)
         card(attention.first, '相信的理由，进入现场了吗？', '看看注意前景与行动连接，让双向动机都被看见。', 2,
             Icons.center_focus_strong),
-      if (_profile.strengths.isNotEmpty && pending.isNotEmpty)
-        card(pending.first, '把力量用在合适的位置', '结合行动证据，找到恰当使用与过度使用的边界。', 4,
+      for (final strength in verifiedStrengths.take(pending.isEmpty ? 0 : 1))
+        card(
+            pending.first,
+            '从实际行动中看见的力量 · ${strength.title}',
+            '${SelfOsInsights.strength(strength, _cases).supports} 次支持 · ${SelfOsInsights.strength(strength, _cases).counters} 次反证 · ${SelfOsInsights.strength(strength, _cases).overuse} 次过度使用\n'
+                '失效条件：${strength.text('counter').isEmpty ? '仍需继续观察' : strength.text('counter')}\n'
+                '使用边界：${strength.text('overuseGuard').isEmpty ? '还需验证合适的使用程度' : strength.text('overuseGuard')}',
+            4,
             Icons.spa_outlined),
     ];
   }

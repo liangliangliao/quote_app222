@@ -1,0 +1,881 @@
+{
+  "source": {
+    "filename": "Self_OS_V3.7_完整产品方案.pdf",
+    "pages": 59,
+    "sha256": "847b81b331c3b6896670cd10ad6b5f6fb17260ff79bfde8472d7391319217ef4",
+    "section": "12.2 核心验收标准",
+    "reviewed_at": "2026-10-22"
+  },
+  "requirements": [
+    {
+      "id": "A01",
+      "page": 47,
+      "requirement": "当重大决定存在关键事实缺口时，系统必须生成 Missing Information Map，并区分事实、后果、时 间、替代方案、反证、动机/欲求六类缺口。",
+      "summary": "六类关键缺口",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_ai.dart",
+        "lib/self_os/self_os_knowledge_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_ai_source_test.dart",
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A02",
+      "page": 47,
+      "requirement": "系统必须为每条关键新增信息保存 Epistemic Label、Source、Confidence、Freshness 与 Contradiction Status；不得用无来源模型推断冒充事实。",
+      "summary": "证据标签、来源、置信度、时效与冲突",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_models.dart",
+        "lib/self_os/self_os_knowledge_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_v37_ai_source_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A03",
+      "page": 47,
+      "requirement": "系统能够在 ASK / RETRIEVE / VERIFY / EXPERIMENT / HOLD 之间路由；私有事实优先问用户，可验 证外部事实才检索，经验性未知优先低成本实验。",
+      "summary": "ASK/RETRIEVE/VERIFY/EXPERIMENT/HOLD 分流",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_progress.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A04",
+      "page": 48,
+      "requirement": "若外部/个人证据相互冲突，系统必须显式展示冲突并降低确定性，而不是静默选择更符合当前建议的 一边。",
+      "summary": "展示冲突证据并降级确定性",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_horizon_view.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A05",
+      "page": 48,
+      "requirement": "Cognitive Completeness Gate 必须根据可逆性、成本与风险调整阈值：低风险实验允许残余未知， 高风险不可逆决定必须提高信息完整性门槛。",
+      "summary": "按风险与可逆性调整门槛",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_progress.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart",
+        "test/self_os/self_os_spec37_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A06",
+      "page": 48,
+      "requirement": "每次从 K1 更新到 K2 后，系统必须重建正反动机/冲突图，并说明新增认识使哪些动机增强、减弱、新 增或失效。",
+      "summary": "K1→K2 后重建动机并解释差异",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_models.dart",
+        "lib/self_os/self_os_reentry_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_learning_test.dart",
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A07",
+      "page": 48,
+      "requirement": "当未知对决定无实质影响或继续搜索的 New Information Gain 已很低时，系统必须允许停止补信息， 防止“认识完整性”退化为无限分析。",
+      "summary": "低敏感性、低信息增益允许停止",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_knowledge_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_learning_test.dart",
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A08",
+      "page": 48,
+      "requirement": "当两个以上高权重欲求/动机同时存在时，系统能够自动识别并可视化冲突对象、方向、时间距离、注 意位置和互斥关系。",
+      "summary": "自动识别并展示冲突、注意与互斥",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_conflict_panel.dart",
+        "lib/self_os/self_os_home_page.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A09",
+      "page": 48,
+      "requirement": "系统能够在趋近-趋近、回避-回避、趋近-回避、双重趋避之间给出可解释分类；证据不足时显示不确 定。",
+      "summary": "四类冲突及证据不足状态",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A10",
+      "page": 48,
+      "requirement": "James 五种决意方式必须显示“本次过程证据 + 置信度”，不得输出固定“决策人格”。",
+      "summary": "James 过程证据与置信度",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_conflict_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A11",
+      "page": 48,
+      "requirement": "意识舞台必须至少区分 Foreground / Midground / Background / Omitted，并允许重要长期动机在 不隐藏反方动机的前提下重新进入前景。",
+      "summary": "四层注意舞台与反方保留",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_conflict_panel.dart",
+        "lib/self_os/self_os_progress.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A12",
+      "page": 48,
+      "requirement": "当同一证据被重复比较且 New Information Gain 低于阈值时，系统能触发 Deliberation Stop Rule， 并提供稳定原则、低成本实验或定时复审，而非继续生成更多理由。",
+      "summary": "审议停止：原则、实验或复审",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_conflict_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_handoff_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A13",
+      "page": 48,
+      "requirement": "当长期认可动机 Valued 高但 Attention Availability / Action-linked 低时，系统能够识别“知道但没 接上行动”的断点。",
+      "summary": "识别重视但不能进入行动的断点",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_progress.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A14",
+      "page": 48,
+      "requirement": "Hold the Idea 在行动现场一次最多保留 1 个关键观念，并必须连接第一动作；其真实作用回写 Decision Trace DB。",
+      "summary": "一条现场观念、第一动作与真实回写",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_action_focus.dart",
+        "lib/self_os/self_os_models.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_widget_test.dart",
+        "test/self_os/self_os_learning_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A15",
+      "page": 48,
+      "requirement": "两个高价值未来互斥时，系统必须支持 Sacrifice Acknowledgement，明确被舍弃价值和机会成本， 并记录是否真实接受。",
+      "summary": "舍弃价值与机会成本接受",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_conflict_panel.dart",
+        "lib/self_os/self_os_repository.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_v37_repository_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A16",
+      "page": 48,
+      "requirement": "事后复盘必须能够区分：事实/认识变化导致的决策改变、注意前景变化、外部偶然、内部爆发、价值 尺度变化和努力决意。",
+      "summary": "六种决策变化来源与过程复盘",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_case_page.dart",
+        "lib/self_os/self_os_insights.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_domain_test.dart",
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A17",
+      "page": 48,
+      "requirement": "用户输入一个现实问题后，系统能够自动路由到正确核心引擎，而不是所有问题都走聊天鼓励。",
+      "summary": "现实问题自动分流至对应引擎",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_guide_models.dart",
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_progress.dart",
+        "lib/self_os/self_os_guide_learning_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_spec37_test.dart",
+        "test/self_os/self_os_spec37_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A18",
+      "page": 48,
+      "requirement": "欲求结论必须展示来源、支持证据、反证和置信度，允许用户拒绝或修改。",
+      "summary": "欲求来源、支持、反证、置信度和修订",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_case_page.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_ai_test.dart",
+        "test/self_os/self_os_domain_test.dart",
+        "test/self_os/self_os_guide_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A19",
+      "page": 48,
+      "requirement": "重要行动必须同时考虑正反动机和 Plan-time/Action-time 差异。",
+      "summary": "正反动机与计划/现场两种概率",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_models.dart",
+        "lib/self_os/self_os_case_page.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_ai_test.dart",
+        "test/self_os/self_os_domain_test.dart",
+        "test/self_os/self_os_guide_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A20",
+      "page": 48,
+      "requirement": "低行动概率时必须先区分欲求、手段、认知、环境，不允许无休止说服。",
+      "summary": "低意向先区分欲求/手段/认识/环境",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_engine.dart",
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_case_page.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_domain_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A21",
+      "page": 48,
+      "requirement": "每次行动结束后必须产生至少一条可复用的新证据：预测误差、动机有效性、认知修正、欲求冲突或 能力边界。",
+      "summary": "行动后生成可复用真实证据",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_models.dart",
+        "lib/self_os/self_os_learning.dart",
+        "lib/self_os/self_os_case_page.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_learning_test.dart",
+        "test/self_os/self_os_widget_test.dart",
+        "test/self_os/self_os_spec37_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A22",
+      "page": 48,
+      "requirement": "同类样本不足时禁止输出确定性人格/性格结论。",
+      "summary": "不足样本不作确定人格结论",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_engine.dart",
+        "lib/self_os/self_os_insights.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_domain_test.dart",
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A23",
+      "page": 48,
+      "requirement": "随着数据积累，AI 推荐必须逐步由个人实证历史而非通用心理学模板主导。",
+      "summary": "个人实证参与 AI 生成与动机排序",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_engine.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_domain_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A24",
+      "page": 48,
+      "requirement": "当用户试图“消灭一种人格/情绪”时，系统必须先进行改变对象分类，并明确哪些可训练、哪些应接 受、哪些尚未验证。",
+      "summary": "改变人格/情绪前分类改变对象",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_strength_panel.dart",
+        "lib/self_os/self_os_progress.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A25",
+      "page": 49,
+      "requirement": "人格力量结论必须展示证据来源、反证、置信度与过度使用风险；不得只展示优势名称。",
+      "summary": "力量依据、反证、置信度与过度使用",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_insights.dart",
+        "lib/self_os/self_os_strength_panel.dart",
+        "lib/self_os/self_os_home_page.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A26",
+      "page": 49,
+      "requirement": "在认知、动机和行动现场三个阶段，系统均能调用已验证力量，但每次必须追踪其真实效果并回写 Strength Evidence DB。",
+      "summary": "力量在认识、动机、行动中调用与回写",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_strength_learning.dart",
+        "lib/self_os/self_os_strength_feedback.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_spec37_test.dart",
+        "test/self_os/self_os_spec37_widget_test.dart",
+        "test/self_os/self_os_v37_repository_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A27",
+      "page": 49,
+      "requirement": "目标/手段设计若与已验证稳定倾向或现实硬限制长期冲突，系统必须触发 Nature Alignment，而不 是继续提高激励强度。",
+      "summary": "已记录倾向/限制冲突优先对齐",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_progress.dart",
+        "lib/self_os/self_os_strength_panel.dart",
+        "lib/self_os/self_os_v37_rules.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_spec37_test.dart",
+        "test/self_os/self_os_handoff_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A28",
+      "page": 49,
+      "requirement": "当用户只提供一个手段且其背后存在更深欲求时，系统必须能够生成多个结构不同的候选路径，并显 示“为什么这些不是同一种方案的改名”。",
+      "summary": "结构不同的路径与机制解释",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_guide_models.dart",
+        "lib/self_os/self_os_guidance.dart",
+        "lib/self_os/self_os_v37_ai.dart",
+        "lib/self_os/self_os_routes_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_guide_test.dart",
+        "test/self_os/self_os_v37_ai_source_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A29",
+      "page": 49,
+      "requirement": "Choice Space Expansion 必须具备停止条件；不得以固定数量堆砌低质量建议，也不得因为“还可以 再想”而阻塞现实行动。",
+      "summary": "扩面停止与机制去重",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_v37_ai.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_ai_source_test.dart",
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A30",
+      "page": 49,
+      "requirement": "用户选择 Active 主线后，其他重要候选必须进入 Secondary / Deferred / Experimental / Abandoned 等明确状态，防止继续以同等优先级争夺注意力。",
+      "summary": "唯一 Active 主线与其他明确状态",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_repository.dart",
+        "lib/self_os/self_os_routes_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_repository_test.dart",
+        "test/self_os/self_os_handoff_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A31",
+      "page": 49,
+      "requirement": "系统必须能够检测短期路线频繁切换、他人成功触发、互不相关长期目标同时升级等漂移信号，并给 出 Market Child / Fish-Bird 类型的低打扰纠偏。",
+      "summary": "频繁切换/比较触发/多主线漂移提醒",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_insights.dart",
+        "lib/self_os/self_os_home_page.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A32",
+      "page": 49,
+      "requirement": "Path Guard 不得机械阻止改道；当新证据足够强时，应支持 Evidence-based Pivot，并记录旧路线 为什么被降级或舍弃。",
+      "summary": "允许证据改道并保留旧路线理由",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_repository.dart",
+        "lib/self_os/self_os_routes_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_repository_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A33",
+      "page": 49,
+      "requirement": "每次重大路线选择必须能够解释 Route Alignment：它服务什么欲求、需要什么能力、代价是什么、 与当前主线有什么关系、机会成本是什么。",
+      "summary": "欲求、能力、代价、主线关系与机会成本",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_routes_panel.dart",
+        "lib/self_os/self_os_repository.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_repository_test.dart",
+        "test/self_os/self_os_handoff_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A34",
+      "page": 49,
+      "requirement": "对任何生活领域，只要用户当前表征只覆盖一个选项、单一时间片、单一效价或被截断的因果链，系 统必须基于语义结构触发 GMRC，而不是依赖“工作/起床/收入”等固定关键词。",
+      "summary": "按语义结构而非领域词触发 GMRC",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_progress.dart",
+        "lib/self_os/self_os_v37_rules.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A35",
+      "page": 49,
+      "requirement": "GMRC 必须为每个重要候选建立可追溯 Consequence Graph，并至少检查即时/近期/长期、收益/代 价、直接/间接、单次/累积四组维度；不存在的维度可明确为空，不得强行编造。",
+      "summary": "后果图四组维度与有理由的不适用",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_knowledge_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_learning_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A36",
+      "page": 49,
+      "requirement": "竞争选项的展开必须通过 Symmetry Guard：交换 A/B 顺序或使用语义等价的改写，不应实质改变系 统识别出的缺口类别和比较深度；若结果改变，必须能由新增证据解释。",
+      "summary": "选项对称与顺序/措辞不变性",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_v37_ai.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_learning_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A37",
+      "page": 49,
+      "requirement": "任何关键因果边必须带证据/条件/置信度；系统不得把相关性、常见经验或想象场景升级为确定因 果。",
+      "summary": "关键边条件、依据与置信度",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_horizon_view.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart",
+        "test/self_os/self_os_spec37_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A38",
+      "page": 49,
+      "requirement": "当抽象后果对用户难以形成有效认识时，系统能在不虚构事实的前提下将其转换为因果链、时间节 点、数值范围、场景变化或反事实比较，并根据个人历史选择最有效的表示。",
+      "summary": "按个人历史选择有效表示方式",
+      "status": "partial",
+      "implementation": [
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_engine.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "已有基于真实认知操作样本的偏好输入及表征候选；尚未完成对表示方式 × 任务 × 时点的细粒度效果学习和真实个体效果比较。"
+    },
+    {
+      "id": "A39",
+      "page": 49,
+      "requirement": "补全完成后必须输出 M0→M1 的 Motive Re-entry 差异，并明确哪些新认识新增/增强/削弱/取消了哪 些动机；若只是增加文本而没有改变动机场，则该次补全视为未完成。",
+      "summary": "M0→M1 差异，文字增加不等于有效增益",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_models.dart",
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_reentry_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_learning_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A40",
+      "page": 49,
+      "requirement": "必须用跨场景回归集验证同一能力：即时不适 vs 延迟后果、即时奖励 vs 累积成本、避免当前冲突 vs 问题积累、单一显著收益 vs 隐性机会成本、抽象长期目标 vs 具体行动链、重复小行为的累积后果等 至少六类结构。",
+      "summary": "至少六类同结构跨场景完整回归",
+      "status": "partial",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_learning.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_learning_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "已有七类结构缺口、六领域变体与前后动机闭环的规则/流程回归；尚未运行六类自然语言输入在真实模型上的完整泛化验收。"
+    },
+    {
+      "id": "A41",
+      "page": 49,
+      "requirement": "当存在明确未来决策/行动时刻且历史证据显示认识/注意条件可能影响结果时，系统能够生成 Future Decision Moment Model 与最小 Cognitive Preparation Plan，而不是只在失败后复盘。",
+      "summary": "未来 T* 与最小认识准备",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_progress.dart",
+        "lib/self_os/self_os_ai_service.dart",
+        "lib/self_os/self_os_preparation_panel.dart",
+        "lib/self_os/self_os_home_page.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_guide_test.dart",
+        "test/self_os/self_os_learning_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A42",
+      "page": 50,
+      "requirement": "Cognitive Preparation Plan 必须把每项干预绑定到具体缺口、来源、计划时点和预期 K/M/Att 变 化；不得输出“多看资料/多想想”这类不可验收建议。",
+      "summary": "干预绑定缺口/来源/时点/预期变化",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_ai.dart",
+        "lib/self_os/self_os_models.dart",
+        "lib/self_os/self_os_preparation_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_ai_source_test.dart",
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A43",
+      "page": 50,
+      "requirement": "对关键未知，系统能够给出 Decision Knowledge Sensitivity：若合理不同方向可能翻转选择，则继 续补证据；若不会翻转且风险可接受，则允许停止搜索。",
+      "summary": "关键未知的翻转敏感性",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_models.dart",
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_knowledge_panel.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_learning_test.dart",
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A44",
+      "page": 50,
+      "requirement": "每次认知条件干预必须保存 K0/M0/Att0 → Intervention → K1/M1/Att1 → D/A/R；如果只有内容消费 而无决策相关变化，不计为成功。",
+      "summary": "干预前后 K/M/Att 与 D/A/R 对照",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_models.dart",
+        "lib/self_os/self_os_learning.dart",
+        "lib/self_os/self_os_insights.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_learning_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A45",
+      "page": 50,
+      "requirement": "当行为与历史模式不同，Change Source Attribution 必须至少比较 K、M、Att、E、T/State、Skill 与稳定模式证据；证据不足时显示“不足以判断性格改变”。",
+      "summary": "K/M/Att/E/T/Skill/稳定模式归因",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_insights.dart",
+        "lib/self_os/self_os_case_page.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A46",
+      "page": 50,
+      "requirement": "只有跨情境、多样本且其他可变条件无法充分解释的稳定差异，才允许更新经验性格/获得性格；单次 行为变化不得触发稳定人格结论。",
+      "summary": "控制条件、跨情境多样本才更新稳定模式",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_insights.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A47",
+      "page": 50,
+      "requirement": "交换领域、措辞和选项顺序后，同类长时域结构必须触发相同的多阶/分支/回路/路径依赖能力，而不 是依赖固定关键词。",
+      "summary": "跨领域措辞/顺序的多阶分支回路泛化",
+      "status": "partial",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_v37_ai.dart",
+        "lib/self_os/self_os_ai_service.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "已有跨域多阶/置信度不变性、条件分支、回路与阈值规则回归；真实模型对陌生领域的分支/回路/路径依赖识别仍待完整泛化验收。"
+    },
+    {
+      "id": "A48",
+      "page": 50,
+      "requirement": "若继续拉长因果链只增加故事性、对当前选择无敏感性或认知负荷显著上升，系统必须触发 Causal Pruning / Stop。",
+      "summary": "决定无关、未知过多或超负荷时剪枝",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_horizon_view.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A49",
+      "page": 50,
+      "requirement": "前台因果地平线至少支持近景/中景/远景三级视图；默认只展示决定相关主链，复杂分支可折叠展 开。",
+      "summary": "近中远三级视图和分支折叠",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_horizon_view.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_widget_test.dart",
+        "test/self_os/self_os_spec37_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A50",
+      "page": 50,
+      "requirement": "系统必须能输出 Future Option Set Delta，并与 Choice Space / Active Life Line / Path Guard 联 动。",
+      "summary": "未来路径变化与选择/主线/护栏联动",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_models.dart",
+        "lib/self_os/self_os_horizon_view.dart",
+        "lib/self_os/self_os_routes_panel.dart",
+        "lib/self_os/self_os_repository.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_widget_test.dart",
+        "test/self_os/self_os_v37_repository_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A51",
+      "page": 50,
+      "requirement": "每个远期节点/路径必须显示证据标签与 Horizon Confidence；链条越依赖推断，确定语气越低。",
+      "summary": "逐节点/路径证据与远期置信度",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_horizon_view.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart",
+        "test/self_os/self_os_spec37_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A52",
+      "page": 50,
+      "requirement": "Consequence Graph 必须支持条件分支、反馈回路、累积阈值与路径依赖；若不存在则不强行生成。",
+      "summary": "条件分支、回路、阈值和路径依赖",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_models.dart",
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_horizon_view.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_v37_widget_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    },
+    {
+      "id": "A53",
+      "page": 50,
+      "requirement": "当决定相关因果在第一步后仍有高价值节点时，系统必须能够继续追踪 2nd/3rd+ order 后果；不能 把“长期”简化成一个终点标签。",
+      "summary": "继续追踪有价值的二阶、三阶及以后",
+      "status": "implemented",
+      "implementation": [
+        "lib/self_os/self_os_v37_rules.dart",
+        "lib/self_os/self_os_v37_ai.dart",
+        "lib/self_os/self_os_horizon_view.dart"
+      ],
+      "tests": [
+        "test/self_os/self_os_v37_rules_test.dart",
+        "test/self_os/self_os_spec37_test.dart"
+      ],
+      "limitation": "工程机制已接通；自动化证据不等于真实模型质量、真机或长期效果验收。"
+    }
+  ]
+}

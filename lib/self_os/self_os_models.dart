@@ -561,6 +561,8 @@ class SelfOsCase {
     fields['knowledgeSource'] = '第 $round 轮行动之镜';
     fields.remove('k2');
     fields.remove('cognitiveOperation');
+    fields.removeWhere((key, _) => key.startsWith('review.'));
+    scores.removeWhere((key, _) => key.startsWith('review.'));
     round += 1;
     committedAt = null;
     commitment = null;
@@ -593,6 +595,8 @@ class SelfOsCase {
       'decisionEvidence',
       'holdResult',
       'holdCompletedAt',
+      'cueSource',
+      'actionBridge',
       'newInformationReviewed',
       'cooledAndReviewed'
     ]) {

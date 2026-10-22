@@ -1,121 +1,141 @@
-# Self OS V3.7：实现与验收证据
+# Self OS V3.7 原文验收记录
 
-审查日期：2026-10-21。开发基线：`main@37a34004`。范围仅为发现之旅中的 Self OS。
+审查日期：2026-10-22。开发基线：`main@37a34004`；交付分支：`codex/self-os-v37-closed-loop-20261021`。范围只包括发现之旅内的 Self OS。
 
-## 怎样回答这次的五个问题
+## 原件与统计口径
 
-| 问题 | 当前结论 | 判定边界 |
+本轮已恢复并通读用户重新提供的 59 页 V3.7 PDF，不再依据上一轮转述推定需求。原件 SHA-256：`847b81b331c3b6896670cd10ad6b5f6fb17260ff79bfde8472d7391319217ef4`。第 12.2 节（p47–50）共有 **53 条核心验收标准**；[机器可读清单](self_os_v37_requirements.json)保存原文、页码、实现文件和验证文件。此前 58 条技术检查点不再充当产品需求分母。
+
+**核心工程实现：50/53 项（94.3%），另 3 项部分完成。** 分母仅是原文明确列出的核心标准，分子指有可执行业务机制并有针对性工程证据，不是“整个 PDF 已验收 94.3%”，也不代表 AI 回答正确率。A38、A40、A47 保守计为未完成；不把模拟响应当真实智能效果。
+
+本地 Self OS 静态分析通过，**138 项专项测试通过**。AI 测试使用受控响应，覆盖候选解析、上下文、调度、权限边界、异常恢复；没有在本环境请求真实模型。没有执行其他模块测试。
+
+## 对用户五个问题的回答
+
+| 问题 | 目前结论 |
+| --- | --- |
+| 实现进度超过 90% 吗？ | 按上述原文核心工程清单，94.3%；整体产品的真实使用验收尚不能作同样声明。 |
+| 核心和重点功能具备吗？ | 欲求、动机、认识、行动、反馈五引擎，以及证据门槛、路径主线、冲突、力量、未来准备、因果地平线都已接通。 |
+| 业务逻辑清晰完善吗？ | 已形成问题→认识/路径→决定或有边界实验→实际反馈→校准→下一轮的闭环；新信息和失效证据可以中断旧协议，失败写入不会伪造完成。 |
+| 系统化、智能化了吗？ | 已有统一调度、模型候选推理、可解释规则、个人实证上下文和长期持久化；不是只拼接几个分析页面。真实模型质量尚待验收。 |
+| 还需要改进吗？ | 需要：细粒度表示偏好学习、真实模型跨场景质量和 Android 真机连续使用。完成工程清单不等于再无改进空间。 |
+
+## 第 12.2 节逐项映射
+
+“实现”表示工程机制完成；“部分”表示仍有明确缺口。所有依赖自然语言理解或生成的条目，其真实模型质量均未在本环境验收，不仅限于标为“部分”的行。实现文件位于 `lib/self_os/`，测试位于 `test/self_os/`，下表省略共同的 `self_os_` 前缀。
+
+| ID / 页 | 核心要求 | 工程状态 | 实现 | 专项证据 |
+| --- | --- | --- | --- | --- |
+| A01 / p47 | 六类关键缺口 | 实现 | `v37_ai.dart`、`knowledge_panel.dart` | `v37_ai_source_test.dart`、`v37_rules_test.dart` |
+| A02 / p47 | 证据标签、来源、置信度、时效与冲突 | 实现 | `v37_models.dart`、`knowledge_panel.dart` | `v37_rules_test.dart`、`v37_ai_source_test.dart` |
+| A03 / p47 | ASK/RETRIEVE/VERIFY/EXPERIMENT/HOLD 分流 | 实现 | `v37_rules.dart`、`progress.dart` | `v37_rules_test.dart`、`spec37_test.dart` |
+| A04 / p48 | 展示冲突证据并降级确定性 | 实现 | `v37_rules.dart`、`horizon_view.dart` | `v37_rules_test.dart`、`spec37_test.dart` |
+| A05 / p48 | 按风险与可逆性调整门槛 | 实现 | `v37_rules.dart`、`progress.dart` | `v37_rules_test.dart`、`spec37_test.dart`、`spec37_widget_test.dart` |
+| A06 / p48 | K1→K2 后重建动机并解释差异 | 实现 | `models.dart`、`reentry_panel.dart` | `learning_test.dart`、`v37_rules_test.dart` |
+| A07 / p48 | 低敏感性、低信息增益允许停止 | 实现 | `v37_rules.dart`、`knowledge_panel.dart` | `learning_test.dart`、`v37_rules_test.dart` |
+| A08 / p48 | 自动识别并展示冲突、注意与互斥 | 实现 | `v37_rules.dart`、`conflict_panel.dart`、`home_page.dart` | `v37_rules_test.dart`、`spec37_widget_test.dart` |
+| A09 / p48 | 四类冲突及证据不足状态 | 实现 | `v37_rules.dart` | `v37_rules_test.dart` |
+| A10 / p48 | James 过程证据与置信度 | 实现 | `v37_rules.dart`、`conflict_panel.dart` | `v37_rules_test.dart` |
+| A11 / p48 | 四层注意舞台与反方保留 | 实现 | `conflict_panel.dart`、`progress.dart` | `v37_rules_test.dart`、`spec37_test.dart` |
+| A12 / p48 | 审议停止：原则、实验或复审 | 实现 | `v37_rules.dart`、`conflict_panel.dart` | `v37_rules_test.dart`、`handoff_widget_test.dart` |
+| A13 / p48 | 识别重视但不能进入行动的断点 | 实现 | `v37_rules.dart`、`progress.dart` | `v37_rules_test.dart`、`spec37_test.dart` |
+| A14 / p48 | 一条现场观念、第一动作与真实回写 | 实现 | `action_focus.dart`、`models.dart` | `v37_widget_test.dart`、`learning_test.dart` |
+| A15 / p48 | 舍弃价值与机会成本接受 | 实现 | `conflict_panel.dart`、`repository.dart` | `v37_rules_test.dart`、`v37_repository_test.dart` |
+| A16 / p48 | 六种决策变化来源与过程复盘 | 实现 | `case_page.dart`、`insights.dart` | `domain_test.dart`、`v37_rules_test.dart` |
+| A17 / p48 | 现实问题自动分流至对应引擎 | 实现 | `guide_models.dart`、`ai_service.dart`、`progress.dart`、`guide_learning_panel.dart` | `spec37_test.dart`、`spec37_widget_test.dart` |
+| A18 / p48 | 欲求来源、支持、反证、置信度和修订 | 实现 | `ai_service.dart`、`case_page.dart` | `ai_test.dart`、`domain_test.dart`、`guide_test.dart` |
+| A19 / p48 | 正反动机与计划/现场两种概率 | 实现 | `ai_service.dart`、`models.dart`、`case_page.dart` | `ai_test.dart`、`domain_test.dart`、`guide_test.dart` |
+| A20 / p48 | 低意向先区分欲求/手段/认识/环境 | 实现 | `engine.dart`、`ai_service.dart`、`case_page.dart` | `domain_test.dart` |
+| A21 / p48 | 行动后生成可复用真实证据 | 实现 | `models.dart`、`learning.dart`、`case_page.dart` | `learning_test.dart`、`widget_test.dart`、`spec37_widget_test.dart` |
+| A22 / p48 | 不足样本不作确定人格结论 | 实现 | `engine.dart`、`insights.dart` | `domain_test.dart`、`v37_rules_test.dart` |
+| A23 / p48 | 个人实证参与 AI 生成与动机排序 | 实现 | `ai_service.dart`、`engine.dart` | `domain_test.dart`、`spec37_test.dart` |
+| A24 / p48 | 改变人格/情绪前分类改变对象 | 实现 | `ai_service.dart`、`strength_panel.dart`、`progress.dart` | `spec37_test.dart` |
+| A25 / p49 | 力量依据、反证、置信度与过度使用 | 实现 | `insights.dart`、`strength_panel.dart`、`home_page.dart` | `v37_rules_test.dart`、`spec37_widget_test.dart` |
+| A26 / p49 | 力量在认识、动机、行动中调用与回写 | 实现 | `ai_service.dart`、`strength_learning.dart`、`strength_feedback.dart` | `spec37_test.dart`、`spec37_widget_test.dart`、`v37_repository_test.dart` |
+| A27 / p49 | 已记录倾向/限制冲突优先对齐 | 实现 | `progress.dart`、`strength_panel.dart`、`v37_rules.dart` | `spec37_test.dart`、`handoff_widget_test.dart` |
+| A28 / p49 | 结构不同的路径与机制解释 | 实现 | `guide_models.dart`、`guidance.dart`、`v37_ai.dart`、`routes_panel.dart` | `guide_test.dart`、`v37_ai_source_test.dart` |
+| A29 / p49 | 扩面停止与机制去重 | 实现 | `v37_rules.dart`、`v37_ai.dart` | `v37_ai_source_test.dart`、`v37_rules_test.dart` |
+| A30 / p49 | 唯一 Active 主线与其他明确状态 | 实现 | `repository.dart`、`routes_panel.dart` | `v37_repository_test.dart`、`handoff_widget_test.dart` |
+| A31 / p49 | 频繁切换/比较触发/多主线漂移提醒 | 实现 | `insights.dart`、`home_page.dart` | `v37_rules_test.dart` |
+| A32 / p49 | 允许证据改道并保留旧路线理由 | 实现 | `repository.dart`、`routes_panel.dart` | `v37_repository_test.dart` |
+| A33 / p49 | 欲求、能力、代价、主线关系与机会成本 | 实现 | `routes_panel.dart`、`repository.dart` | `v37_repository_test.dart`、`handoff_widget_test.dart` |
+| A34 / p49 | 按语义结构而非领域词触发 GMRC | 实现 | `ai_service.dart`、`progress.dart`、`v37_rules.dart` | `v37_rules_test.dart`、`spec37_test.dart` |
+| A35 / p49 | 后果图四组维度与有理由的不适用 | 实现 | `v37_rules.dart`、`knowledge_panel.dart` | `v37_rules_test.dart`、`learning_test.dart` |
+| A36 / p49 | 选项对称与顺序/措辞不变性 | 实现 | `v37_rules.dart`、`v37_ai.dart` | `v37_rules_test.dart`、`learning_test.dart` |
+| A37 / p49 | 关键边条件、依据与置信度 | 实现 | `v37_rules.dart`、`horizon_view.dart` | `v37_rules_test.dart`、`spec37_test.dart`、`spec37_widget_test.dart` |
+| A38 / p49 | 按个人历史选择有效表示方式 | 部分 | `ai_service.dart`、`engine.dart` | `spec37_test.dart` |
+| A39 / p49 | M0→M1 差异，文字增加不等于有效增益 | 实现 | `models.dart`、`v37_rules.dart`、`reentry_panel.dart` | `v37_rules_test.dart`、`learning_test.dart` |
+| A40 / p49 | 至少六类同结构跨场景完整回归 | 部分 | `v37_rules.dart`、`ai_service.dart`、`learning.dart` | `v37_rules_test.dart`、`learning_test.dart`、`spec37_test.dart` |
+| A41 / p49 | 未来 T* 与最小认识准备 | 实现 | `progress.dart`、`ai_service.dart`、`preparation_panel.dart`、`home_page.dart` | `v37_rules_test.dart`、`guide_test.dart`、`learning_test.dart`、`spec37_test.dart` |
+| A42 / p50 | 干预绑定缺口/来源/时点/预期变化 | 实现 | `v37_ai.dart`、`models.dart`、`preparation_panel.dart` | `v37_ai_source_test.dart`、`v37_rules_test.dart` |
+| A43 / p50 | 关键未知的翻转敏感性 | 实现 | `v37_models.dart`、`v37_rules.dart`、`knowledge_panel.dart` | `learning_test.dart`、`v37_rules_test.dart` |
+| A44 / p50 | 干预前后 K/M/Att 与 D/A/R 对照 | 实现 | `models.dart`、`learning.dart`、`insights.dart` | `v37_rules_test.dart`、`learning_test.dart` |
+| A45 / p50 | K/M/Att/E/T/Skill/稳定模式归因 | 实现 | `insights.dart`、`case_page.dart` | `v37_rules_test.dart` |
+| A46 / p50 | 控制条件、跨情境多样本才更新稳定模式 | 实现 | `insights.dart` | `v37_rules_test.dart` |
+| A47 / p50 | 跨领域措辞/顺序的多阶分支回路泛化 | 部分 | `v37_rules.dart`、`v37_ai.dart`、`ai_service.dart` | `v37_rules_test.dart`、`spec37_test.dart` |
+| A48 / p50 | 决定无关、未知过多或超负荷时剪枝 | 实现 | `v37_rules.dart`、`horizon_view.dart` | `v37_rules_test.dart` |
+| A49 / p50 | 近中远三级视图和分支折叠 | 实现 | `horizon_view.dart` | `v37_widget_test.dart`、`spec37_widget_test.dart` |
+| A50 / p50 | 未来路径变化与选择/主线/护栏联动 | 实现 | `models.dart`、`horizon_view.dart`、`routes_panel.dart`、`repository.dart` | `v37_widget_test.dart`、`v37_repository_test.dart` |
+| A51 / p50 | 逐节点/路径证据与远期置信度 | 实现 | `v37_rules.dart`、`horizon_view.dart` | `v37_rules_test.dart`、`spec37_test.dart`、`spec37_widget_test.dart` |
+| A52 / p50 | 条件分支、回路、阈值和路径依赖 | 实现 | `v37_models.dart`、`v37_rules.dart`、`horizon_view.dart` | `v37_rules_test.dart`、`v37_widget_test.dart` |
+| A53 / p50 | 继续追踪有价值的二阶、三阶及以后 | 实现 | `v37_rules.dart`、`v37_ai.dart`、`horizon_view.dart` | `v37_rules_test.dart`、`spec37_test.dart` |
+
+## 核心标准之外的章节复核
+
+| 原文章节 / 页码 | 工程对应与边界 |
+| --- | --- |
+| §1–3，p3–10：W→K→M→Att→D→A→R→K′、六阶段、个性/力量 | `models/guidance/learning` 保留冻结前态、实际结果与后态；`strength_panel/insights` 区分候选、反证、现实限制与稳定模式。不会推断基因或终极人格。 |
+| §4，p10–15：冲突、James、注意、认识门槛与 LHCP | 对应 A01–A16、A34–A53；具体判定使用可解释提示和证据等级，不把心理学描述伪装成测量概率。 |
+| §5，p16–20：欲求与动机 | 独立生成 5–10 个欲求；Why Tree 支持分支、合并、纠正；AI 比较重合/部分重合/双方独有/冲突。动机搜索 50–100 个，双向、三层、五个时间尺度；当前作用参考相关性×可信度×鲜明度×注意×历史，任一缺失显示未知。 |
+| §6–7，p21–29：七类认识操作、八类未来准备、现场 Ritual | 用户选定操作进入真实请求；补全前后 K/M/Att 可比较；准备绑定来源、缺口、T* 和实际反馈；现场保持一条观念 10–20 秒并连接第一动作。 |
+| §8，p29–35：行动之镜、能力、桥接、路线 | 实际证据区分已验证优势/硬限制/可训练/未验证/不适配；口头代价与真实遭遇分开；八类路径机制、停止依据、五种状态与全局唯一主线；原则有适用、不适用和覆盖条件。 |
+| §9.1，p35–36：十二个长期模型 | 欲求、认知、信念、动机、能力、经验性格、获得性格、力量/个性、可能性/路线、冲突/决意/注意、认知干预、长时域图谱分别对应个人说明书、指纹、实际观察、力量、路线记录、干预及因果图；前五类包含本人可修订解释，不能当作自动验证的心理模型。 |
+| §9.2–9.3，p36–37：三个指纹、九个校准数据库 | 动机/认知/决意注意指纹；预测、代价、取舍、力量、路线、决意、认识、干预、因果九类逻辑记录由独立 SQLite 的案例/个人模型 JSON 承载。原文未要求九张物理表。 |
+| §9.4–9.5，p37–38：评分与成熟度 | 使用主观估计、实测频次、结构缺口、解释性等级和证据覆盖；未知不填零。没有为每个指标臆造百分比，成熟度是覆盖维度而非人格排名。 |
+| §10，p39–41：AI 总管家与首页 | 三入口；语义路由与证据优先级共同决定下一步；模型生成候选、规则执行门槛；新增三项冲突摘要、经验证力量卡和 T* 最小准备卡。狭窄选择空间可扩面也可继续分析。 |
+| §11，p41–45：完整案例 | 作为业务示例而非关键词模板。自动化含本人纠正、未知概率、小实验、未行动、真实反馈与下一轮；示例的实际问答效果仍待真实模型验证。 |
+| §12.3–12.5，p50–52：泛化测试族 | 见下表；规则侧通过不等于模型在陌生自然语言变体上通过。 |
+| 附录 A，p52–55：数据对象 | 使用可兼容扩展的 JSON，保留案例、力量、路径、决意、干预、因果对象与来源 ID；旧 schema 1 可读，当前 schema 2，数据库版本与名字保持兼容。 |
+| p55–59：理论参考 | 提供设计依据，不作为新的功能条目计入完成率。 |
+
+## 第 12.3–12.5 节验证边界
+
+| 原文测试族 | 已有工程验证 | 仍需验证 |
 | --- | --- | --- |
-| 原方案实现是否超过 90%？ | **尚不能认证这个百分比。** | 当前执行环境没有先前上传的 PDF 原件，下面依据前一轮从原文提取并保存在 `self_os_v37.md` 的需求映射核对。没有用页面数、代码行数、测试数量或自行缩小的分母当作原方案覆盖率。 |
-| 核心和重点功能是否具备？ | 五引擎、欲求与路径选择、认识与证据门槛、冲突与决意、行动与反馈、未来准备、力量、因果地平线均有可运行实现。 | 区分可执行的业务机制与真实模型的分析质量；后者仍需实际模型验收。 |
-| 业务逻辑是否清晰完善？ | 主流程已连接到同一数据模型，新增真实反馈回到原问题、动机、后果和下一轮的闭环。 | 自动化验证覆盖关键状态、反例、写入失败及恢复。不能据此声称不存在未知缺陷。 |
-| 是否系统化和智能化？ | 已有统一下一步调度、独立持久化、可追溯快照、模型候选分析、用户校准和实际经历进入后续 AI 上下文。 | 智能化方式是模型推理、规则约束和经验检索，不是在线训练模型权重。当前无可用模型凭据，未验证真实生成质量。 |
-| 是否还需要改进？ | **需要继续根据真实使用改进。** | 当前可完成的代码缺口已修复；原文全量复核、真实模型和 Android 真机验收不能由模拟响应替代。 |
+| 即时不适/延迟后果、即时奖励/累积成本、避免冲突/问题积累、显著收益/机会成本、抽象目标/现实链条、重复小行为 | 七类表征缺口跨六领域措辞和选项顺序不变；条件/未知、对称性、停止与动机重新入场分别验证 | 六类自然语言输入的真实模型全流程，不能由结构化 fixture 代替 |
+| Decision-Flip Sensitive Unknown | 不同访问方式、两情景翻转、相同情景无效、本人确认才可停止 | 真实模型能否提出合理且有证据的情景 |
+| Prospective Preparation | T*、到期边界、迟到标记、复杂输入不得塞入现场、前后差异、真实行动回写 | 数小时到数周的实际内容与时点适配 |
+| Same Person/New Knowledge、Environment vs Character、Stable Pattern Update | 七种来源对照；未知条件不当作不变；跨情境/多样本/替代解释门槛 | 真实长期数据的解释质量，不能生成样本冒充经历 |
+| Multi-order、Conditional Branching、Feedback Loop、Threshold/Lock-in、Future Options、Horizon Uncertainty | 多阶/分支/回路、剪枝预算、阈值/可逆窗口、六类未来路径、逐节点置信度和最弱依据；跨域与顺序变化验证 | 模型自由输入下对条件、回路、阈值及高价值中间节点的泛化识别 |
 
-以下清单包含 58 条技术与交互验收点，其中 53 条有专项自动化证据，5 条仅代码审阅，不作为原文全量需求的替代分母。“专项验证”指 Self OS 范围的可控自动化验证；“代码审阅”表示实现已检查，但该项没有独立的交互或效果验收证据。二者均不代表真实模型质量已通过。
+## 本轮实际补齐与修复
 
-## 可追溯验收清单
+1. 原文驱动的十类语义分流接到对应工作台/引擎，可直接启动所需分析；新信息、反证、过期证据优先。已审视的冲突不会无变化地反复阻挡。
+2. 个人真实复盘、校准、原则、认知偏好与力量证据进入分析请求；不存在的力量/路径/欲求引用会被剔除。用户选定的认识操作实际参与请求。
+3. 力量在认识、动机和行动中分别记录使用与作用；一次复盘只增加一个力量样本，反作用保留。没有具体观察不增信，未知反馈可以撤回原先判断。
+4. 关键因果边显示来源与置信度；近处直接事实不再被远处未知一起降为未知，沿推断路径逐级降低确定性。
+5. 当前动机作用同时参考可信度、鲜明度、注意和个人历史；缺失因子不编造分数。
+6. 完整决定的协议在进入现场前重新检查依据；权限范围从封存协议读取。核验失败会回到认识入口，有边界实验仍保持其范围。
+7. 复盘与力量反馈原子保存；失败保留草稿并可重试。新一轮清除上轮实际反馈输入与现场力量选择，历史快照保留。
+8. 首页新增三项冲突摘要、证据充分才展示的力量卡；未来准备卡显示时刻、1–3 项动作、最晚时间与一条现场观念/第一动作。
 
-文件名均相对于仓库；实现位于 `lib/self_os/`，验证位于 `test/self_os/`。
+## 尚未完成的三项与真实使用验收
 
-| ID | 要求与通过条件 | 实现证据 | 验证证据 / 状态 |
-| --- | --- | --- | --- |
-| W01 | 发现之旅内独立入口；不修改其他产品数据 | `self_os_discover_entry.dart`、`self_os_repository.dart` | `self_os_widget_test.dart`、`self_os_repository_test.dart` · 专项验证 |
-| W02 | 首页三个入口，案例可保存后继续 | `self_os_home_page.dart`、`self_os_guide_page.dart` | `self_os_widget_test.dart`、`self_os_guide_widget_test.dart` · 专项验证 |
-| W03 | 独立提出 5–10 个欲求假设，不能读 Why Tree 充当独立分析 | `self_os_ai_service.dart: discover` | `self_os_ai_test.dart` · 专项验证 |
-| W04 | Why Tree 分支、合并、回退，拒绝悬空父节点 | `self_os_models.dart: addWhy/removeWhy` | `self_os_domain_test.dart` · 专项验证 |
-| W05 | 比较独立假设与自我解释，保留重合、独有与冲突 | `self_os_ai_service.dart: compare`、`self_os_case_page.dart` | 结构与入口已具备，真实比较质量待模型验收 · 代码审阅 |
-| W06 | 欲求、手段、认识、环境四类阻塞分别分流 | `self_os_engine.dart: next` | `self_os_domain_test.dart` · 专项验证 |
-| M01 | 50–100 个去重候选动机，保留正反两方 | `self_os_ai_service.dart: motives` | `self_os_ai_test.dart`：三批 60 个、去重与取消 · 专项验证 |
-| M02 | 实际反馈参与动机排序；未知反馈不计失败 | `self_os_engine.dart: motiveRank/motiveFingerprint` | `self_os_domain_test.dart` · 专项验证 |
-| K01 | 七类认识操作有独立选择与候选建议 | `self_os_models.dart: selfOsCognitiveOperations`、`self_os_case_page.dart` | 七类操作与输入输出已审阅；逐类真实效果未验收 · 代码审阅 |
-| K02 | 保存认识、动机、注意及预测的前后基线 | `self_os_models.dart: beginCognition/completeCognition` | `self_os_v37_rules_test.dart`、`self_os_guide_test.dart` · 专项验证 |
-| K03 | 新增、增强、减弱、失效由实际差异计算；可明确无变化 | `self_os_v37_rules.dart: motiveDelta`、`self_os_reentry_panel.dart` | `self_os_learning_test.dart`：AI 建议增强而本人取消时记录失效 · 专项验证 |
-| O01 | 八类不同实现机制，不能只换路径名称 | `self_os_v37_models.dart: osMechanisms`、`self_os_v37_ai.dart: routes` | 枚举、结构键、提示与表单已审阅；语义差异需模型验收 · 代码审阅 |
-| O02 | 扩面有停止依据，不强制凑满八种路径 | `self_os_v37_rules.dart: expansionStop`、`self_os_v37_ai.dart` | `self_os_v37_ai_source_test.dart` · 专项验证 |
-| O03 | 一般价值与六项个人适配分开；未知不填零 | `self_os_routes_panel.dart`、`self_os_v37_models.dart: OsRoute.fit` | `self_os_handoff_widget_test.dart`：高一般价值不替代本人适配；空项与路线状态保存 · 专项验证 |
-| O04 | 扩面、筛选、实验、承诺、守护、修订的阶段随真实操作推进 | `self_os_guidance.dart`、`self_os_models.dart`、`self_os_repository.dart` | `self_os_learning_test.dart`、`self_os_v37_repository_test.dart` · 专项验证 |
-| O05 | 五种投入状态；跨案例只允许一条人生主线 | `self_os_repository.dart: transitionRoute` | `self_os_v37_repository_test.dart`：原子切换与失败回滚 · 专项验证 |
-| O06 | 主线必须记录真实取舍、能力与现实条件、机会成本接受 | `self_os_routes_panel.dart`、`self_os_repository.dart` | `self_os_v37_repository_test.dart` · 专项验证 |
-| O07 | Path Guard 区分证据改道与反复新鲜、比较、逃避 | `self_os_insights.dart: pathGuard` | `self_os_v37_rules_test.dart` · 专项验证 |
-| O08 | Fish-Bird 比较完整生活结构，而非只比较羡慕的外观 | `self_os_routes_panel.dart`、`self_os_insights.dart` | 表单与提醒已审阅，实际选择效果未验收 · 代码审阅 |
-| S01 | 区分稳定倾向、技能、习惯、认识、环境、限制和未知 | `self_os_strength_panel.dart`、`self_os_v37_rules.dart: natureAdvice` | 分流与证据字段已审阅；不提供人格诊断 · 代码审阅 |
-| S02 | 力量至少 3 次、2 情境、2 案例；重复或不存在来源不增信 | `self_os_insights.dart: strength` | `self_os_v37_rules_test.dart` · 专项验证 |
-| S03 | 力量记录使用不足、合适、过度及反作用 | `self_os_strength_panel.dart`、`self_os_case_page.dart` | `self_os_v37_rules_test.dart`：实际观察、反证及重复来源 · 专项验证 |
-| S04 | 力量—弱点—机制—动作桥接，并设置过度使用边界 | `self_os_strength_panel.dart: bridge`、`self_os_models.dart: stageStrengthBridge` | `self_os_handoff_widget_test.dart`：带入动作草稿、保留冻结协议、不自动认可候选力量 · 专项验证 |
-| D01 | 四类冲突基于高重要度、已选动机和互斥选项 | `self_os_v37_rules.dart: conflict` | `self_os_v37_rules_test.dart` · 专项验证 |
-| D02 | 前景、中景、背景、遗漏；重要度与注意占据分开 | `self_os_conflict_panel.dart`、`self_os_v37_rules.dart: attentionBreaks` | `self_os_v37_rules_test.dart` · 专项验证 |
-| D03 | 知道、相信、重视、现场可用、动作连接分级 | `self_os_v37_models.dart: osEndorsement`、`self_os_reentry_panel.dart` | `self_os_v37_rules_test.dart`、`self_os_learning_test.dart` · 专项验证 |
-| D04 | James 五类仅在临近或事后且有过程证据时分类 | `self_os_v37_rules.dart: jamesMode` | `self_os_v37_rules_test.dart` · 专项验证 |
-| D05 | 现场最多一条认可提示，10–20 秒，可拒绝、暂停再行动 | `self_os_action_focus.dart` | `self_os_v37_widget_test.dart` · 专项验证 |
-| D06 | 重大冲动决定需要冷却；努力决意承认被舍弃的真实价值 | `self_os_v37_rules.dart: gate`、`self_os_models.dart: commit` | `self_os_v37_rules_test.dart`、`self_os_v37_repository_test.dart` · 专项验证 |
-| D07 | 审议轮次及信息增益可追踪；无增益停止反复准备 | `self_os_models.dart: completeCognition`、`self_os_v37_rules.dart: stopAdvice` | `self_os_learning_test.dart`、`self_os_v37_rules_test.dart` · 专项验证 |
-| D08 | 个人原则包含适用、不适用、证据覆盖条件 | `self_os_home_page.dart: _principle`、`self_os_conflict_panel.dart` | `self_os_handoff_widget_test.dart`：现代与旧字段都显示边界，采用后保留来源、不自动承诺 · 专项验证 |
-| E01 | PASS / ASK / RETRIEVE / VERIFY / EXPERIMENT / HOLD 随风险和未知切换 | `self_os_v37_rules.dart: gate` | `self_os_v37_rules_test.dart`、`self_os_guide_test.dart` · 专项验证 |
-| E02 | 小实验许可不等于重大决定充分或人生主线许可 | `self_os_guidance.dart: commitExperiment`、`self_os_repository.dart` | `self_os_guide_test.dart`、`self_os_v37_repository_test.dart` · 专项验证 |
-| E03 | 六类证据；来源、时间、有效期、冲突不明不能充当核实依据 | `self_os_v37_models.dart: OsEvidence` | `self_os_v37_rules_test.dart` · 专项验证 |
-| E04 | HTTPS 原文读取、重定向和体积边界、摘录必须匹配 | `self_os_source_service.dart`、`self_os_knowledge_panel.dart` | `self_os_v37_ai_source_test.dart`；网络用可控响应 · 专项验证 |
-| E05 | 敏感性情景由用户确认后才允许停止搜索 | `self_os_v37_models.dart: OsGap`、`self_os_knowledge_panel.dart` | `self_os_learning_test.dart`、`self_os_v37_rules_test.dart` · 专项验证 |
-| E06 | 关联证据不等于已回答；关闭问题需答案、范围和有效证据 | `self_os_learning.dart`、`self_os_v37_models.dart: resolvedBy` | `self_os_learning_test.dart` · 专项验证 |
-| G01 | 七类结构缺口，不按生活领域词汇分流 | `self_os_v37_rules.dart: representationGaps` | `self_os_v37_rules_test.dart`：七类结构、六领域、措辞与顺序变换 · 专项验证 |
-| G02 | 竞争路径同深度检查正负、时间、直接间接、单次累积；例外需理由 | `self_os_v37_rules.dart: coverage/symmetryWarnings/gate` | `self_os_learning_test.dart`、`self_os_v37_rules_test.dart` · 专项验证 |
-| P01 | 明确 T* 后才提出 1–3 个最小准备，绑定缺口、来源、时点与预期变化 | `self_os_preparation_panel.dart`、`self_os_v37_ai.dart` | `self_os_v37_ai_source_test.dart`、`self_os_v37_rules_test.dart` · 专项验证 |
-| P02 | 八类准备方式，现场只保留预演，不能堆叠复杂阅读 | `self_os_v37_models.dart: osInterventionTypes`、`self_os_models.dart` | `self_os_v37_rules_test.dart` · 专项验证 |
-| P03 | 准备前后 K/M/Att 和预测对照，实际行动另行回写，迟到不能当事前效果 | `self_os_models.dart: completeIntervention`、`self_os_learning.dart` | `self_os_v37_rules_test.dart`、`self_os_learning_test.dart` · 专项验证 |
-| H01 | 多阶条件图、分支、回路、打断条件、阈值和可逆窗口 | `self_os_v37_models.dart`、`self_os_horizon_view.dart` | `self_os_v37_rules_test.dart` · 专项验证 |
-| H02 | 最弱依据、过期、冲突、深度限制推断；共享 7 条主链预算 | `self_os_v37_rules.dart: causalPaths` | `self_os_v37_rules_test.dart` · 专项验证 |
-| H03 | 近景 1–2 阶、中景 3–5 阶、远景与未知可展开查看 | `self_os_horizon_view.dart` | `self_os_v37_widget_test.dart` · 专项验证 |
-| H04 | 六类未来路径变化可以带回选择空间 | `self_os_horizon_view.dart`、`self_os_routes_panel.dart` | `self_os_v37_rules_test.dart`、`self_os_v37_widget_test.dart` · 专项验证 |
-| H05 | 实际反证连接后果和未来路径；暂停沿旧推断延伸并保留前后记录 | `self_os_learning.dart`、`self_os_v37_rules.dart` | `self_os_learning_test.dart` · 专项验证 |
-| R01 | 行动协议冻结，后续草稿不能改写原预测；新信息优先重审 | `self_os_models.dart`、`self_os_guide_page.dart` | `self_os_domain_test.dart`、`self_os_learning_widget_test.dart` · 专项验证 |
-| R02 | 真实完成、部分完成、未行动均可复盘；每轮只有一个样本 | `self_os_models.dart: addReview`、`self_os_guidance.dart: review` | `self_os_domain_test.dart`、`self_os_guide_test.dart` · 专项验证 |
-| R03 | 对照原预期，确认支持、反证、混合、未知或未观察；限定适用范围 | `self_os_learning.dart`、`self_os_guide_learning_panel.dart` | `self_os_learning_test.dart`、`self_os_learning_widget_test.dart` · 专项验证 |
-| R04 | 下一轮从本人校准后的认识继续；AI 获得真实观察、来源和范围 | `self_os_models.dart: nextRound`、`self_os_ai_service.dart` | `self_os_learning_test.dart`、`self_os_v37_repository_test.dart` · 专项验证 |
-| R05 | 先比较 K/M/Att/E/T/Skill；稳定模式需控制条件和跨情境样本 | `self_os_insights.dart: attribution/stableChanges` | `self_os_v37_rules_test.dart` · 专项验证 |
-| R06 | 个人模型可回溯欲求、预测、代价、力量、决意、准备与校准案例 | `self_os_home_page.dart`、`self_os_insights.dart` | `self_os_domain_test.dart`、`self_os_v37_rules_test.dart`、`self_os_learning_widget_test.dart` · 专项验证 |
-| T01 | 首页、引导、AI 上下文共用下一步，按证据结构排序 | `self_os_progress.dart` | `self_os_learning_test.dart`：六领域分流；`self_os_learning_widget_test.dart`：首页联动 · 专项验证 |
-| T02 | SQLite 关闭重开保留案例、冻结快照、校准和个人模型；兼容旧 JSON | `self_os_repository.dart`、`self_os_models.dart` | `self_os_repository_test.dart`、`self_os_v37_repository_test.dart` · 专项验证 |
-| T03 | AI 不得写核实状态、实际结果、主线承诺或伪造引用 | `self_os_v37_ai.dart`、`self_os_guide_models.dart` | `self_os_v37_ai_source_test.dart`、`self_os_guide_test.dart`、`self_os_learning_test.dart` · 专项验证 |
-| T04 | 保存失败不推进；取消后迟到响应不覆盖；详细页返回读最新记录 | `self_os_guide_page.dart` | `self_os_guide_widget_test.dart`、`self_os_learning_widget_test.dart` · 专项验证 |
-| T05 | 窄屏、大字体、现场后台暂停及提示拒绝可用 | `self_os_guide_page.dart`、`self_os_action_focus.dart` | `self_os_guide_widget_test.dart`、`self_os_learning_widget_test.dart`、`self_os_v37_widget_test.dart` · 专项验证 |
+- **A38**：已有基于真实认知操作样本的偏好输入及表征候选；尚未完成对表示方式 × 任务 × 时点的细粒度效果学习和真实个体效果比较。
+- **A40**：已有七类结构缺口、六领域变体与前后动机闭环的规则/流程回归；尚未运行六类自然语言输入在真实模型上的完整泛化验收。
+- **A47**：已有跨域多阶/置信度不变性、条件分支、回路与阈值规则回归；真实模型对陌生领域的分支/回路/路径依赖识别仍待完整泛化验收。
 
-## 本轮修复的业务断点
+本环境没有可用的真实模型凭据；应用继续使用现有 `UnifiedAiService` 与用户已有供应商配置，没有改动公共 AI 服务或索取明文密钥。真实模型验收应记录实际配置、输入输出和来源，覆盖第 12.3–12.5 节用例族，并逐项判定，而不是让模型自评分。编造来源、单向说服、误升级事实或用小实验越过不可逆决定均判失败。
 
-1. 原来实验反馈只形成结果与感想。现在用户可校准预期、结论和适用范围，保存到证据、K/M/Att 变化、关联后果、未来路径与准备记录；下一轮直接使用校准结论。原来的协议与观察保持不变。
-2. 原来 AI 生成的两个“同选择”情景可能自动让缺口不再重要。现在需要本人确认；同一情景不能冒充两个合理情景。旧数据与 AI 候选不会自动获得确认。
-3. 原来只关联一条可靠材料就可能算作回答。现在还需具体答案、适用范围与本人确认；过期和冲突仍会使答案重新需要核验。
-4. 原来动机重新入场只有文字建议。现在逐项采用前由本人调整选择、强弱、认可、注意及动作连接，差异由前后真实数据计算。
-5. 原来首页、引导和工作台的下一步提示各自独立。现在基于同一记录给出新情况重审、校准、修订、准备、取证或路径取舍的入口。
-6. 原来引导实验保存的约定时间未被到期判断读取。现在写入真正的 `dueAt`，保留具体时刻，不把未来准备误报成现在到期。
-7. 原来旧风险确认可能压过新的 AI 高风险提醒，重大决定的对称比较也只是提示。现在新提醒需要重新审视，高风险门槛会检查对称性并尊重有理由的不适用。
-8. 原来从详细分析返回或重开时，旧的行动阶段可能掩盖重要新信息。现在重新进入理解，完整协议与人生主线都检查未审视的新信息。
-9. 筛选、实验、修订和重新比较的阶段随真实业务动作更新；认识确认会记录审议轮次及对决定是否产生变化。
-10. 力量桥接可以直接带入行动草稿与停止边界。候选力量仍需验证，原协议保持封存；已有协议下更换动作会进入重审。个人原则的不适用字段读取修正，并兼容旧记录。
+还需在 Android 真机上完成本模块的安装/升级数据保留、真实联网、断网重试、键盘、后台恢复和连续使用。APK 编译与 Flutter 手机布局检查不能替代真机测试。长期效果只能由用户真实经历积累。
 
-## 尚未完成的验收
+公共事实目前通过用户提供的 HTTPS 链接读取和核验，未接入自动搜索；准备时点在产品内展示，未增加后台推送；本机保存与导出，未新增云同步。原文要求获取/核验可验证信息及准备时点，并未指定搜索供应商、系统通知或云同步，它们不被假报为已经实现的能力。
 
-- **原 PDF 全量逐条复核**：需恢复 V3.7 原件，包含可能未进入上一轮需求映射的细则；原件恢复前不发布“整体达到 90%”的结论。
-- **真实模型质量**：当前环境没有配置可用模型凭据。现有 AI 使用应用已有 `UnifiedAiService`，本次未改模型、供应商或密钥。可控响应测试只能证明流程与权限约束。
-- **Android 真机使用**：APK 编译、Flutter 窄屏交互和 SQLite 测试不能代替设备上的安装升级、实际联网、后台恢复、软键盘与连续使用。
-- **长期效果**：同一个人的真实跨情境经历需逐步积累；不能通过生成样本证明产品帮助了真实选择或改变了稳定模式。
-
-自动网络搜索、后台系统通知、云同步并未在本轮新增。当前公共资料读取需要本人提供 HTTPS 来源；准备时刻在产品内展示。它们是否属于原方案的必做验收项，需要原文复核，不能擅自认定必做或排除出分母。
-
-## 真实模型与真机验收方法
-
-使用应用中本人已经配置的模型，在六种处境各走完整主流程：岗位自主空间、照顾家人与个人时间、技能学习、预算取舍、共同生活安排、创作投入。每种至少包括一次纠正、一条未知和一次实际反馈；高风险例只做信息核对与可撤回动作。
-
-每个案例记录：模型及配置、时间、实际输入输出、问题是否回应最新补充、路径机制是否不同、正反代价是否对称、是否索取该索取的来源、实验边界是否匹配动作、反馈是否回到原问题、下一轮是否避免重复已回答的问题、本人是否认为有所帮助。逐项通过或不通过，不用模型自己打分充当验收。
-
-硬性失败包括：编造原话或历史、把推断当事实、用小实验绕过不可逆承诺、无新证据反复追问、把未行动当结果支持、校准覆盖原始预测、重要新信息出现后继续旧协议。任何一次出现都应回到缺陷修复，不用平均分掩盖。
-
-真机还应验证：安装/升级后旧案例保留，断网/模型失败输入保留，切后台再进入能继续，取消后迟到响应不覆盖，复盘与校准保存后重开一致。只操作 Self OS，不开展无关模块测试。
-
-## 验证命令与交付
+## 验证与 APK
 
 ```sh
 flutter analyze --no-pub lib/self_os test/self_os
 flutter test --no-pub test/self_os --reporter expanded
 ```
 
-GitHub 手动运行源码工作流 `.github/workflows/android_build_source_repo.yml`，输入 `self_os_checks=true`。该流程只分析和测试 Self OS，然后编译完整 release APK。提交包含 `[skip ci]`，避免推送或 PR 自动触发无关模块测试。构建和产物链接记录在本轮 PR 中；未合并前，旧主分支产物不包含本轮改动。
+本地结果：分析无问题，138 项通过；已检查新引导入口与力量反馈的中文手机布局。GitHub 手动运行源码工作流 `.github/workflows/android_build_source_repo.yml`，输入 `self_os_checks=true`，只跑 Self OS 专项检查，再编译完整 release APK。提交包含 `[skip ci]`，避免触发无关模块自动测试。当前构建状态和最终产物链接以 [PR #187](https://github.com/liangliangliao/quote_app222/pull/187) 的本次提交记录为准。未合并主分支，旧 APK 不包含当前提交。

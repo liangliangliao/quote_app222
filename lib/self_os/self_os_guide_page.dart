@@ -10,6 +10,8 @@ import 'self_os_progress.dart';
 import 'self_os_models.dart';
 import 'self_os_repository.dart';
 import 'self_os_widgets.dart';
+import 'self_os_strength_learning.dart';
+import 'self_os_strength_feedback.dart';
 
 part 'self_os_guide_learning_panel.dart';
 
@@ -104,14 +106,17 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
     super.dispose();
   }
 
-  Future<bool> _persist(SelfOsCase c) async {
+  Future<bool> _persist(SelfOsCase c, {SelfOsProfile? profile}) async {
     if (_needsReload || _inDetails) return false;
     final copy = c.copy();
+    final profileCopy =
+        profile == null ? null : SelfOsProfile.fromJson(profile.toJson());
     // Serialize autosaves, transitions and back navigation, so an old draft can
     // never land after a newly confirmed protocol.
-    final write = _writes
-        .catchError((Object _) {})
-        .then((_) => widget.repository.saveCase(copy));
+    final write = _writes.catchError((Object _) {}).then((_) =>
+        profileCopy == null
+            ? widget.repository.saveCase(copy)
+            : widget.repository.saveCaseAndProfile(copy, profileCopy));
     _writes = write;
     try {
       await write;
@@ -239,7 +244,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
     }
   }
 
-  Future<void> _details([int? target]) async {
+  Future<void> _details([int? target, String? initialAiTask]) async {
     if (_locked) return;
     final selection = target ??
         await showModalBottomSheet<int>(
@@ -289,6 +294,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
                 ai: widget.ai,
                 history: _history,
                 profile: _profile,
+                initialAiTask: initialAiTask,
                 initialWorkspace: selection < 5 ? selection : null,
                 initialEngine: selection >= 5
                     ? SelfOsEngine.values[selection - 5]
@@ -347,10 +353,9 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
   Future<void> _focus() async {
     final snapshot = _c.commitment;
     if (snapshot == null || _locked) return;
-    if (_c.v37.flag('requiresReconsideration') ||
-        (_c.text('newInformation').isNotEmpty &&
-            !_c.v37.flag('newInformationReviewed'))) {
-      setState(() => _error = '先回应重要新信息，更新认识后再确认行动约定。');
+    final blocker = SelfOsProgress.actionBlocker(_c);
+    if (blocker != null) {
+      setState(() => _error = blocker);
       return;
     }
     final result = await Navigator.push<Map<String, dynamic>>(
@@ -470,6 +475,9 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
                   children: [
                     for (final route in f.routes)
                       OsSection(title: osText(route['title']), children: [
+                        if (osText(route['mechanismDetail']).isNotEmpty)
+                          _line(
+                              '这条路怎样实现想要的变化', osText(route['mechanismDetail'])),
                         _line('可能得到', osText(route['benefit'])),
                         _line('可能付出', osText(route['cost'])),
                         _line('还不知道', osText(route['unknown'])),
@@ -709,10 +717,12 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
     final snapshot = _c.commitment ?? _c.evidenceSnapshot();
     final fields = osMap(snapshot['fields']);
     final experiment = osMap(snapshot['experiment']);
+    final blocker = SelfOsProgress.actionBlocker(_c);
     return [
-      const Text('这一刻，只走这一步。',
-          style: TextStyle(fontSize: 27, fontWeight: FontWeight.w700)),
+      Text(blocker == null ? '这一刻，只走这一步。' : '先核对变化，再行动。',
+          style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w700)),
       const SizedBox(height: 20),
+      if (SelfOsProgress.next(_c).kind != 'act') _nextStepCard(),
       OsSection(
           title: osText(fields['firstAction']).isEmpty
               ? '你的行动约定'
@@ -724,7 +734,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
               _line('回来时看看', osText(experiment['observe'])),
               _line('做到这里就够了', osText(experiment['boundary'])),
             ],
-            _primary('进入行动现场', _focus, key: 'guide_focus'),
+            if (blocker == null) _primary('进入行动现场', _focus, key: 'guide_focus'),
             const SizedBox(height: 10),
             OutlinedButton(
                 onPressed: _locked
@@ -835,6 +845,11 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
                 icon: Icons.spa_outlined),
           ]),
       if (plan.isNotEmpty) _calibrationCard(r),
+      SelfOsStrengthFeedback(
+          key: ValueKey('guide_strength_${r.id}'),
+          review: r,
+          profile: _profile,
+          onSave: (notes) => _saveStrengthFeedback(r.id, notes)),
       _nextStepCard(),
       _primary('带着这个发现再试一轮', () async {
         if (await _transition((c) {

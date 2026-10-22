@@ -135,7 +135,7 @@ class SelfOsGuidance {
       final route = OsRoute({
         'title': r['title'],
         'mechanism': r['mechanism'],
-        'mechanismDetail': r['title'],
+        'mechanismDetail': r['mechanismDetail'] ?? r['title'],
         'desire': accepted.title,
         'cost': r['cost'],
         'reality': '待核验：${r['unknown']}',

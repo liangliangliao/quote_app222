@@ -1,6 +1,28 @@
 part of 'self_os_guide_page.dart';
 
 extension _GuideLearningPanel on _SelfOsGuidePageState {
+  Future<bool> _saveStrengthFeedback(
+      String reviewId, Map<String, String> notes) async {
+    if (_locked) return false;
+    _draftTimer?.cancel();
+    final draft = _c.copy();
+    final profile = SelfOsProfile.fromJson(_profile.toJson());
+    final review = draft.reviews.firstWhere((r) => r.id == reviewId);
+    review.notes.addAll(notes);
+    SelfOsStrengthLearning.applyFeedback(review, profile);
+    _redraw(() => _saving = true);
+    try {
+      if (!await _persist(draft, profile: profile) || !mounted) return false;
+      _redraw(() {
+        _c = draft;
+        _profile = profile;
+      });
+      return true;
+    } finally {
+      if (mounted) _redraw(() => _saving = false);
+    }
+  }
+
   Widget _calibrationCard(SelfOsReview review) {
     if (SelfOsLearning.calibrated(review)) {
       return OsSection(title: '认识已回到原问题', children: [
@@ -132,17 +154,41 @@ extension _GuideLearningPanel on _SelfOsGuidePageState {
               'prepare' => '继续这项准备',
               'decide' => '比较路径与真实取舍',
               'reentry' => '校准受影响的动机',
+              'horizon' => '展开后续状态与未来路径',
+              'alignment' => '查看本性、技能与可用力量',
+              'conflict' => '看看两边为什么都重要',
+              'routes' => '比较适合我的几种走法',
               _ => '补上当前需要的认识',
             })),
-      if (next.kind == 'assess')
+      if (next.engine != null)
+        OutlinedButton.icon(
+            key: const ValueKey('guide_next_engine'),
+            onPressed: _locked
+                ? null
+                : () => _details(
+                    5 + next.engine!.index,
+                    switch (next.engine!) {
+                      SelfOsEngine.desire => 'desires',
+                      SelfOsEngine.motivation => 'motives',
+                      SelfOsEngine.cognition => 'cognition',
+                      SelfOsEngine.action => 'action',
+                      _ => null,
+                    }),
+            icon: const Icon(Icons.arrow_forward, size: 17),
+            label: Text('继续到${next.engine!.label}')),
+      if (next.kind == 'assess' || next.analysisTask != null)
         TextButton.icon(
-            onPressed: _locked ? null : _analyseDecision,
+            key: const ValueKey('guide_analyse_next'),
+            onPressed: _locked
+                ? null
+                : () => _analyseDecision(
+                    next.analysisTask ?? 'gmrc', next.workspace ?? 1),
             icon: const Icon(Icons.auto_awesome_outlined, size: 17),
-            label: const Text('结合真实反馈，分析还缺什么')),
+            label: const Text('结合我的记录，帮我继续分析')),
     ]);
   }
 
-  Future<void> _analyseDecision() async {
+  Future<void> _analyseDecision(String task, int workspace) async {
     if (_locked) return;
     final ticket = ++_ticket;
     _draftTimer?.cancel();
@@ -155,7 +201,7 @@ extension _GuideLearningPanel on _SelfOsGuidePageState {
     try {
       if (!await _persist(_c) || !mounted || ticket != _ticket) return;
       final proposal = await widget.ai.analyseV37(_c.copy(),
-          [..._history.where((c) => c.id != _c.id), _c], _profile, 'gmrc');
+          [..._history.where((c) => c.id != _c.id), _c], _profile, task);
       if (!mounted || ticket != _ticket) return;
       final draft = _c.copy()..v37.pendingProposal = osClone(proposal.data);
       _redraw(() => _saving = true);
@@ -173,6 +219,6 @@ extension _GuideLearningPanel on _SelfOsGuidePageState {
           _saving = false;
         });
     }
-    if (saved && mounted) await _details(1);
+    if (saved && mounted) await _details(workspace);
   }
 }

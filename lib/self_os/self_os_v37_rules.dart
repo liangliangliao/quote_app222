@@ -23,16 +23,35 @@ class OsGate {
 }
 
 class OsCausalPath {
-  const OsCausalPath(this.nodes, this.edges, this.certainty, this.explanation,
-      this.stopReason);
+  const OsCausalPath(
+      this.nodes, this.edges, this.certainty, this.explanation, this.stopReason,
+      {this.nodeCertainties = const {}});
   final List<OsConsequence> nodes;
   final List<OsCausalEdge> edges;
   final String certainty, explanation, stopReason;
+  final Map<String, String> nodeCertainties;
 }
 
 /// V3.7 routing is based on the represented decision structure, never on life-
 /// domain keywords. Labels/scores are transparent product rules, not diagnoses.
 class SelfOsV37Rules {
+  static String evidenceCertainty(SelfOsV37 s, String label, List<String> ids,
+      {DateTime? at}) {
+    final now = at ?? DateTime.now();
+    final proof = s.evidence.where((e) => ids.contains(e.id)).toList();
+    if (proof
+        .any((e) => e.text('contradiction') == 'conflict' || !e.freshAt(now)))
+      return 'unknown';
+    if (label == 'unknown' ||
+        !osEpistemicLabels.containsKey(label) ||
+        (['fact', 'personal', 'external'].contains(label) &&
+            !proof.any((e) => e.reliableAt(now)))) return 'unknown';
+    if (label == 'simulation') return 'scenario';
+    if (label == 'inference')
+      return proof.any((e) => e.reliableAt(now)) ? 'supported' : 'scenario';
+    return 'direct';
+  }
+
   static List<OsRepresentationGap> representationGaps(SelfOsV37 s) {
     final result = <OsRepresentationGap>[];
     final routes = s.consideredRoutes;
@@ -380,22 +399,12 @@ class SelfOsV37Rules {
         .toList()
       ..sort((a, b) => a.id.compareTo(b.id));
     final result = <OsCausalPath>[];
-    int rank(String label, List<String> ids) {
-      final proof = s.evidence.where((e) => ids.contains(e.id)).toList();
-      if (proof
-          .any((e) => e.text('contradiction') == 'conflict' || !e.freshAt(now)))
-        return 0;
-      if (label == 'unknown' ||
-          (['fact', 'personal', 'external'].contains(label) &&
-              !proof.any((e) => e.reliableAt(now)))) return 0;
-      if (label == 'simulation') return 1;
-      if (label == 'inference')
-        return proof.any((e) => e.reliableAt(now)) ? 2 : 1;
-      return 3;
-    }
+    const levels = ['unknown', 'scenario', 'supported', 'direct'];
+    int rank(String label, List<String> ids) =>
+        levels.indexOf(evidenceCertainty(s, label, ids, at: now));
 
     void visit(OsConsequence node, List<OsConsequence> chain,
-        List<OsCausalEdge> links, int certainty) {
+        List<OsCausalEdge> links, int certainty, Map<String, String> prior) {
       if (result.length >= limit) return;
       final path = [...chain, node];
       var weakest = rank(node.label, node.evidenceIds);
@@ -422,27 +431,30 @@ class SelfOsV37Rules {
         stop = node.text('pruneReason').isEmpty
             ? '继续延伸不会改变本次选择。'
             : node.text('pruneReason');
+      final perNode = {...prior, node.id: levels[weakest]};
       if (stop.isNotEmpty || next.isEmpty) {
         result.add(OsCausalPath(
             path,
             links,
             ['unknown', 'scenario', 'supported', 'direct'][weakest],
             '按最弱关键依据、未知暴露与路径深度判断；不机械相乘概率。${path.length >= 5 ? '远期包含多次条件传递。' : ''}',
-            stop));
+            stop,
+            nodeCertainties: perNode));
         return;
       }
       for (final edge in next.take(4)) {
         if (path.any((n) => n.id == edge.to)) {
           result.add(OsCausalPath(
-              path, links, 'unknown', '检测到重复节点。', '请把反馈标记为闭环，而非无限复制节点。'));
+              path, links, 'unknown', '检测到重复节点。', '请把反馈标记为闭环，而非无限复制节点。',
+              nodeCertainties: perNode));
         } else {
-          visit(relevant[edge.to]!, path, [...links, edge], weakest);
+          visit(relevant[edge.to]!, path, [...links, edge], weakest, perNode);
         }
       }
     }
 
     for (final root in roots) {
-      visit(root, [], [], 3);
+      visit(root, [], [], 3, {});
     }
     return result.take(limit).toList();
   }

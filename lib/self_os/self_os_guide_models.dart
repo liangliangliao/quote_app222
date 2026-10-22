@@ -1,5 +1,18 @@
 import 'self_os_codec.dart';
 
+const osGuideTasks = {
+  'desire': '先分清真正想要的东西',
+  'motivation': '看看哪些理由能在现场起作用',
+  'cognition': '核对影响判断的认识',
+  'action': '把计划接到真实行动现场',
+  'routes': '比较结构不同的可行路径',
+  'gmrc': '补上会改变选择的认识',
+  'conflict': '看清两边真实的吸引与代价',
+  'prepare': '为未来那一刻做准备',
+  'alignment': '分清该训练、利用和尊重的部分',
+  'horizon': '看看这些后果还会改变什么',
+};
+
 /// A resumable conversation, separate from verified evidence and commitments.
 /// The model can propose a frame; only user actions advance confirmation.
 class OsGuideState {
@@ -49,6 +62,7 @@ class OsGuideFrame {
   Map<String, dynamic> get insight => osMap(data['insight']);
   Map<String, dynamic> get question => osMap(data['question']);
   Map<String, dynamic> get experiment => osMap(data['experiment']);
+  Map<String, dynamic> get routing => osMap(data['routing']);
   List<Map<String, dynamic>> get routes => osMaps(data['routes']);
   bool get ready => experiment.isNotEmpty;
 
@@ -97,6 +111,18 @@ class OsGuideFrame {
       'risk':
           ['low', 'medium', 'high'].contains(j['risk']) ? j['risk'] : 'unknown',
     };
+    // A semantic routing suggestion can open an appropriate workspace. It has
+    // no authority to approve a risk, evidence, personality or commitment.
+    final routing = osMap(j['routing']);
+    if (routing.isNotEmpty) {
+      if (!osGuideTasks.containsKey(routing['task'])) {
+        throw const FormatException('分析给出的下一步无法识别，请重新分析');
+      }
+      result['routing'] = {
+        'task': routing['task'],
+        'reason': requiredText(routing, 'reason', 300),
+      };
+    }
     if (insight.isNotEmpty) {
       result['insight'] = {
         for (final key in ['before', 'after', 'reason'])
@@ -123,6 +149,9 @@ class OsGuideFrame {
           ].contains(route['mechanism'])
               ? route['mechanism']
               : 'alternative',
+          'mechanismDetail': osText(route['mechanismDetail']).trim().isEmpty
+              ? requiredText(route, 'title', 240)
+              : requiredText(route, 'mechanismDetail', 300),
         }
     ];
     if (question.isNotEmpty) {

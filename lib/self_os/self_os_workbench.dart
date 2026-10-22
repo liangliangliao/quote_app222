@@ -6,6 +6,7 @@ import 'self_os_v37_ai.dart';
 import 'self_os_source_service.dart';
 import 'self_os_insights.dart';
 import 'self_os_learning.dart';
+import 'self_os_progress.dart';
 import 'self_os_horizon_view.dart';
 import 'self_os_widgets.dart';
 import 'self_os_workbench_widgets.dart';

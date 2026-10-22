@@ -10,6 +10,8 @@ import 'self_os_guide_test.dart' show experimentGuide;
 import 'package:quote_app/self_os/self_os_guidance.dart';
 import 'package:quote_app/self_os/self_os_learning.dart';
 import 'self_os_learning_test.dart' show observedExperiment, calibrate;
+import 'package:quote_app/self_os/self_os_strength_learning.dart';
+import 'self_os_spec37_test.dart' show strengthCase, strengthProfile;
 
 void main() {
   late Directory dir;
@@ -23,6 +25,39 @@ void main() {
   tearDown(() async {
     await repo.close();
     await dir.delete(recursive: true);
+  });
+
+  test('原文 A26：力量分阶段观察与复盘共同持久化，重开不改变封存协议', () async {
+    final c = strengthCase(), profile = strengthProfile();
+    final frozen = jsonEncode(c.commitment);
+    final review = c.reviews.single;
+    review.notes.addAll({
+      'strength.curiosity.cognition.effect': 'helped',
+      'strength.curiosity.cognition.usage': 'optimal',
+      'strength.curiosity.cognition.observation': '把担忧改写成可核对的问题',
+    });
+    SelfOsStrengthLearning.applyFeedback(review, profile);
+    await repo.saveCaseAndProfile(c, profile);
+    await repo.close();
+    final loadedCase = (await repo.loadCases()).single;
+    final loadedProfile = await repo.loadProfile();
+    expect(
+        loadedCase.reviews.single.notes['strength.curiosity.cognition.effect'],
+        'helped');
+    expect(loadedProfile.strengths.single.observations.single['reviewId'],
+        review.id);
+    expect(
+        osMaps(loadedProfile
+                .strengths.single.observations.single['stageEffects'])
+            .single['stage'],
+        'cognition');
+    expect(jsonEncode(loadedCase.commitment), frozen);
+    SelfOsStrengthLearning.applyFeedback(
+        loadedCase.reviews.single, loadedProfile);
+    await repo.saveCaseAndProfile(loadedCase, loadedProfile);
+    await repo.close();
+    expect(
+        (await repo.loadProfile()).strengths.single.observations, hasLength(1));
   });
 
   test('实际校准关闭重开不丢证据链，下一轮从修订结论继续', () async {
