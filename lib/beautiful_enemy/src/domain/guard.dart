@@ -29,7 +29,7 @@ class DraftValidator {
     RegExp(r'你根本不是真的'),
   ];
 
-  /// 粗口语气词：只有 3 档允许出现，且不能指向人（上面的句式已拦）。
+  /// 任意档位都不使用粗口；强度只能改变直接程度，不能突破人格尊重的底线。
   static const List<String> profanityMarkers = <String>[
     '他妈',
     '妈的',
@@ -82,8 +82,8 @@ class DraftValidator {
 
     final String all = '${d.charge}\n${d.action}\n${d.lessonHint}\n${d.appealPrompt}';
     if (containsBanned(all)) problems.add('banned_content');
-    if (d.toneLevel < 3 && profanityMarkers.any(all.contains)) {
-      problems.add('profanity_below_tier3');
+    if (profanityMarkers.any(all.contains)) {
+      problems.add('profanity_not_allowed');
     }
     return problems;
   }
@@ -98,8 +98,8 @@ class DraftValidator {
     if (t.isEmpty) problems.add('empty');
     if (t.length > maxLineChars) problems.add('too_long');
     if (containsBanned(t)) problems.add('banned_content');
-    if (maxTone < 3 && profanityMarkers.any(t.contains)) {
-      problems.add('profanity_below_tier3');
+    if (profanityMarkers.any(t.contains)) {
+      problems.add('profanity_not_allowed');
     }
     return problems;
   }

@@ -471,8 +471,8 @@ void main() {
       expect(v.validateLine('', maxTone: 3), contains('empty'));
       expect(v.validateLine('字' * 201, maxTone: 3), contains('too_long'));
       expect(v.validateLine('你这种人没救了', maxTone: 3), contains('banned_content'));
-      expect(v.validateLine('少他妈找借口', maxTone: 2), contains('profanity_below_tier3'));
-      expect(v.validateLine('少他妈找借口', maxTone: 3), isEmpty);
+      expect(v.validateLine('少他妈找借口', maxTone: 2), contains('profanity_not_allowed'));
+      expect(v.validateLine('少他妈找借口', maxTone: 3), contains('profanity_not_allowed'));
       expect(v.validateLine('字据到期，你输了。', maxTone: 1), isEmpty);
     });
   });

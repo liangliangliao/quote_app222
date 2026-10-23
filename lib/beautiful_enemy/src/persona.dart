@@ -3,8 +3,8 @@ import 'copy.dart';
 /// 美丽的敌人的本地台词。
 ///
 /// 模型不可用、超时、输出不合规时用这里的台词，所以它们本身就要像这个角色：
-/// 克制、精准、记账、不先动怒；用你的原话和事实说话；赢了就认，输了不饶。
-/// 所有台词都过同一套校验（禁区、粗口只在 3 档），测试里逐条跑。
+/// 温暖但坚定，只依据记录与用户原话挑战，真实进步也要认可。
+/// 所有台词都过安全校验：任何强度都不以羞辱或粗口推动行动。
 class PersonaLines {
   const PersonaLines._();
 
@@ -36,14 +36,14 @@ class PersonaLines {
         return _pick(<String>[
           '$a，$l没打卡。我只记一笔，不多话。',
           '$l记成未完成了，$a。别先给理由，先给我一个补做的时间。',
-          if (tone >= 2) '$l空着。你今天有的是时间做别的事，这件它排不上队？',
-          if (tone >= 3) '$l他妈的又空着，$a。这是第几次，你自己数。',
+          if (tone >= 2) '$l空着。是任务太大，还是被别的事打断？',
+          if (tone >= 3) '$l仍未完成，$a。具体卡在哪一步？',
         ], seed);
       case 'habit_done':
         return _pick(<String>[
-          '$l做完了。记下，不多夸。',
+          '$l做完了。这是有记录的进步。',
           '$a，$l完成。这一分算你的。',
-          if (tone >= 3) '$l做了。这一局我认——下一局门槛抬高。',
+          if (tone >= 3) '$l做到了，$a。这一项已兑现。下一步由你选择。',
         ], seed);
       case 'kindling_completed':
         return _pick(<String>[
@@ -55,7 +55,7 @@ class PersonaLines {
         return _pick(<String>[
           '$a，火种烧了 $minutes 分钟就停了。点火的是你，掐灭的也是你。',
           if (tone >= 2) '火种 $minutes 分钟就掐了。开头从来不是难处，难的是熬过那一段。',
-          if (tone >= 3) '火种烧了 $minutes 分钟又掐了。别拿「状态不好」糊弄我，状态是做出来的，$a。',
+          if (tone >= 3) '火种烧了 $minutes 分钟又掐了。$a，这次中断了；下次怎样降低中断概率？',
         ], seed);
       case 'knowledge_converted':
         return _pick(<String>[
@@ -64,14 +64,14 @@ class PersonaLines {
         ], seed);
       case 'commitment_missed':
         return _pick(<String>[
-          '字据到期：$l。这一局你输了，$a。$stakeLine',
-          if (tone >= 2) '$l到点了，没兑现。输了就认，别拿「忙」换时间。$stakeLine',
-          if (tone >= 3) '$l到期作废。说得漂亮，做得难看，$a。$stakeLine',
+          '字据到期：$l。记录显示未兑现，$a。发生了什么？$stakeLine',
+          if (tone >= 2) '$l到点了，没兑现。请说一个具体阻碍，再决定是否重排。$stakeLine',
+          if (tone >= 3) '$l到期作废。原计划与执行有差距，$a。下次该改哪个环节？$stakeLine',
         ], seed).trim();
       case 'commitment_unverified':
         return _pick(<String>[
-          '$l你标记完成了，账上没有对应的完整火种记录。这一条我不认，$a。',
-          if (tone >= 2) '$l打了勾，账上却是空的。$a，勾是你画的，账是我记的。',
+          '$l标记为完成，但账上暂无对应的完整火种记录。$a，你用别的方式完成了吗？',
+          if (tone >= 2) '$l已勾选，当前记录尚无法核实。$a，可以补充完成方式和时间。',
         ], seed);
       case 'commitment_done':
         return _pick(<String>[
@@ -91,7 +91,7 @@ class PersonaLines {
     int seed = 0,
   }) {
     return _pick(<String>[
-      '$address，「$text」还剩 $minutes 分钟。我在看。',
+      '$address，「$text」还剩 $minutes 分钟。若计划仍适合，现在可以开始。',
       '「$text」只剩 $minutes 分钟了，$address。现在动手，还来得及。',
     ], seed);
   }
@@ -103,9 +103,9 @@ class PersonaLines {
     int seed = 0,
   }) {
     return _pick(<String>[
-      '$address，话我听见了。话不是证据——今天你做成了什么，拿数字来。',
-      '这话我记下了。但案卷里没有它，说了不算，做完再来。',
-      if (tone >= 2) '少讲道理，$address。给我一个动作和一个时间。',
+      '$address，我听到了。能说说具体发生了什么，以及希望改变哪一步吗？',
+      '这件事目前没有对应记录；如果你在应用外做过，也可以告诉我。',
+      if (tone >= 2) '$address，我们先抓一个点：你愿意选哪个动作，定在什么时候？',
     ], seed);
   }
 
@@ -147,7 +147,7 @@ class PersonaLines {
     int seed = 0,
   }) {
     final String next = nextText.isEmpty ? '' : '，最近的是「$nextText」';
-    final String done = doneToday == 0 ? '今天案卷里一件完成的事都没有。' : '今天完成了 $doneToday 件。';
+    final String done = doneToday == 0 ? '今天账上尚无完成记录；这不等于你什么都没做。' : '今天完成了 $doneToday 件。';
     return _pick(<String>[
       '$address，今晚结账。$done还开着 $open 条字据$next。',
       '$address，天快黑了。$done还开着 $open 条字据$next。账不会自己平。',
@@ -169,7 +169,7 @@ class PersonaLines {
 
   /// 他说做完了，账上没有。
   static String claimNoRecord(String address) =>
-      '$address，你说做完了。案卷里最近 24 小时没有一条完成记录。做的是什么，几点做的？';
+      '$address，你说做完了。案卷里最近 24 小时暂未找到完成记录。你做的是什么，几点做的？';
 
   /// 他说没时间，账上他在 App 里待了不短的时间。
   static String claimBusy(String address, int minutes) =>
@@ -244,18 +244,18 @@ class PersonaLines {
         ], seed);
       case 'ignored_verdict':
         return _pick(<String>[
-          '$a，上一条判词你没有回应。沉默不是申辩，我把它记作默认。',
-          if (tone >= 2) '判词摆在那儿，你既不接受也不申辩。$a，装作没看见，账也不会消失。',
+          '$a，上一条判词你没有回应。不回应不等于同意，你可以选择跳过。',
+          if (tone >= 2) '判词摆在那儿，你既不接受也不申辩。$a，如果你愿意，可以一起核实判词是否准确。',
         ], seed);
       case 'reject_pattern':
         return _pick(<String>[
-          '$a，本周你驳回了 $n 项动议，兑现了 $m 条字据。驳回是你的权利，但账上只认兑现。',
-          if (tone >= 2) '驳回 $n 次，兑现 $m 次。$a，你的否决权用得比行动权勤快。',
+          '$a，本周你驳回了 $n 项动议，兑现了 $m 条字据。驳回是你的权利。是哪一点不适合？',
+          if (tone >= 2) '驳回 $n 次，兑现 $m 次。$a，哪些建议不合适？我们可以调整。',
         ], seed);
       case 'unanswered_inquiry':
         return _pick(<String>[
-          '$a，我 $hours 小时前问过：「$text」。沉默也是一种答复——要我这样记吗？',
-          if (tone >= 2) '「$text」——$hours 小时了，没有回答。$a，不答，就是答了。',
+          '$a，我 $hours 小时前问过：「$text」。你可以稍后回复，也可以略过。',
+          if (tone >= 2) '「$text」——$hours 小时了，没有回答。$a，未回复不等于同意；要继续讨论还是先处理别的？',
         ], seed);
       default:
         if (hours >= 3 && tone >= 2) {
@@ -293,8 +293,8 @@ class PersonaLines {
   static String rebut({required String address, required String reason, int seed = 0}) {
     final String r = reason.length > 30 ? '${reason.substring(0, 30)}…' : reason;
     return _pick(<String>[
-      '$address，驳回记下了。理由是：「$r」。账上只认兑现，不认理由。动议我保留。',
-      '「$r」——就这？$address，理由我收下，动议不撤。',
+      '$address，驳回记下了。理由是：「$r」。我可能忽略了现实限制，愿意再核实。动议已驳回。',
+      '「$r」——我听到了。$address，动议已驳回；有需要可换个可行方案。',
     ], seed);
   }
 
