@@ -1,6 +1,23 @@
 part of 'self_os_guide_page.dart';
 
 extension _GuideLearningPanel on _SelfOsGuidePageState {
+  Future<bool> _saveRepresentationFeedback(
+      String reviewId, Map<String, String> notes) async {
+    if (_locked) return false;
+    _draftTimer?.cancel();
+    final draft = _c.copy();
+    SelfOsRepresentationLearning.saveFeedback(
+        draft.reviews.firstWhere((r) => r.id == reviewId), notes);
+    _redraw(() => _saving = true);
+    try {
+      if (!await _persist(draft) || !mounted) return false;
+      _redraw(() => _c = draft);
+      return true;
+    } finally {
+      if (mounted) _redraw(() => _saving = false);
+    }
+  }
+
   Future<bool> _saveStrengthFeedback(
       String reviewId, Map<String, String> notes) async {
     if (_locked) return false;

@@ -12,6 +12,8 @@ import 'package:quote_app/self_os/self_os_learning.dart';
 import 'self_os_learning_test.dart' show observedExperiment, calibrate;
 import 'package:quote_app/self_os/self_os_strength_learning.dart';
 import 'self_os_spec37_test.dart' show strengthCase, strengthProfile;
+import 'self_os_representation_test.dart' show expressionCase, expressionNotes;
+import 'package:quote_app/self_os/self_os_representation_learning.dart';
 
 void main() {
   late Directory dir;
@@ -25,6 +27,42 @@ void main() {
   tearDown(() async {
     await repo.close();
     await dir.delete(recursive: true);
+  });
+
+  test('A38：表达效果关闭重开与导出恢复后仍可推荐，撤回反馈不改事前快照', () async {
+    final cases = [
+      for (var i = 0; i < 3; i++) expressionCase(context: '实际情境 $i')
+    ];
+    for (final c in cases) {
+      await repo.saveCase(c);
+    }
+    await repo.close();
+    final restored = await repo.loadCases();
+    expect(
+        SelfOsRepresentationLearning.recommend(
+                restored, 'discomfort', 'evening')!
+            .total,
+        3);
+    final c = restored.first;
+    final frozen = jsonEncode(c.commitment);
+    SelfOsRepresentationLearning.saveFeedback(
+        c.reviews.single, expressionNotes(c.reviews.single, effect: 'unknown'));
+    await repo.saveCase(c);
+    await repo.close();
+    final reread = await repo.loadCases();
+    expect(
+        SelfOsRepresentationLearning.recommend(reread, 'discomfort', 'evening'),
+        isNull);
+    expect(
+        jsonEncode(reread.firstWhere((v) => v.id == c.id).commitment), frozen);
+    expect(
+        SelfOsRepresentationLearning.patterns(reread
+                .map((c) =>
+                    SelfOsCase.fromJson(jsonDecode(jsonEncode(c.toJson()))))
+                .toList())
+            .single
+            .total,
+        2);
   });
 
   test('原文 A26：力量分阶段观察与复盘共同持久化，重开不改变封存协议', () async {

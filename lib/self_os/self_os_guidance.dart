@@ -1,5 +1,6 @@
 import 'self_os_models.dart';
 import 'self_os_progress.dart';
+import 'self_os_representation_learning.dart';
 
 /// Translates user-confirmed guidance into the same V3.7 evidence model used by
 /// the detailed workbenches. AI output alone never advances these transitions.
@@ -92,7 +93,16 @@ class SelfOsGuidance {
       // The endorsed original view belongs to the before snapshot.
       c.v37.knowledgeBefore!['knowledge'] = c.text('k1');
     }
-    c.fields['k2'] = osText(f.insight['after']);
+    final representation = SelfOsRepresentationLearning.validateChoice(
+        f.insight['representation']);
+    if (representation != null) {
+      SelfOsRepresentationLearning.adopt(c,
+          choice: representation,
+          content: osText(f.insight['after']),
+          source: osText(f.insight['reason']));
+    } else {
+      c.fields['k2'] = osText(f.insight['after']);
+    }
     c.fields['knowledgeSource'] = '引导中的用户确认（解释，尚待现实验证）';
     final desire =
         c.desires.where((d) => d.title == f.text('toward')).firstOrNull;

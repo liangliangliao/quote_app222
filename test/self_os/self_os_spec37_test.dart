@@ -305,7 +305,8 @@ void main() {
     final suggestions =
         await ai.suggest(plannedCase(), history, 'cognition', profile: profile);
     final personal = osMap(captured!['personalEvidence']);
-    expect(osMaps(personal['representationPreferences']).single['samples'], 3);
+    expect(
+        osMaps(personal['cognitiveOperationPreferences']).single['samples'], 3);
     final strength = osMaps(personal['strengths']).single;
     expect(strength['observations'], hasLength(3));
     expect(strength['supportedReviewIds'], isNot(contains('orphan')));

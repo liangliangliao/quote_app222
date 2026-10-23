@@ -1,24 +1,24 @@
 # Self OS V3.7 原文验收记录
 
-审查日期：2026-10-22。开发基线：`main@37a34004`；交付分支：`codex/self-os-v37-closed-loop-20261021`。范围只包括发现之旅内的 Self OS。
+审查日期：2026-10-23。开发基线：`main@37a34004`；交付分支：`codex/self-os-v37-closed-loop-20261021`。范围只包括发现之旅内的 Self OS。
 
 ## 原件与统计口径
 
 本轮已恢复并通读用户重新提供的 59 页 V3.7 PDF，不再依据上一轮转述推定需求。原件 SHA-256：`847b81b331c3b6896670cd10ad6b5f6fb17260ff79bfde8472d7391319217ef4`。第 12.2 节（p47–50）共有 **53 条核心验收标准**；[机器可读清单](self_os_v37_requirements.json)保存原文、页码、实现文件和验证文件。此前 58 条技术检查点不再充当产品需求分母。
 
-**核心工程实现：50/53 项（94.3%），另 3 项部分完成。** 分母仅是原文明确列出的核心标准，分子指有可执行业务机制并有针对性工程证据，不是“整个 PDF 已验收 94.3%”，也不代表 AI 回答正确率。A38、A40、A47 保守计为未完成；不把模拟响应当真实智能效果。
+**核心工程实现：51/53 项（96.2%），另 2 项部分完成。** 分母仅是原文明确列出的核心标准，分子指有可执行业务机制并有针对性工程证据，不是“整个 PDF 已验收 96.2%”，也不代表 AI 回答正确率。A40、A47 保守计为未完成；不把模拟响应当真实智能效果。
 
-本地 Self OS 静态分析通过，**138 项专项测试通过**。AI 测试使用受控响应，覆盖候选解析、上下文、调度、权限边界、异常恢复；没有在本环境请求真实模型。没有执行其他模块测试。
+本地 Self OS 静态分析通过，**153 项专项测试通过，1 项真实模型验收入口因未提供真实响应而明确跳过**。AI 测试使用受控响应，覆盖候选解析、上下文、调度、权限边界、异常恢复；没有在本环境请求真实模型。17 族、168 变体的生产请求已实际导出并校验；这不计为模型通过。没有执行其他模块测试。
 
 ## 对用户五个问题的回答
 
 | 问题 | 目前结论 |
 | --- | --- |
-| 实现进度超过 90% 吗？ | 按上述原文核心工程清单，94.3%；整体产品的真实使用验收尚不能作同样声明。 |
+| 实现进度超过 90% 吗？ | 按上述原文核心工程清单，96.2%；整体产品的真实使用验收尚不能作同样声明。 |
 | 核心和重点功能具备吗？ | 欲求、动机、认识、行动、反馈五引擎，以及证据门槛、路径主线、冲突、力量、未来准备、因果地平线都已接通。 |
 | 业务逻辑清晰完善吗？ | 已形成问题→认识/路径→决定或有边界实验→实际反馈→校准→下一轮的闭环；新信息和失效证据可以中断旧协议，失败写入不会伪造完成。 |
 | 系统化、智能化了吗？ | 已有统一调度、模型候选推理、可解释规则、个人实证上下文和长期持久化；不是只拼接几个分析页面。真实模型质量尚待验收。 |
-| 还需要改进吗？ | 需要：细粒度表示偏好学习、真实模型跨场景质量和 Android 真机连续使用。完成工程清单不等于再无改进空间。 |
+| 还需要改进吗？ | 需要：真实模型跨场景质量、真实个体效果积累和 Android 真机连续使用。完成工程清单不等于再无改进空间。 |
 
 ## 第 12.2 节逐项映射
 
@@ -63,9 +63,9 @@
 | A35 / p49 | 后果图四组维度与有理由的不适用 | 实现 | `v37_rules.dart`、`knowledge_panel.dart` | `v37_rules_test.dart`、`learning_test.dart` |
 | A36 / p49 | 选项对称与顺序/措辞不变性 | 实现 | `v37_rules.dart`、`v37_ai.dart` | `v37_rules_test.dart`、`learning_test.dart` |
 | A37 / p49 | 关键边条件、依据与置信度 | 实现 | `v37_rules.dart`、`horizon_view.dart` | `v37_rules_test.dart`、`spec37_test.dart`、`spec37_widget_test.dart` |
-| A38 / p49 | 按个人历史选择有效表示方式 | 部分 | `ai_service.dart`、`engine.dart` | `spec37_test.dart` |
+| A38 / p49 | 按个人历史选择有效表示方式 | 实现 | `representation_learning.dart`、`representation_widgets.dart`、`ai_service.dart`、`guidance.dart` | `representation_test.dart`、`representation_widget_test.dart`、`v37_repository_test.dart` |
 | A39 / p49 | M0→M1 差异，文字增加不等于有效增益 | 实现 | `models.dart`、`v37_rules.dart`、`reentry_panel.dart` | `v37_rules_test.dart`、`learning_test.dart` |
-| A40 / p49 | 至少六类同结构跨场景完整回归 | 部分 | `v37_rules.dart`、`ai_service.dart`、`learning.dart` | `v37_rules_test.dart`、`learning_test.dart`、`spec37_test.dart` |
+| A40 / p49 | 至少六类同结构跨场景完整回归 | 部分 | `v37_rules.dart`、`ai_service.dart`、`learning.dart` | `v37_rules_test.dart`、`learning_test.dart`、`spec37_test.dart`、`semantic_test.dart`、`semantic/corpus.json` |
 | A41 / p49 | 未来 T* 与最小认识准备 | 实现 | `progress.dart`、`ai_service.dart`、`preparation_panel.dart`、`home_page.dart` | `v37_rules_test.dart`、`guide_test.dart`、`learning_test.dart`、`spec37_test.dart` |
 | A42 / p50 | 干预绑定缺口/来源/时点/预期变化 | 实现 | `v37_ai.dart`、`models.dart`、`preparation_panel.dart` | `v37_ai_source_test.dart`、`v37_rules_test.dart` |
 | A43 / p50 | 关键未知的翻转敏感性 | 实现 | `v37_models.dart`、`v37_rules.dart`、`knowledge_panel.dart` | `learning_test.dart`、`v37_rules_test.dart` |
@@ -108,7 +108,15 @@
 | Same Person/New Knowledge、Environment vs Character、Stable Pattern Update | 七种来源对照；未知条件不当作不变；跨情境/多样本/替代解释门槛 | 真实长期数据的解释质量，不能生成样本冒充经历 |
 | Multi-order、Conditional Branching、Feedback Loop、Threshold/Lock-in、Future Options、Horizon Uncertainty | 多阶/分支/回路、剪枝预算、阈值/可逆窗口、六类未来路径、逐节点置信度和最弱依据；跨域与顺序变化验证 | 模型自由输入下对条件、回路、阈值及高价值中间节点的泛化识别 |
 
-## 本轮实际补齐与修复
+## 本轮新增：细粒度表达学习与模型验收工具
+
+- 五种表达（因果链、时间节点、数值范围、场景变化、反事实）× 六类问题结构 × 四个使用时点。默认引导确认与详细认识工作台共用事前采用、K/M/Att 更新、冻结协议和事后反馈链。
+- 分别记录理解、动机可用性、真实行动帮助，以及反作用和其他条件变化；每种表达每次复盘最多一条样本，未知和混杂不作为有效推荐证据。
+- 至少 3 次复盘、2 个案例、2 种情境，且问题结构与时点匹配才推荐；依据与反例可查看。撤回判断、删除案例会立即改变统计；下一轮不继承旧采用草稿。
+- 认知与引导 AI 获得可追溯的分层统计，用户确认才采用，不能写入实际效果或已验证状态。没有模型时可手动改写。
+- 原文全部 17 个泛化测试族的 168 个变体与生产请求导出已就绪；缺来源、缺样本、结构错误或缺语义评审均不能通过，执行说明见 [真实模型验收](self_os_v37_semantic_eval.md)。
+
+## 上一轮已补齐的基础
 
 1. 原文驱动的十类语义分流接到对应工作台/引擎，可直接启动所需分析；新信息、反证、过期证据优先。已审视的冲突不会无变化地反复阻挡。
 2. 个人真实复盘、校准、原则、认知偏好与力量证据进入分析请求；不存在的力量/路径/欲求引用会被剔除。用户选定的认识操作实际参与请求。
@@ -119,11 +127,10 @@
 7. 复盘与力量反馈原子保存；失败保留草稿并可重试。新一轮清除上轮实际反馈输入与现场力量选择，历史快照保留。
 8. 首页新增三项冲突摘要、证据充分才展示的力量卡；未来准备卡显示时刻、1–3 项动作、最晚时间与一条现场观念/第一动作。
 
-## 尚未完成的三项与真实使用验收
+## 尚未完成的两项与真实使用验收
 
-- **A38**：已有基于真实认知操作样本的偏好输入及表征候选；尚未完成对表示方式 × 任务 × 时点的细粒度效果学习和真实个体效果比较。
-- **A40**：已有七类结构缺口、六领域变体与前后动机闭环的规则/流程回归；尚未运行六类自然语言输入在真实模型上的完整泛化验收。
-- **A47**：已有跨域多阶/置信度不变性、条件分支、回路与阈值规则回归；真实模型对陌生领域的分支/回路/路径依赖识别仍待完整泛化验收。
+- **A40 / A47**：自然语言跨场景验收集、生产请求导出、来源校验、结构检查与语义评审报告已完成。尚缺实际模型对 168 个变体的真实响应及逐条评审，仍计部分完成；不能用本地受控响应补齐这两个勾选。
+- **A38 工程已补齐**：真实个体效果只能从实际使用中积累，统计是观察性推荐，不证明某种表达在所有情境最有效。
 
 本环境没有可用的真实模型凭据；应用继续使用现有 `UnifiedAiService` 与用户已有供应商配置，没有改动公共 AI 服务或索取明文密钥。真实模型验收应记录实际配置、输入输出和来源，覆盖第 12.3–12.5 节用例族，并逐项判定，而不是让模型自评分。编造来源、单向说服、误升级事实或用小实验越过不可逆决定均判失败。
 
@@ -138,4 +145,4 @@ flutter analyze --no-pub lib/self_os test/self_os
 flutter test --no-pub test/self_os --reporter expanded
 ```
 
-本地结果：分析无问题，138 项通过；已检查新引导入口与力量反馈的中文手机布局。GitHub 手动运行源码工作流 `.github/workflows/android_build_source_repo.yml`，输入 `self_os_checks=true`，只跑 Self OS 专项检查，再编译完整 release APK。提交包含 `[skip ci]`，避免触发无关模块自动测试。当前构建状态和最终产物链接以 [PR #187](https://github.com/liangliangliao/quote_app222/pull/187) 的本次提交记录为准。未合并主分支，旧 APK 不包含当前提交。
+本地结果：分析无问题，153 项通过、1 项真实模型验收入口明确跳过；已检查新增表达学习的中文 390×844 布局。GitHub 手动运行源码工作流 `.github/workflows/android_build_source_repo.yml`，输入 `self_os_checks=true`，只跑 Self OS 专项检查，再编译完整 release APK。提交包含 `[skip ci]`，避免触发无关模块自动测试。当前构建状态和最终产物链接以 [PR #187](https://github.com/liangliangliao/quote_app222/pull/187) 的本次提交记录为准。未合并主分支，旧 APK 不包含当前提交。

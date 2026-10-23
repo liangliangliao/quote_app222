@@ -13,6 +13,8 @@ import 'self_os_insights.dart';
 import 'self_os_strength_learning.dart';
 import 'self_os_strength_feedback.dart';
 import 'self_os_progress.dart';
+import 'self_os_representation_learning.dart';
+import 'self_os_representation_widgets.dart';
 
 class SelfOsCasePage extends StatefulWidget {
   const SelfOsCasePage(
@@ -318,6 +320,11 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('AI 候选 · ${s['kind']}',
                 style: const TextStyle(color: osGold, fontSize: 12)),
+            if (SelfOsRepresentationLearning.validateChoice(s['representation'])
+                case final choice?)
+              Text(
+                  '${osRepresentationFormats[choice['format']]} · ${osRepresentationTasks[choice['task']]} · ${osRepresentationWindows[choice['window']]}',
+                  style: const TextStyle(fontSize: 12)),
             const SizedBox(height: 6),
             Text(osText(s['value']), style: const TextStyle(height: 1.6)),
             Text('依据：${s['reason']}',
@@ -343,9 +350,23 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
                     if (yes != true || !mounted) return;
                   }
                   setState(() {
-                    if (task == 'cognition' && field == 'k2')
-                      _c.beginCognition();
-                    _c.fields[field] = osText(s['value']);
+                    final representation =
+                        SelfOsRepresentationLearning.validateChoice(
+                            s['representation']);
+                    if (task == 'cognition' &&
+                        field == 'k2' &&
+                        representation != null &&
+                        !_c.reviewed &&
+                        !_c.retrospective) {
+                      SelfOsRepresentationLearning.adopt(_c,
+                          choice: representation,
+                          content: osText(s['value']),
+                          source: osText(s['reason']));
+                    } else {
+                      if (task == 'cognition' && field == 'k2')
+                        _c.beginCognition();
+                      _c.fields[field] = osText(s['value']);
+                    }
                     if (osText(s['strengthId']).isNotEmpty) {
                       SelfOsStrengthLearning.draftUse(
                           _c,
@@ -889,6 +910,22 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
   List<Widget> _cognition() => [
         _workbenchLink('进入证据台账与因果地平线', 1),
         if (_profile.strengths.isNotEmpty) _workbenchLink('用已有力量检查当前解释与边界', 4),
+        ExpansionTile(
+            key: const ValueKey('representation_editor'),
+            tilePadding: EdgeInsets.zero,
+            title: const Text('选择更适合我的表达方式'),
+            subtitle: const Text('查看个人历史，或自己改写一版后果'),
+            children: [
+              SelfOsRepresentationEditor(
+                  value: _c,
+                  history: _history,
+                  enabled:
+                      !_busy && !_saving && !_c.reviewed && !_c.retrospective,
+                  onChanged: (change) => setState(() {
+                        change();
+                        _revision++;
+                      }))
+            ]),
         if (_c.blocker != 'cognition')
           OsNote(
               '当前阻塞判断：${selfOsBlockers[_c.blocker]}。先检验原因；如果目标、手段或环境不合适，可以直接调整它们。'),
@@ -1051,6 +1088,11 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
             review: current.single,
             profile: _profile,
             onSave: (notes) => _saveStrengthFeedback(current.single.id, notes)),
+        SelfOsRepresentationFeedback(
+            key: ValueKey('representation_${current.single.id}'),
+            review: current.single,
+            onSave: (notes) =>
+                _saveRepresentationFeedback(current.single.id, notes)),
         FilledButton.icon(
             onPressed: () async {
               _c.nextRound();
@@ -1291,6 +1333,28 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
         _c = draft;
         _profile = profile;
         _profileDirty = false;
+        _error = null;
+      });
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<bool> _saveRepresentationFeedback(
+      String reviewId, Map<String, String> notes) async {
+    if (_saving || _busy) return false;
+    final draft = _c.copy();
+    SelfOsRepresentationLearning.saveFeedback(
+        draft.reviews.firstWhere((r) => r.id == reviewId), notes);
+    setState(() => _saving = true);
+    try {
+      await widget.repository.saveCase(draft);
+      if (!mounted) return false;
+      setState(() {
+        _c = draft;
         _error = null;
       });
       return true;

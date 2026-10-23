@@ -394,8 +394,9 @@ class SelfOsCase {
     final delta = SelfOsV37Rules.motiveDelta(before, after);
     if (delta.isEmpty && noChangeReason.trim().isEmpty)
       throw const FormatException('尚未观察到动机场变化。请关联动机变化，或说明为何新信息不改变决定');
+    final traceId = selfOsId();
     v37.knowledgeTraces.add({
-      'id': selfOsId(),
+      'id': traceId,
       'round': round,
       'before': osClone(before),
       'after': osClone(after),
@@ -405,6 +406,14 @@ class SelfOsCase {
       'status': delta.isEmpty ? 'no_decision_change' : 'rebuilt',
       'createdAt': DateTime.now().toIso8601String(),
     });
+    final expressions = osMaps(v37.settings['representationUses']);
+    for (final use in expressions.where((u) => u['round'] == round)) {
+      use['after'] = osClone(after);
+      use['knowledgeTraceId'] = traceId;
+      use['motiveDelta'] = osClone({'items': delta})['items'];
+    }
+    if (expressions.isNotEmpty)
+      v37.settings['representationUses'] = expressions;
     v37.knowledgeBefore = null;
     v37.settings['deliberationCycles'] =
         (v37.number('deliberationCycles') ?? 0).toInt() + 1;
@@ -561,6 +570,8 @@ class SelfOsCase {
     fields['knowledgeSource'] = '第 $round 轮行动之镜';
     fields.remove('k2');
     fields.remove('cognitiveOperation');
+    fields.removeWhere((key, _) => key.startsWith('representation.'));
+    v37.settings.remove('representationUses');
     fields.removeWhere((key, _) => key.startsWith('review.'));
     scores.removeWhere((key, _) => key.startsWith('review.'));
     round += 1;

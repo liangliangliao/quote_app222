@@ -12,6 +12,8 @@ import 'self_os_repository.dart';
 import 'self_os_widgets.dart';
 import 'self_os_strength_learning.dart';
 import 'self_os_strength_feedback.dart';
+import 'self_os_representation_learning.dart';
+import 'self_os_representation_widgets.dart';
 
 part 'self_os_guide_learning_panel.dart';
 
@@ -468,6 +470,11 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
             _line('原先的理解', osText(f.insight['before'])),
             _line('也许更接近的解释', osText(f.insight['after'])),
             _line('为什么这样想', osText(f.insight['reason'])),
+            if (SelfOsRepresentationLearning.validateChoice(
+                    f.insight['representation'])
+                case final choice?)
+              _line('这次的表达方式',
+                  '${osRepresentationFormats[choice['format']]} · ${osRepresentationWindows[choice['window']]}；实际是否有帮助，行动后再反馈。'),
             if (f.routes.isNotEmpty)
               ExpansionTile(
                   tilePadding: EdgeInsets.zero,
@@ -850,6 +857,10 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
           review: r,
           profile: _profile,
           onSave: (notes) => _saveStrengthFeedback(r.id, notes)),
+      SelfOsRepresentationFeedback(
+          key: ValueKey('guide_representation_${r.id}'),
+          review: r,
+          onSave: (notes) => _saveRepresentationFeedback(r.id, notes)),
       _nextStepCard(),
       _primary('带着这个发现再试一轮', () async {
         if (await _transition((c) {

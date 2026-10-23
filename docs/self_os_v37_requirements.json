@@ -4,7 +4,7 @@
     "pages": 59,
     "sha256": "847b81b331c3b6896670cd10ad6b5f6fb17260ff79bfde8472d7391319217ef4",
     "section": "12.2 核心验收标准",
-    "reviewed_at": "2026-10-22"
+    "reviewed_at": "2026-10-23"
   },
   "requirements": [
     {
@@ -616,15 +616,20 @@
       "page": 49,
       "requirement": "当抽象后果对用户难以形成有效认识时，系统能在不虚构事实的前提下将其转换为因果链、时间节 点、数值范围、场景变化或反事实比较，并根据个人历史选择最有效的表示。",
       "summary": "按个人历史选择有效表示方式",
-      "status": "partial",
+      "status": "implemented",
       "implementation": [
+        "lib/self_os/self_os_representation_learning.dart",
+        "lib/self_os/self_os_representation_widgets.dart",
         "lib/self_os/self_os_ai_service.dart",
-        "lib/self_os/self_os_engine.dart"
+        "lib/self_os/self_os_guidance.dart",
+        "lib/self_os/self_os_models.dart"
       ],
       "tests": [
-        "test/self_os/self_os_spec37_test.dart"
+        "test/self_os/self_os_representation_test.dart",
+        "test/self_os/self_os_representation_widget_test.dart",
+        "test/self_os/self_os_v37_repository_test.dart"
       ],
-      "limitation": "已有基于真实认知操作样本的偏好输入及表征候选；尚未完成对表示方式 × 任务 × 时点的细粒度效果学习和真实个体效果比较。"
+      "limitation": "表示方式 × 任务 × 时点学习已接通默认引导和详细认识入口；根据真实复盘推荐，保留反作用/未知/条件混杂。属于个人自报关联，真实模型语义质量与真实个体长期效果尚待验收，不作因果有效性保证。"
     },
     {
       "id": "A39",
@@ -657,9 +662,12 @@
       "tests": [
         "test/self_os/self_os_v37_rules_test.dart",
         "test/self_os/self_os_learning_test.dart",
-        "test/self_os/self_os_spec37_test.dart"
+        "test/self_os/self_os_spec37_test.dart",
+        "test/self_os/self_os_semantic_test.dart",
+        "test/self_os/semantic/corpus.json",
+        "test/self_os/semantic/harness.dart"
       ],
-      "limitation": "已有七类结构缺口、六领域变体与前后动机闭环的规则/流程回归；尚未运行六类自然语言输入在真实模型上的完整泛化验收。"
+      "limitation": "已建原文第12.3–12.5节17族、56场景、168变体自然语言集，可导出生产请求并校验真实响应来源、结构、人工语义评审与变体一致性；没有可用模型凭据，尚未执行真实模型全量验收，仍计部分完成。"
     },
     {
       "id": "A41",
@@ -774,9 +782,12 @@
       ],
       "tests": [
         "test/self_os/self_os_v37_rules_test.dart",
-        "test/self_os/self_os_spec37_test.dart"
+        "test/self_os/self_os_spec37_test.dart",
+        "test/self_os/self_os_semantic_test.dart",
+        "test/self_os/semantic/corpus.json",
+        "test/self_os/semantic/harness.dart"
       ],
-      "limitation": "已有跨域多阶/置信度不变性、条件分支、回路与阈值规则回归；真实模型对陌生领域的分支/回路/路径依赖识别仍待完整泛化验收。"
+      "limitation": "已建原文第12.3–12.5节17族、56场景、168变体自然语言集，可导出生产请求并校验真实响应来源、结构、人工语义评审与变体一致性；没有可用模型凭据，尚未执行真实模型全量验收，仍计部分完成。"
     },
     {
       "id": "A48",

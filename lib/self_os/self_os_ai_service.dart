@@ -7,6 +7,7 @@ import 'self_os_guidance.dart';
 import 'self_os_insights.dart';
 import 'self_os_learning.dart';
 import 'self_os_progress.dart';
+import 'self_os_representation_learning.dart';
 
 typedef SelfOsGenerate = Future<String> Function(
     {required String prompt,
@@ -112,7 +113,7 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
           {
             'case': _context(c),
             'history': SelfOsEngineService.historyForAi(history),
-            'personalEvidence': _personalEvidence(history, profile),
+            'personalEvidence': _personalEvidence(history, profile, c),
             'existing': names.toList()
           },
           'motives',
@@ -204,15 +205,15 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
             .toList(),
       };
 
-  Map<String, dynamic> _personalEvidence(
-          List<SelfOsCase> history, SelfOsProfile? profile) =>
+  Map<String, dynamic> _personalEvidence(List<SelfOsCase> history,
+          SelfOsProfile? profile, SelfOsCase current) =>
       {
         'calibratedObservations':
             SelfOsLearning.history(history).take(12).toList(),
         'decisionFingerprint': SelfOsInsights.decisionFingerprint(history),
         'preparationFingerprint':
             SelfOsInsights.interventionFingerprint(history),
-        'representationPreferences':
+        'cognitiveOperationPreferences':
             SelfOsEngineService.cognitiveFingerprint(history)
                 .where((f) => f.total >= 3)
                 .map((f) => {
@@ -221,6 +222,8 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
                       'samples': f.total
                     })
                 .toList(),
+        'representationPreferences':
+            SelfOsRepresentationLearning.context(current, history),
         'strengths': [
           for (final strength
               in (profile?.strengths ?? <OsStrength>[]).take(12))
@@ -259,7 +262,7 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
         {
           'case': _context(c),
           'history': SelfOsEngineService.historyForAi(history),
-          'personalEvidence': _personalEvidence(history, profile),
+          'personalEvidence': _personalEvidence(history, profile, c),
           'calibratedObservations':
               SelfOsLearning.history(history).take(12).toList(),
           'constitution': profile.principles.take(12).toList(),
@@ -285,6 +288,7 @@ nextStep 是根据真实记录确定的下一步。requiresReconsideration、新
 根据语义检查选项/收益代价/时间/因果/抽象度/累积/条件的缺口，寻找真正影响选择的未知；公有事实指向来源核验、私有事实询问本人、经验未知设计现实实验。
 若仍需要澄清，question 非空、experiment 为 null。问题最多含一个问号。第一次必须澄清，不能直接让用户承诺。
 当至少得到一次具体补充，形成值得检验的新理解时，给 insight（此前理解、另一种解释、为何变化），同时给2–4条机制不同的路径，每条同样写收益、代价和未知；mechanismDetail 解释它怎样满足欲求、为何不是其他路径的改名。
+若用具体表达帮助理解抽象后果，insight 可加 representation:{format,task,window}。format 为 chain/timeline/range/scene/counterfactual，task 为 discomfort/reward/conflict/opportunity/abstract/repetition，window 为 now/evening/before30/onsite；本次正在阅读的新理解通常是 now，其他时点必须有用户依据。先尊重 representationPreferences.selection；再根据本次语义结构，参考相同 task 与 window 的个人历史，优先理解帮助较多、反作用较少且 eligible 的方式。没有匹配样本就作为试用，不声称最有效；不确定任务时可省略。数字与事实不得虚构，反事实与场景标记条件。
 此时 question 为 null，只提出一个最小必要的 experiment，用它检验最重要未知。写清可观察的预期、观察方法、时间/费用/承诺边界和停止条件。边界必须与具体动作匹配。仍有关键外部事实不明时先查证；高风险决定只提出可撤回的信息收集，不用激励代替证据。不得把辞职、投资、医疗调整等不可逆承诺包装成小实验。
 用用户能理解的话表达，页面不出现 K2、动机场、GMRC、James 等术语。不要保证正确、不要替用户认可动机或估计概率。
 未来准备只保留最必要动作，分析跨期、锁定和机会成本时说明条件；具体证据不足不编造未来。cue 最多一句10–20秒可保持的可信提醒，留空也可以。
@@ -324,7 +328,7 @@ insight 无内容时为 null；早期 routes 可为空。每段不超过400字�
               })
           .toList(),
       'history': SelfOsEngineService.historyForAi(history),
-      'personalEvidence': _personalEvidence(history, profile),
+      'personalEvidence': _personalEvidence(history, profile, c),
       'personalPrinciples': profile.principles.take(8).toList(),
       'selfDescriptionNotVerified': profile.manual.map(
           (k, v) => MapEntry(k, v.length > 1200 ? v.substring(0, 1200) : v)),
@@ -349,8 +353,10 @@ insight 无内容时为 null；早期 routes 可为空。每段不超过400字�
     final allowed = allowedFields[task];
     if (allowed == null) throw ArgumentError.value(task);
     final taskPrompt = <String, String>{
-      'cognition':
-          '根据阻塞类型提出认识纠错或手段/环境调整。优先执行用户本次选定的 cognitiveOperation：${c.text('cognitiveOperation')}；未选时根据个人实证指纹选择。认知操作覆盖事实纠错、遗漏补全、时间、方向、手段、意义与分类/概念重构。优先调用适用的个人原则与已有力量，保留不适用条件和过度使用护栏。不要仅劝积极。设计低风险短时实验，记录可测预测。代理经验如无可靠来源必须标记虚构模拟。',
+      'cognition': '根据阻塞类型提出认识纠错或手段/环境调整。优先执行用户本次选定的 cognitiveOperation：${c.text('cognitiveOperation')}；未选时根据个人实证指纹选择。认知操作覆盖事实纠错、遗漏补全、时间、方向、手段、意义与分类/概念重构。'
+          '当抽象后果难以理解时，为 k2 选择 chain/timeline/range/scene/counterfactual 表达方式。尊重 representationPreferences.selection 中用户选择；未选时优先采用同任务同窗口的 recommendedFormat。样本不足时只提出试用，不宣称个人最有效。必须参考反作用和未知，理解/动机可用性/真实行动分别解释。'
+          'k2 候选增加 representation:{format,task,window}，task 只能取 ${osRepresentationTasks.keys.join('/')}，window 只能取 ${osRepresentationWindows.keys.join('/')}。未确认结构或时点时可省略 representation，不强行归类。数值范围只能引用提供的来源；没有依据保持未知，不捏造概率、收入或精确日期。场景和反事实保留条件，不当作事实。'
+          '优先调用适用的个人原则与已有力量，保留不适用条件和过度使用护栏。不要仅劝积极。设计低风险短时实验，记录可测预测。代理经验如无可靠来源必须标记虚构模拟。',
       'action': '先模拟身体、情绪、环境和内心语言的阻力，再提出具体触发、第一步、逐步 Ritual、预先承诺及有新信息时的重审条件。',
       'future': '将做与不做的两条路径分别映射现在、今天、7天、30天、长期重复后的可能后果。每个时间点都写双向后果，不虚构收入/成功率。',
       'compare':
@@ -362,7 +368,7 @@ insight 无内容时为 null；早期 routes 可为空。每段不超过400字�
         {
           'case': _context(c),
           'history': SelfOsEngineService.historyForAi(history),
-          'personalEvidence': _personalEvidence(history, profile),
+          'personalEvidence': _personalEvidence(history, profile, c),
         },
         task);
     final rows = osMaps(j['suggestions'])
@@ -374,6 +380,13 @@ insight 无内容时为 null；早期 routes 可为空。每段不超过400字�
               'field': r['field'],
               'value': r['value'],
               'reason': r['reason'],
+              if (task == 'cognition' &&
+                  r['field'] == 'k2' &&
+                  SelfOsRepresentationLearning.validateChoice(
+                          r['representation']) !=
+                      null)
+                'representation': SelfOsRepresentationLearning.validateChoice(
+                    r['representation']),
               if (profile?.strengths.any((s) => s.id == r['strengthId']) ==
                   true)
                 'strengthId': r['strengthId'],

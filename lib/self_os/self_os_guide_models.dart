@@ -1,4 +1,5 @@
 import 'self_os_codec.dart';
+import 'self_os_representation_learning.dart';
 
 const osGuideTasks = {
   'desire': '先分清真正想要的东西',
@@ -127,6 +128,10 @@ class OsGuideFrame {
       result['insight'] = {
         for (final key in ['before', 'after', 'reason'])
           key: requiredText(insight, key, 400),
+        if (SelfOsRepresentationLearning.validateChoice(
+                insight['representation'])
+            case final choice?)
+          'representation': choice,
       };
     }
     if (routes.length > 4) {
