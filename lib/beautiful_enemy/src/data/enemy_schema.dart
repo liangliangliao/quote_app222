@@ -6,9 +6,15 @@ import 'package:sqflite/sqflite.dart';
 class EnemySchema {
   const EnemySchema._();
 
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
 
   static const List<String> _statements = <String>[
+    '''CREATE TABLE IF NOT EXISTS be_growth_action (
+      commitment_id INTEGER PRIMARY KEY, weakness_id TEXT NOT NULL,
+      weakness TEXT NOT NULL, goal TEXT NOT NULL DEFAULT '',
+      obstacle_plan TEXT NOT NULL, evidence TEXT NOT NULL, created_ms INTEGER NOT NULL,
+      observation TEXT NOT NULL DEFAULT '', adjustment TEXT NOT NULL DEFAULT ''
+    )''',
     '''
     CREATE TABLE IF NOT EXISTS be_event (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +115,10 @@ class EnemySchema {
     await _ensureColumn(db, 'be_commitment', 'stake', "TEXT NOT NULL DEFAULT ''");
     // v3：承诺可带「核实方式」（比如火种动议：标记完成时去账上核对有没有完整的火种）。
     await _ensureColumn(db, 'be_commitment', 'verify', "TEXT NOT NULL DEFAULT ''");
+    // 旧版本自动建立、用户从未接受的判词行动，改为建议；不再按失约结算。
+    await db.execute("UPDATE be_commitment SET status = 'proposed' "
+        "WHERE origin = 'verdict' AND status = 'open' AND id IN "
+        "(SELECT commitment_id FROM be_verdict WHERE user_response = 'pending')");
   }
 
   static Future<void> _ensureColumn(

@@ -280,7 +280,7 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
     await _engine.settleOverdue();
     final List<EnemyCommitment> items = await _engine.dao.commitments(limit: 100);
     if (!mounted) return;
-    setState(() => _items = items);
+    setState(() => _items = items.where((c) => c.status != CommitmentStatus.proposed && c.status != CommitmentStatus.declined).toList());
   }
 
   Future<void> _add() async {
@@ -475,7 +475,7 @@ class _LessonsTabState extends State<LessonsTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text('本周审判', style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700)),
+                  const Text('本周复盘', style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   _line('承诺', '兑现 ${r.commitmentsDone} · 失效 ${r.commitmentsMissed} · 豁免 ${r.commitmentsExcused}'),
                   _line('履约率', _pct(r.commitmentRate)),
@@ -551,9 +551,9 @@ class _SettingsTabState extends State<SettingsTab> {
   static const List<String> _weekdays = <String>['无', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
   static const List<String> _intensityHelp = <String>[
     '',
-    '1 档：冷静挑刺，只陈述差距。',
-    '2 档：直接强硬，点名拖延，允许讽刺。',
-    '3 档：火力全开，允许粗口作语气词——但只冲着行为和借口，不冲着你这个人。',
+    '1 档：温和提醒，理解处境并核对事实。',
+    '2 档：明确挑战，指出有证据的行为差距。',
+    '3 档：坚定追问，协商行动与责任；始终尊重，不使用粗口或羞辱。',
   ];
 
   bool _loaded = false;
@@ -956,7 +956,7 @@ class _SettingsTabState extends State<SettingsTab> {
           contentPadding: EdgeInsets.zero,
           title: const Text('反对党质询', style: TextStyle(color: kEnemyText)),
           subtitle: const Text(
-            '你一声不响的时候它也不闭嘴：从账上缺的东西发起质询、提动议、讽刺你的借口和回避。只冲着行为，不冲着你这个人。',
+            '根据已有记录主动核对事实、提出行动建议。没有记录时先询问处境，沉默不视为承认。',
             style: TextStyle(color: kEnemyMuted),
           ),
           value: _opposition,
@@ -1012,7 +1012,7 @@ class _SettingsTabState extends State<SettingsTab> {
           contentPadding: EdgeInsets.zero,
           title: const Text('允许轻度挑衅', style: TextStyle(color: kEnemyText)),
           subtitle: const Text(
-            '默认关闭。开启后，2–3 档可用克制挑衅激起“我偏要证明给你看”的证明欲或有益愤怒。只针对借口与回避，不攻击你这个人。',
+            '默认关闭。开启后，2–3 档可使用更直接的行为挑战。以自主选择为前提，不故意激怒、不羞辱。',
             style: TextStyle(color: kEnemyMuted),
           ),
           value: _allowProvocation,
@@ -1304,7 +1304,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 final bool ok = await confirmDialog(
                   context,
                   title: '清空全部？',
-                  body: '证据、判词、承诺、教训全部删除，设置保留。不能撤销。',
+                  body: '证据、判词、承诺、教训、成长档案与弱点关联全部删除，其余设置保留。不能撤销。',
                   confirm: '全部清空',
                 );
                 if (ok) await _dao.wipeEverything();

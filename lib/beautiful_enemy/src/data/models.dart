@@ -64,6 +64,8 @@ class EventDraft {
 class CommitmentStatus {
   const CommitmentStatus._();
   static const String open = 'open';
+  static const String proposed = 'proposed';
+  static const String declined = 'declined';
   static const String done = 'done';
   static const String missed = 'missed';
   static const String excused = 'excused';
@@ -122,6 +124,7 @@ class VerdictResponse {
   static const String ack = 'ack';
   static const String appeal = 'appeal';
   static const String ignored = 'ignored';
+  static const String declined = 'declined';
 }
 
 class EnemyVerdict {

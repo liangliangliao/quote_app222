@@ -50,3 +50,8 @@
 # Some Baidu Map releases rely on bgl engine packages; keep them in release builds.
 -keep class vi.com.gdi.bgl.android.** { *; }
 
+# read_pdf_text uses PDFBox for text extraction, which does not decode JPX images.
+# PDFBox references this optional JPEG 2000 decoder and checks its availability
+# at runtime. It is intentionally not bundled for the text-only import feature.
+-dontwarn com.gemalto.jp2.JP2Decoder
+

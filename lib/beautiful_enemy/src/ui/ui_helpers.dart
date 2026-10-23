@@ -46,6 +46,8 @@ String eventLine(EnemyEvent e) {
 }
 
 const Map<String, String> commitmentStatusLabels = <String, String>{
+  CommitmentStatus.proposed: '建议，尚未接受',
+  CommitmentStatus.declined: '未接受',
   CommitmentStatus.open: '进行中',
   CommitmentStatus.done: '已兑现',
   CommitmentStatus.missed: '已失效',

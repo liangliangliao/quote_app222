@@ -431,12 +431,11 @@ void main() {
       expect((await p.acceptMotion(id, text: '再来一次')).note, contains('处理过'));
     });
 
-    test('驳回动议：要给理由，敌人当场反驳，动议状态记下', () async {
+    test('驳回动议：尊重拒绝，理由选填，动议状态记下', () async {
       final EnemyPresence p = await make();
       final EnemyMessage m = (await stepAfterBaseline(p))!;
       final int id = m.refId!;
 
-      expect((await p.rejectMotion(id, '不')).note, contains('理由'));
       final MotionResult r = await p.rejectMotion(id, '今天真的没空，改天再说吧');
       expect(r.ok, isTrue);
       expect(r.enemy!.text, contains('今天真的没空'));
@@ -472,7 +471,7 @@ void main() {
       }
 
       // 追问的台词有两种说法，都带着「没回答」的意思。
-      final Matcher asksAgain = anyOf(contains('小时前问过'), contains('没有回答'));
+      final Matcher asksAgain = allOf(contains('小时前问过'), contains('不代表认同'));
       final EnemyMessage f1 = (await later())!;
       expect(f1.text, asksAgain);
       final EnemyMessage f2 = (await later())!;
@@ -494,7 +493,7 @@ void main() {
       // 他答了，所以过了 3 小时也不会追问同一条。
       current = current.add(const Duration(hours: 3, minutes: 1));
       final EnemyMessage? next = await p.step();
-      final Matcher asksAgain = anyOf(contains('小时前问过'), contains('没有回答'));
+      final Matcher asksAgain = allOf(contains('小时前问过'), contains('不代表认同'));
       expect(next?.text ?? '', isNot(asksAgain));
     });
 
@@ -561,7 +560,7 @@ void main() {
       await p.engine.complete(cid);
       final EnemyMessage? reply = await p.react(force: true);
       expect(reply, isNotNull);
-      expect(reply!.text, anyOf(contains('不认'), contains('账上却是空的')));
+      expect(reply!.text, allOf(contains('没有对应'), contains('补充事实')));
     });
 
     test('字据标记完成而且账上确实有火种：不质疑', () async {

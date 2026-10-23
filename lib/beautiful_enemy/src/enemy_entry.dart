@@ -5,6 +5,7 @@ import 'data/enemy_dao.dart';
 import 'domain/enemy_engine.dart';
 import 'domain/enemy_presence.dart';
 import 'domain/evidence_source.dart';
+import 'domain/growth_profile.dart';
 import 'enemy_host_tools.dart';
 import 'enemy_oracle.dart';
 import 'enemy_reminder.dart';
@@ -57,6 +58,7 @@ class EnemyEntry {
     List<EvidenceSource> sources = const <EvidenceSource>[],
     EnemyReminder reminder = const NoopEnemyReminder(),
     EnemyHostTools tools = const NoopEnemyHostTools(),
+    GrowthProfileImporter? profileImporter,
   }) {
     return _EnemyLoader(
       db: db,
@@ -66,6 +68,7 @@ class EnemyEntry {
       sources: sources,
       reminder: reminder,
       tools: tools,
+      profileImporter: profileImporter,
     );
   }
 }
@@ -79,6 +82,7 @@ class _EnemyLoader extends StatefulWidget {
     required this.sources,
     required this.reminder,
     required this.tools,
+    this.profileImporter,
   });
 
   final Database db;
@@ -88,6 +92,7 @@ class _EnemyLoader extends StatefulWidget {
   final List<EvidenceSource> sources;
   final EnemyReminder reminder;
   final EnemyHostTools tools;
+  final GrowthProfileImporter? profileImporter;
 
   @override
   State<_EnemyLoader> createState() => _EnemyLoaderState();
@@ -118,6 +123,7 @@ class _EnemyLoaderState extends State<_EnemyLoader> {
           voice: widget.voice,
           reminder: widget.reminder,
           tools: widget.tools,
+          profileImporter: widget.profileImporter,
         );
       },
     );

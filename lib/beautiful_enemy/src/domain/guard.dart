@@ -17,6 +17,7 @@ class DraftValidator {
     // 威胁恐吓
     '没人会要你', '没人会', '没有人会', '后悔一辈子', '完蛋了', '再这样就完了', '去死', '死了算了',
     // 孤立 / 制造依赖
+    '沉默就是默认', '不答就是承认', '为你好必须', '就这？',
     '只有我', '别人都不', '离了我', '没有我你',
     // 身份与处境攻击
     '学历', '出身', '长相', '外貌', '身材', '你的家人', '你父母', '你太穷', '你这么穷',
@@ -29,7 +30,7 @@ class DraftValidator {
     RegExp(r'你根本不是真的'),
   ];
 
-  /// 粗口语气词：只有 3 档允许出现，且不能指向人（上面的句式已拦）。
+  /// 粗口语气词：所有强度都禁止。
   static const List<String> profanityMarkers = <String>[
     '他妈',
     '妈的',
@@ -82,8 +83,8 @@ class DraftValidator {
 
     final String all = '${d.charge}\n${d.action}\n${d.lessonHint}\n${d.appealPrompt}';
     if (containsBanned(all)) problems.add('banned_content');
-    if (d.toneLevel < 3 && profanityMarkers.any(all.contains)) {
-      problems.add('profanity_below_tier3');
+    if (profanityMarkers.any(all.contains)) {
+      problems.add('profanity_not_allowed');
     }
     return problems;
   }
@@ -98,8 +99,8 @@ class DraftValidator {
     if (t.isEmpty) problems.add('empty');
     if (t.length > maxLineChars) problems.add('too_long');
     if (containsBanned(t)) problems.add('banned_content');
-    if (maxTone < 3 && profanityMarkers.any(t.contains)) {
-      problems.add('profanity_below_tier3');
+    if (profanityMarkers.any(t.contains)) {
+      problems.add('profanity_not_allowed');
     }
     return problems;
   }

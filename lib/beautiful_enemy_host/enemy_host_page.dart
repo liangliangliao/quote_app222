@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:file_picker/file_picker.dart';
+import 'enemy_weakness_importer.dart';
 
 import '../beautiful_enemy/beautiful_enemy.dart';
 import '../data/db.dart';
@@ -18,7 +20,8 @@ import 'enemy_voice_out.dart';
 class EnemyHostPage extends StatefulWidget {
   const EnemyHostPage({super.key});
 
-  static const Key loadingKey = ValueKey<String>('beautiful_enemy_host_loading');
+  static const Key loadingKey =
+      ValueKey<String>('beautiful_enemy_host_loading');
 
   @override
   State<EnemyHostPage> createState() => _EnemyHostPageState();
@@ -64,6 +67,20 @@ class _EnemyHostPageState extends State<EnemyHostPage> {
           sources: defaultEnemySources(),
           reminder: const EnemyHostReminder(),
           tools: const EnemyHostToolsImpl(),
+          profileImporter: () async {
+            final result = await FilePicker.platform.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: EnemyWeaknessImporter.extensions,
+                allowMultiple: false);
+            if (result == null) return null;
+            final file = result.files.single;
+            if (file.size > EnemyWeaknessImporter.maxBytes) {
+              throw const FormatException('文件不能超过 12 MB。');
+            }
+            final text = await const EnemyWeaknessImporter()
+                .extract(name: file.name, path: file.path, bytes: file.bytes);
+            return (name: file.name, text: text);
+          },
         );
       },
     );
