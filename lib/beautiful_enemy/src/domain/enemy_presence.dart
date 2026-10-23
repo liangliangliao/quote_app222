@@ -1043,7 +1043,7 @@ class EnemyPresence {
     final EnemyMessage msg = await _speak(
       snap: snap,
       situation: '他驳回了你的动议「${m.text}」，理由是：「${_clipText(text, 80)}」。'
-          '反驳他的理由（不是他这个人），动议你保留。一句话。',
+          '认真对待他的拒绝；若理由有实际限制就承认。动议已驳回，只可提供一个可选替代方案，不施压。一句话。',
       userText: text,
       kind: MessageKind.chat,
       fallback: () => PersonaLines.rebut(address: snap.address, reason: text, seed: id),
