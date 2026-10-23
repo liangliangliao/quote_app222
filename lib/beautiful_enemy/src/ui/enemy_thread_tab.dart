@@ -344,12 +344,12 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
     if (enemy != null && !r.crisis) await _announce(enemy);
   }
 
-  /// 驳回动议：必须给理由，敌人会当场反驳。
+  /// 用户可以自主拒绝，理由选填。
   Future<void> _rejectMotion(EnemyMotion m) async {
     final String? reason = await askText(
       context,
       title: '驳回「${m.text}」',
-      hint: '写一句具体的理由',
+      hint: '可以说明困难或替代方案（选填）',
       confirm: '驳回',
       maxLines: 3,
     );
@@ -529,7 +529,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
                   onSubmitted: (_) => _send(),
                   style: const TextStyle(color: kEnemyText),
                   decoration: InputDecoration(
-                    hintText: _muted ? '敌人已静音' : '说吧。别绕。',
+                    hintText: _muted ? '敌人已静音' : '说说你的处境、困惑或进展',
                     hintStyle: const TextStyle(color: kEnemyMuted),
                     filled: true,
                     fillColor: kEnemyCard,
@@ -756,7 +756,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
             ],
           ),
           const Divider(height: 22),
-          Text('动作：${v.action}', style: const TextStyle(color: kEnemyText)),
+          Text('行动建议：${v.action}', style: const TextStyle(color: kEnemyText)),
           const SizedBox(height: 2),
           Text(
             '截止 ${fmtTime(v.actionDueMs)} · ${fmtRemaining(v.actionDueMs, now)}',
@@ -786,12 +786,17 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
               children: <Widget>[
                 TextButton(
                   onPressed: () async {
-                    await _engine.acknowledge(v.id);
+                    final result = await _engine.acknowledge(v.id);
+                    if (result.message.isNotEmpty) _snack(result.message);
                     await _load();
                   },
-                  child: const Text('接受'),
+                  child: const Text('我选择接受这个行动'),
                 ),
-                TextButton(onPressed: () => _appeal(v), child: const Text('申辩')),
+                TextButton(onPressed: () async {
+                  await _engine.declineSuggestion(v.id);
+                  await _load();
+                }, child: const Text('暂不接受行动')),
+                TextButton(onPressed: () => _appeal(v), child: const Text('补充事实 / 申辩')),
                 TextButton(
                   onPressed: () async {
                     await _engine.markTooMuch();

@@ -54,7 +54,7 @@ class ClaimCheck {
         return const ClaimAssessment(
           ClaimKind.doneWithoutRecord,
           hint: '他声称做完了某件事，但案卷里最近 24 小时没有任何完成记录。'
-              '盘问他：做的是什么、几点做的、为什么没有记录。'
+              '邀请补充具体事项与时间，承认可能漏记，不把没有记录等同于没有行动。'
               '不要说他撒谎，只指出账上没有。',
         );
       }
@@ -73,7 +73,7 @@ class ClaimCheck {
           ClaimKind.busyButOnline,
           minutes: minutes,
           hint: '他说没时间，但今天他在这个 App 里待了 $minutes 分钟。'
-              '把这个数字摆给他看，问这段时间花在了哪里。不评价他这个人。',
+              '核对实际时间安排和精力限制，App 使用时长不等于可用于任务的时间；不推断他在逃避。',
         );
       }
     }

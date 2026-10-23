@@ -56,7 +56,7 @@ class EnemySettings {
   static String patrolDone(String kind, String day) => 'patrol_${kind}_$day';
   static const String patrolStallMs = 'patrol_stall_ms';
 
-  /// 反对党质询（主动盘问、动议、讽刺你的借口）的总开关，默认开。
+  /// 反对党质询（主动核实、建设性挑战、行动建议）的总开关，默认开。
   static const String opposition = 'opposition';
 
   /// 自适应动机刺激总开关，默认开。它不是“说得更狠”，而是选择哪一种
@@ -273,6 +273,7 @@ class EnemyDao {
     required int createdMs,
     int? dueMs,
     String origin = 'manual',
+    String status = CommitmentStatus.open,
     int? verdictId,
     String stake = '',
     String verify = '',
@@ -281,7 +282,7 @@ class EnemyDao {
       'text': text,
       'created_ms': createdMs,
       'due_ms': dueMs,
-      'status': CommitmentStatus.open,
+      'status': status,
       'origin': origin,
       'verdict_id': verdictId,
       'stake': stake,
@@ -717,6 +718,8 @@ class EnemyDao {
 
   /// 清空模块的全部数据（设置保留）。
   Future<void> wipeEverything() async {
+    await db.delete('be_growth_action');
+    await db.delete('be_setting', where: 'key = ?', whereArgs: <Object?>['growth_profile_v1']);
     await db.delete('be_event');
     await db.delete('be_commitment');
     await db.delete('be_verdict');

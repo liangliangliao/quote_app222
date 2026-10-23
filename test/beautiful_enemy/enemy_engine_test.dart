@@ -192,7 +192,7 @@ void main() {
       final EnemyCommitment? c = await dao.commitment(v.commitmentId!);
       expect(c, isNotNull);
       expect(c!.origin, 'verdict');
-      expect(c.status, CommitmentStatus.open);
+      expect(c.status, CommitmentStatus.proposed);
     });
 
     test('违规输出最多重试两次，然后降级成事实播报', () async {
@@ -270,7 +270,9 @@ void main() {
   group('闭环', () {
     Future<EnemyVerdict> firstVerdict(EnemyEngine e) async {
       await e.grantAll();
-      return (await e.judge(manual: true)).verdict!;
+      final v = (await e.judge(manual: true)).verdict!;
+      await e.acknowledge(v.id);
+      return v;
     }
 
     test('兑现：认账，判词记为完成', () async {

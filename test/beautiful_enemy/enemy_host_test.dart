@@ -215,9 +215,9 @@ void main() {
 
     test('系统提示里写死了铁律和各档边界', () {
       const String p = EnemyAiOracle.systemPrompt;
-      expect(p, contains('只评行为不评人'));
-      expect(p, contains('无证据不开口'));
-      expect(p, contains('不能是人'));
+      expect(p, contains('人的价值'));
+      expect(p, contains('没有记录只代表没有记录'));
+      expect(p, contains('禁止讽刺、粗口与羞辱'));
     });
   });
 
@@ -407,9 +407,9 @@ void main() {
 
     test('系统提示写死了人设、铁律和退场条件', () {
       const String p = EnemyAiTalker.systemPrompt;
-      expect(p, contains('值得尊重的对手'));
-      expect(p, contains('无证据不开口'));
-      expect(p, contains('只评行为不评人'));
+      expect(p, contains('对人保持关爱，对事实保持诚实，对成长保持要求'));
+      expect(p, contains('没有记录只代表没有记录'));
+      expect(p, contains('人的价值'));
       expect(p, contains('放下角色'));
     });
   });

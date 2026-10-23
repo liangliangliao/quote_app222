@@ -1,6 +1,8 @@
 import '../copy.dart';
 import '../data/enemy_dao.dart';
 import '../data/models.dart';
+import '../data/growth_store.dart';
+import 'growth_profile.dart';
 import '../enemy_oracle.dart';
 import 'digest_builder.dart';
 import 'evidence_source.dart';
@@ -278,6 +280,7 @@ class EnemyEngine {
   Future<String?> complete(int commitmentId) async {
     final EnemyCommitment? c = await dao.commitment(commitmentId);
     if (c == null || c.status == CommitmentStatus.done) return null;
+    if (c.status == CommitmentStatus.proposed || c.status == CommitmentStatus.declined) return '这是尚未接受的行动建议，请先选择是否接受。';
     final int now = nowMs();
     await dao.setCommitmentStatus(c.id, CommitmentStatus.done);
     await _commitmentEvent(c, 'commitment_done', now);
@@ -476,20 +479,70 @@ class EnemyEngine {
       factOnly: chosen.factOnly,
     );
 
-    // 动作自动成为一条承诺，到期由 settleOverdue 结算。
+    // AI 只提出建议，未接受不产生用户承诺或失约记录。
     final int commitmentId = await dao.insertCommitment(
       text: chosen.action.trim(),
       createdMs: now,
       dueMs: chosen.actionDueMs,
       origin: 'verdict',
+      status: CommitmentStatus.proposed,
       verdictId: verdictId,
     );
     await dao.linkVerdictCommitment(verdictId, commitmentId);
-    final EnemyCommitment? created = await dao.commitment(commitmentId);
-    if (created != null) await _commitmentEvent(created, 'commitment_created', now);
 
     final EnemyVerdict? saved = await dao.verdict(verdictId);
     return EnemyOutcome.verdict(saved!);
+  }
+
+  EnemyGrowthStore get growth => EnemyGrowthStore(dao.db);
+
+  Future<int> addGrowthAction(
+      {required GrowthWeakness weakness,
+      required String action,
+      required String obstaclePlan,
+      required String evidence,
+      required DateTime due}) async {
+    final p = await growth.load();
+    if (p == null ||
+        !p.enabled ||
+        !p.weaknesses.any((w) => w.id == weakness.id)) {
+      throw const FormatException('请先启用档案并选择其中的弱点。');
+    }
+    if (action.trim().isEmpty ||
+        obstaclePlan.trim().isEmpty ||
+        evidence.trim().isEmpty ||
+        action.length > 200 ||
+        obstaclePlan.length > 300 ||
+        evidence.length > 300 ||
+        due.millisecondsSinceEpoch <= nowMs()) {
+      throw const FormatException('请填写小行动、遇阻预案、验证证据，并选择未来的截止时间。');
+    }
+    final text = '$action $obstaclePlan $evidence';
+    if (SafetyValve.shouldMute(text)) {
+      await _muteForText(text);
+      throw const FormatException(EnemyCopy.truceAcknowledged);
+    }
+    if (DraftValidator.containsBanned(text) ||
+        StakeGuard.harmfulMarkers.any(action.contains)) {
+      throw const FormatException('请选择尊重自己、力所能及的行动。');
+    }
+    return growth.createAction(
+        weakness: p.weaknesses.firstWhere((w) => w.id == weakness.id),
+        action: action.trim(),
+        obstaclePlan: obstaclePlan.trim(),
+        evidence: evidence.trim(),
+        nowMs: nowMs(),
+        dueMs: due.millisecondsSinceEpoch);
+  }
+
+  Future<void> reviewGrowthAction(
+      int id, String observation, String adjustment) async {
+    final text = '$observation $adjustment';
+    if (SafetyValve.shouldMute(text)) {
+      await _muteForText(text);
+      throw const FormatException(EnemyCopy.truceAcknowledged);
+    }
+    await growth.review(id, observation, adjustment);
   }
 
   /// 此刻的证据摘要、实际档位和称呼。开庭、对话、插话都从这里取材。
@@ -515,6 +568,7 @@ class EnemyEngine {
       address: addr,
       usage: usage,
     );
+    digest.json['growth_profile'] = await growth.context();
     return (digest: digest, intensity: intensity, address: addr);
   }
 
@@ -569,8 +623,28 @@ class EnemyEngine {
   // ---------------------------------------------------------------- response
 
   Future<ResponseResult> acknowledge(int verdictId) async {
-    await dao.setVerdictResponse(verdictId, VerdictResponse.ack);
-    return const ResponseResult(ResponseKind.acked, '');
+    final v = await dao.verdict(verdictId);
+    final c = v?.commitmentId == null ? null : await dao.commitment(v!.commitmentId!);
+    if (c != null && c.status == CommitmentStatus.proposed) {
+      if ((c.dueMs ?? 0) <= nowMs()) {
+        return const ResponseResult(ResponseKind.needsText, '建议期限已过，请在字据中自选新的行动和时间。');
+      }
+      await dao.setVerdictResponse(verdictId, VerdictResponse.ack);
+      await dao.setCommitmentStatus(c.id, CommitmentStatus.open);
+      await _commitmentEvent(c, 'commitment_created', nowMs());
+    } else {
+      await dao.setVerdictResponse(verdictId, VerdictResponse.ack);
+    }
+    return const ResponseResult(ResponseKind.acked, '已按你的选择接受行动。');
+  }
+
+  Future<void> declineSuggestion(int verdictId) async {
+    final v = await dao.verdict(verdictId);
+    final c = v?.commitmentId == null ? null : await dao.commitment(v!.commitmentId!);
+    if (c == null || c.status != CommitmentStatus.proposed) return;
+    await dao.setCommitmentStatus(c.id, CommitmentStatus.declined);
+    await dao.setVerdictResponse(verdictId, VerdictResponse.declined);
+    await dao.setVerdictOutcome(verdictId, 'declined', nowMs());
   }
 
   /// 申辩。理由必须写；理由里出现危机表达时按安全阀处理。

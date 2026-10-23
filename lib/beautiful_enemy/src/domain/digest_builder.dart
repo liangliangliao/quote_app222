@@ -1,6 +1,6 @@
 import '../data/models.dart';
 
-/// 交给判词生成器的摘要。原始数据不出本机，只有这份聚合后的 JSON 会给模型。
+/// 交给判词生成器的摘要。原文件全文不发送；行为聚合与用户确认的成长条目作为上下文交给模型。
 class EnemyDigest {
   const EnemyDigest({
     required this.json,
@@ -115,6 +115,7 @@ class DigestBuilder {
     int cDone = 0, cMissed = 0, cExcused = 0, cOpenDue = 0;
     final List<Map<String, dynamic>> cItems = <Map<String, dynamic>>[];
     for (final EnemyCommitment c in weekCommitments) {
+      if (c.status == CommitmentStatus.proposed || c.status == CommitmentStatus.declined) continue;
       final int? due = c.dueMs;
       if (due == null || due < fromMs || due >= nowMs) continue;
       switch (c.status) {
@@ -148,6 +149,7 @@ class DigestBuilder {
 
     int weekDone = 0, weekMissed = 0;
     for (final EnemyCommitment c in weekCommitments) {
+      if (c.status == CommitmentStatus.proposed || c.status == CommitmentStatus.declined) continue;
       if (c.status == CommitmentStatus.done) weekDone++;
       if (c.status == CommitmentStatus.missed) weekMissed++;
     }

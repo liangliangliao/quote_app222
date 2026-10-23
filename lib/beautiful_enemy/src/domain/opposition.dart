@@ -128,8 +128,8 @@ class ProbeFacts {
 
 /// 反对党：用户一声不响的时候，敌人不会跟着安静。
 ///
-/// 沉默本身就是证据。这里从案卷里**已有的**和**缺失的**事实出发，挑出此刻最该质询的一件事。
-/// 它可以把账上的缺口摆出来逼问，可以提动议要用户接受或驳回，但不会编造不存在的事实：
+/// 沉默不代表承认，也不能据此推断动机。这里从案卷里**已有的**和**缺失的**事实出发，挑出此刻最该质询的一件事。
+/// 它可以把账上的缺口摆出来核实，可以提动议要用户接受或驳回，但不会编造不存在的事实：
 /// 账上没有的东西只说「账上没有」，不说「你没做」。
 class Opposition {
   const Opposition._();
@@ -162,9 +162,8 @@ class Opposition {
     return last == 0 || f.nowMs - last >= cool;
   }
 
-  static const String _style = '你是反对党席位上的议员：质询、反问、归谬，先摆账上的事实，再逼问。'
-      '可以讽刺他的借口、回避和计划，不能攻击他这个人；不编造账上没有的事——账上没有的，只说「账上没有」。'
-      '一到两句话。';
+  static const String _style = '以关爱和尊重为前提核对事实，提出建设性挑战或支持。'
+      '账上没有记录不等于没做，沉默不等于承认；不要预设逃避，不讽刺、不能攻击他这个人、不强迫接受建议。一到两句话。';
 
   /// 挑一件此刻最该质询的事。全都没到间隔时返回 null。
   static ProbePlan? choose(ProbeFacts f) {
@@ -181,7 +180,7 @@ class Opposition {
         text: quoted,
         followUpOf: q.id,
         situation: '【追问】你 ${((f.nowMs - q.ts) / _hour).floor()} 小时前质询过他：「$quoted」，他一直没有回答。'
-            '沉默也是一种答复，点破它，问他要不要这样记。$_style',
+            '询问是否愿意继续，允许暂停，不能把未回答当成承认。$_style',
       );
     }
 
@@ -191,7 +190,7 @@ class Opposition {
       return ProbePlan(
         type: 'ignored_verdict',
         situation: '【质询】上一条判词（${v.charge}）他超过 $ignoredVerdictAfterHours 小时没有任何回应，'
-            '既没接受也没申辩。沉默不是申辩，你把它记作默认。$_style',
+            '既没接受也没申辩。询问是否有补充事实，不能视为默认。$_style',
       );
     }
 
@@ -203,7 +202,7 @@ class Opposition {
       return ProbePlan(
         type: 'no_commitments',
         situation: '【质询】他手里没有一条开着的字据，最近 24 小时也没立过。没有字据就没有账可算。'
-            '问他这是自由还是回避。${canMotion ? '同时正式提一项动议：请他现在立一条今晚能做完的字据。' : ''}$_style',
+            '询问当前目标与困难。${canMotion ? '同时正式提一项动议：请他现在立一条今晚能做完的字据。' : ''}$_style',
         motion: canMotion
             ? MotionPlan(
                 kind: 'no_commitments',
@@ -224,7 +223,7 @@ class Opposition {
         category: l.category,
         text: l.lesson,
         situation: '【质询】「${l.category}」这个坑他已经踩了 ${l.timesRepeated} 次。'
-            '他自己写下的教训是：「${l.lesson}」。问他读过没有、做了什么不同的事。$_style',
+            '他自己写下的教训是：「${l.lesson}」。询问这次情境与可调整的方法。$_style',
       );
     }
 
@@ -237,7 +236,7 @@ class Opposition {
         type: 'knowledge_without_action',
         n: f.knowledge24h,
         situation: '【质询】过去 24 小时他把 ${f.knowledge24h} 张知识卡转成了行动步骤，'
-            '但账上没有任何一次行动（习惯完成、火种完成、字据兑现都是零）。纸上谈兵。'
+            '但账上没有任何一次行动（习惯完成、火种完成、字据兑现都是零）。记录可能不全，先核实。'
             '${canMotion ? '同时正式提一项动议：请他把其中一个行动步骤立成字据。' : ''}$_style',
         motion: canMotion
             ? MotionPlan(
@@ -295,7 +294,7 @@ class Opposition {
         label: d.label,
         days: d.days,
         situation: '【质询】「${d.label}」他以前常有记录，最近 ${d.days} 天一条新记录都没有。'
-            '问他是它出了问题，还是他在躲。${canMotion ? '同时正式提一项动议：限期内在这个模块留下一条新记录。' : ''}$_style',
+            '询问目标是否改变或遇到困难。${canMotion ? '同时正式提一项动议：限期内在这个模块留下一条新记录。' : ''}$_style',
         motion: canMotion
             ? MotionPlan(
                 kind: 'dormant_module',
@@ -320,7 +319,7 @@ class Opposition {
         type: 'open_question',
         hours: f.silentHours,
         situation: '【质询】案卷已经 ${f.silentHours} 小时没有新记录，没有可以抓的具体事实。'
-            '那就问他一个直接的问题：他此刻在回避什么、今天的账他敢让谁看。'
+            '那就问他一个直接的问题：他此刻重视什么、需要什么支持。'
             '问一个问题，别替他回答。$_style',
       );
     }
