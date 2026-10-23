@@ -37,6 +37,21 @@ extension _StrengthPanel on _SelfOsWorkbenchState {
                     '当前桥接：${s.text('bridgeWeakness')} → ${s.text('bridgeMechanism')} → ${s.text('bridgeAction')}\n护栏：${s.text('bridgeGuardrail')}'),
               button('设计一个可验证的桥接', Icons.merge_type,
                   widget.profile.strengths.isEmpty ? null : bridge),
+              if (s.text('bridgeAction').isNotEmpty)
+                button('把桥接动作带入行动草稿', Icons.arrow_forward, () async {
+                  if (!widget.profile.strengths
+                      .any((v) => v.id == s.text('bridgeStrengthId'))) {
+                    osMessage(context, '关联的力量已改变，请重新选择后再尝试');
+                    return;
+                  }
+                  try {
+                    c.stageStrengthBridge();
+                    if (await widget.onChanged() && mounted)
+                      widget.onEngine(SelfOsEngine.action);
+                  } on FormatException catch (e) {
+                    if (mounted) osMessage(context, e.message);
+                  }
+                }, primary: true),
               const OsNote('已验证力量可以进入现场提示；未验证力量先作为实验候选。使用后在行动之镜记录帮助、无帮助或反作用。'),
             ]),
       ];

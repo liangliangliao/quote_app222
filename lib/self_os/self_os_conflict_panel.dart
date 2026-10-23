@@ -105,7 +105,7 @@ extension _ConflictPanel on _SelfOsWorkbenchState {
                     for (final p in widget.profile.principles)
                       OsRecordCard(title: osText(p['rule']), children: [
                         text(
-                            '适用：${p['condition']}\n不适用：${p['doesNotApply'] ?? '待补充'}\n覆盖旧原则的新证据：${p['overrideEvidence'] ?? p['exception']}'),
+                            '适用：${p['condition']}\n不适用：${p['notApplicable'] ?? p['doesNotApply'] ?? '待补充'}\n覆盖旧原则的新证据：${p['overrideEvidence'] ?? p['exception']}'),
                         TextButton(
                             onPressed: () => update(
                                 (d) => d.settings['principleId'] = p['id']),
@@ -116,9 +116,16 @@ extension _ConflictPanel on _SelfOsWorkbenchState {
                   ]),
           ]),
       cueCard(),
-      button('带着选择设计行动现场', Icons.arrow_forward,
-          () => widget.onEngine(SelfOsEngine.action),
-          primary: true),
+      button('已看清这次冲突，设计行动现场', Icons.arrow_forward, () async {
+        final before = s.copy();
+        s.settings['reviewedConflict'] = SelfOsProgress.conflictFingerprint(c);
+        if (await widget.onChanged()) {
+          if (mounted) widget.onEngine(SelfOsEngine.action);
+        } else {
+          c.v37 = before;
+          redraw();
+        }
+      }, primary: true),
     ];
   }
 

@@ -5,6 +5,8 @@ import 'self_os_v37_rules.dart';
 import 'self_os_v37_ai.dart';
 import 'self_os_source_service.dart';
 import 'self_os_insights.dart';
+import 'self_os_learning.dart';
+import 'self_os_progress.dart';
 import 'self_os_horizon_view.dart';
 import 'self_os_widgets.dart';
 import 'self_os_workbench_widgets.dart';
@@ -14,6 +16,7 @@ part 'self_os_knowledge_panel.dart';
 part 'self_os_conflict_panel.dart';
 part 'self_os_preparation_panel.dart';
 part 'self_os_strength_panel.dart';
+part 'self_os_reentry_panel.dart';
 
 class SelfOsWorkbench extends StatefulWidget {
   const SelfOsWorkbench(

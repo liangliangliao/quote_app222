@@ -135,10 +135,30 @@ class SelfOsEngineService {
   }
 
   static double motiveRank(SelfOsMotive m, List<SelfOsFingerprint> history) {
+    final effect = currentMotiveEffect(m, history);
+    if (effect != null) return effect;
     final samples = history.where((h) => h.label == m.type && h.total >= 3);
     // Once measured, personal history takes precedence over AI's prior score.
     if (samples.isNotEmpty) return samples.first.rate;
     return m.predicted ?? 0;
+  }
+
+  /// An explanatory availability index, never a probability of taking action.
+  /// Unknown factors stay unknown; we do not turn missing attention into zero.
+  static double? currentMotiveEffect(
+      SelfOsMotive m, List<SelfOsFingerprint> history) {
+    final samples = history.where((h) => h.label == m.type && h.total >= 3);
+    final base = samples.isNotEmpty ? samples.first.rate : m.predicted;
+    final factors = [
+      m.importance,
+      m.credibility,
+      m.vividness,
+      m.occupancy,
+      base
+    ];
+    if (factors.any((v) => v == null)) return null;
+    return factors.fold<double>(
+        100, (value, factor) => value * factor!.clamp(0, 100) / 100);
   }
 
   static List<String> patterns(List<SelfOsCase> cases) {

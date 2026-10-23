@@ -1,24 +1,19 @@
 import 'self_os_models.dart';
+import 'self_os_progress.dart';
+import 'self_os_representation_learning.dart';
 
 /// Translates user-confirmed guidance into the same V3.7 evidence model used by
 /// the detailed workbenches. AI output alone never advances these transitions.
 class SelfOsGuidance {
   static String next(SelfOsCase c) {
-    if (c.reviewed) return '看看这次现实与预期哪里不同，再决定是否继续。';
-    if (c.retrospective || c.guide.phase == 'review') {
-      return '记下实际发生的事，让这次经历成为下一次选择的依据。';
-    }
-    if (c.guide.phase == 'act' ||
-        (c.committedAt != null && c.guide.turns.isEmpty)) {
-      return '按约定迈出第一步，回来记录实际观察。';
-    }
-    if (c.guide.confirmed) return '只安排一个有边界的小行动，验证眼前最重要的未知。';
+    final step = SelfOsProgress.next(c);
+    if (step.kind != 'explore') return '${step.title}。${step.reason}';
     final frame = c.guide.frame;
     if (frame != null) {
       final question = osText(osMap(frame['question'])['text']);
       return question.isEmpty ? '确认这份理解是否符合你，再选择怎么验证。' : question;
     }
-    return '从一件具体的事开始，先理清你想改变什么、又想保护什么。';
+    return step.reason;
   }
 
   static Map<String, String> sources(SelfOsCase c) => {
@@ -53,6 +48,7 @@ class SelfOsGuidance {
     if (c.committedAt != null) {
       c.fields['newInformation'] = text.trim();
       c.v37.settings['newInformationReviewed'] = false;
+      c.v37.settings['requiresReconsideration'] = true;
     }
   }
 
@@ -97,7 +93,16 @@ class SelfOsGuidance {
       // The endorsed original view belongs to the before snapshot.
       c.v37.knowledgeBefore!['knowledge'] = c.text('k1');
     }
-    c.fields['k2'] = osText(f.insight['after']);
+    final representation = SelfOsRepresentationLearning.validateChoice(
+        f.insight['representation']);
+    if (representation != null) {
+      SelfOsRepresentationLearning.adopt(c,
+          choice: representation,
+          content: osText(f.insight['after']),
+          source: osText(f.insight['reason']));
+    } else {
+      c.fields['k2'] = osText(f.insight['after']);
+    }
     c.fields['knowledgeSource'] = '引导中的用户确认（解释，尚待现实验证）';
     final desire =
         c.desires.where((d) => d.title == f.text('toward')).firstOrNull;
@@ -140,7 +145,7 @@ class SelfOsGuidance {
       final route = OsRoute({
         'title': r['title'],
         'mechanism': r['mechanism'],
-        'mechanismDetail': r['title'],
+        'mechanismDetail': r['mechanismDetail'] ?? r['title'],
         'desire': accepted.title,
         'cost': r['cost'],
         'reality': '待核验：${r['unknown']}',
@@ -162,16 +167,23 @@ class SelfOsGuidance {
         }));
       }
     }
-    final gap = OsGap({
-      'question': f.experiment['question'],
-      'kind': 'fact',
-      'access': 'experience',
-      'source': '引导中确认的待验证问题',
-    });
-    c.v37.gaps.add(gap);
+    final priorGap =
+        c.v37.gaps.where((g) => g.id == f.experiment['gapId']).firstOrNull;
+    final gap = priorGap ??
+        OsGap({
+          'question': f.experiment['question'],
+          'kind': 'fact',
+          'access': 'experience',
+          'source': '引导中确认的待验证问题',
+        });
+    if (priorGap == null) c.v37.gaps.add(gap);
+    final route = c.v37.routes
+        .where((r) => r.title == f.experiment['routeTitle'])
+        .firstOrNull;
     g.draft.addAll({
       ...f.experiment,
       'gapId': gap.id,
+      if (route != null) 'routeId': route.id,
       'influence': influence,
       'trigger': '',
       'costAccepted': false,
@@ -180,6 +192,7 @@ class SelfOsGuidance {
     });
     g.confirmedRevision = g.revision;
     g.phase = 'plan';
+    c.v37.settings['phase'] = 'filter';
     g.confirmations.add({
       'id': selfOsId(),
       'round': c.round,
@@ -223,8 +236,34 @@ class SelfOsGuidance {
     if (moment != null && !moment.isAfter(DateTime.now())) {
       throw const FormatException('约定时刻已过去，请更新或清除该时间');
     }
-    c.v37.gaps.singleWhere((gap) => gap.id == d['gapId']).data['question'] =
-        osText(d['question']);
+    final gap = c.v37.gaps.singleWhere((gap) => gap.id == d['gapId']);
+    if (gap.text('question') != osText(d['question'])) {
+      gap.data.addAll({
+        'question': osText(d['question']),
+        'resolutionConfirmed': false,
+        'sensitivityReviewed': false
+      });
+    }
+    final route = c.v37.routes.where((r) => r.id == d['routeId']).firstOrNull;
+    if (osText(d['routeId']).isNotEmpty && route == null) {
+      throw const FormatException('关联的路径已改变，请重新选择');
+    }
+    if (route != null) {
+      final prediction = OsConsequence({
+        'routeId': route.id,
+        'title': d['prediction'],
+        'concrete': d['observe'],
+        'order': 1,
+        'horizon': 'near',
+        'valence': 'mixed',
+        'label': 'inference',
+        'source': '第 ${c.round} 轮实验事前预期',
+        'relevance': 'high',
+        'gapId': gap.id,
+      });
+      c.v37.nodes.add(prediction);
+      d['nodeId'] = prediction.id;
+    }
     if (c.commitment != null)
       c.v37.priorCommitments.add(osClone(c.commitment!));
     c.fields.addAll({
@@ -249,6 +288,7 @@ class SelfOsGuidance {
     // Only the user-confirmed revision can supersede an interrupted protocol.
     if (c.text('newInformation').isNotEmpty) {
       c.v37.settings['newInformationReviewed'] = true;
+      c.v37.settings['requiresReconsideration'] = false;
     }
     if (moment != null) {
       c.v37.settings['futureMoment'] = moment.toIso8601String();
@@ -259,13 +299,15 @@ class SelfOsGuidance {
         'task': d['action'],
         'source': '本人实际观察：${d['observe']}',
         'expectedChange': d['question'],
-        'scheduledAt': moment.toIso8601String(),
+        'dueAt': moment.toIso8601String(),
+        'createdAt': DateTime.now().toIso8601String(),
       });
       c.v37.interventions.add(intervention);
       c.startIntervention(intervention);
       d['interventionId'] = intervention.id;
     }
     c.committedAt = DateTime.now();
+    c.v37.settings['phase'] = 'experiment';
     c.commitment = osClone({
       ...c.evidenceSnapshot(),
       'commitmentScope': 'experiment',

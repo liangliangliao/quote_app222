@@ -5,9 +5,17 @@ import 'self_os_action_focus.dart';
 import 'self_os_ai_service.dart';
 import 'self_os_case_page.dart';
 import 'self_os_guidance.dart';
+import 'self_os_learning.dart';
+import 'self_os_progress.dart';
 import 'self_os_models.dart';
 import 'self_os_repository.dart';
 import 'self_os_widgets.dart';
+import 'self_os_strength_learning.dart';
+import 'self_os_strength_feedback.dart';
+import 'self_os_representation_learning.dart';
+import 'self_os_representation_widgets.dart';
+
+part 'self_os_guide_learning_panel.dart';
 
 class SelfOsGuidePage extends StatefulWidget {
   const SelfOsGuidePage(
@@ -47,6 +55,10 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
   OsGuideFrame? get _frame =>
       g.frame == null ? null : OsGuideFrame.saved(g.frame!);
 
+  void _redraw(VoidCallback change) {
+    if (mounted) setState(change);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +68,15 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
       g.phase = 'learn';
     } else if (_c.retrospective) {
       g.phase = 'review';
+    } else if (_c.v37.flag('requiresReconsideration') ||
+        (_c.text('newInformation').isNotEmpty &&
+            !_c.v37.flag('newInformationReviewed'))) {
+      g
+        ..phase = 'explore'
+        ..frame = null
+        ..confirmedRevision = null;
+      g.draft['correcting'] = true;
+      _correcting = true;
     } else if (_c.committedAt != null && g.turns.isEmpty) {
       g.phase = 'act';
     }
@@ -87,14 +108,17 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
     super.dispose();
   }
 
-  Future<bool> _persist(SelfOsCase c) async {
+  Future<bool> _persist(SelfOsCase c, {SelfOsProfile? profile}) async {
     if (_needsReload || _inDetails) return false;
     final copy = c.copy();
+    final profileCopy =
+        profile == null ? null : SelfOsProfile.fromJson(profile.toJson());
     // Serialize autosaves, transitions and back navigation, so an old draft can
     // never land after a newly confirmed protocol.
-    final write = _writes
-        .catchError((Object _) {})
-        .then((_) => widget.repository.saveCase(copy));
+    final write = _writes.catchError((Object _) {}).then((_) =>
+        profileCopy == null
+            ? widget.repository.saveCase(copy)
+            : widget.repository.saveCaseAndProfile(copy, profileCopy));
     _writes = write;
     try {
       await write;
@@ -222,39 +246,41 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
     }
   }
 
-  Future<void> _details() async {
+  Future<void> _details([int? target, String? initialAiTask]) async {
     if (_locked) return;
-    final selection = await showModalBottomSheet<int>(
-        context: context,
-        isScrollControlled: true,
-        builder: (ctx) => SafeArea(
-                child: SingleChildScrollView(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text('分析与记录',
-                      style: TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w700))),
-              const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 24),
-                  child: Text('按需要展开。返回后，继续眼前这一步。')),
-              for (final e in const {
-                0: '选择与未来路径',
-                1: '认识、证据与因果',
-                2: '冲突与注意',
-                3: '未来认识准备',
-                4: '本性与力量',
-                5: '欲求假设与 Why Tree',
-                6: '完整动机空间',
-                7: '认识纠错',
-                8: '完整行动协议',
-                9: '详细复盘'
-              }.entries)
-                ListTile(
-                    title: Text(e.value),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.pop(ctx, e.key)),
-            ]))));
+    final selection = target ??
+        await showModalBottomSheet<int>(
+            context: context,
+            isScrollControlled: true,
+            builder: (ctx) => SafeArea(
+                    child: SingleChildScrollView(
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text('分析与记录',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.w700))),
+                  const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 24),
+                      child: Text('按需要展开。返回后，继续眼前这一步。')),
+                  for (final e in const {
+                    0: '选择与未来路径',
+                    1: '认识、证据与因果',
+                    2: '冲突与注意',
+                    3: '未来认识准备',
+                    4: '本性与力量',
+                    5: '欲求假设与 Why Tree',
+                    6: '完整动机空间',
+                    7: '认识纠错',
+                    8: '完整行动协议',
+                    9: '详细复盘'
+                  }.entries)
+                    ListTile(
+                        title: Text(e.value),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.pop(ctx, e.key)),
+                ]))));
     if (selection == null || !mounted) return;
     _draftTimer?.cancel();
     if (!await _persist(_c) || !mounted) return;
@@ -270,6 +296,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
                 ai: widget.ai,
                 history: _history,
                 profile: _profile,
+                initialAiTask: initialAiTask,
                 initialWorkspace: selection < 5 ? selection : null,
                 initialEngine: selection >= 5
                     ? SelfOsEngine.values[selection - 5]
@@ -288,6 +315,14 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
       final changed = jsonEncode(c.evidenceSnapshot()) != _detailBefore;
       if (c.reviewed) {
         c.guide.phase = 'learn';
+      } else if (c.v37.flag('requiresReconsideration') ||
+          (c.text('newInformation').isNotEmpty &&
+              !c.v37.flag('newInformationReviewed'))) {
+        c.guide
+          ..phase = 'explore'
+          ..frame = null
+          ..confirmedRevision = null;
+        c.guide.draft['correcting'] = true;
       } else if (c.committedAt != null &&
           (c.committedAt != _detailCommit || c.guide.phase == 'act')) {
         c.guide.phase = 'act';
@@ -320,6 +355,11 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
   Future<void> _focus() async {
     final snapshot = _c.commitment;
     if (snapshot == null || _locked) return;
+    final blocker = SelfOsProgress.actionBlocker(_c);
+    if (blocker != null) {
+      setState(() => _error = blocker);
+      return;
+    }
     final result = await Navigator.push<Map<String, dynamic>>(
         context,
         MaterialPageRoute(
@@ -336,6 +376,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
         c.guide.draft['correcting'] = true;
         c.fields['newInformation'] = '现场出现重要新信息，待补充与重审';
         c.v37.settings['newInformationReviewed'] = false;
+        c.v37.settings['requiresReconsideration'] = true;
         c.v37.settings['understandingReviewed'] = false;
       }
     });
@@ -429,6 +470,11 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
             _line('原先的理解', osText(f.insight['before'])),
             _line('也许更接近的解释', osText(f.insight['after'])),
             _line('为什么这样想', osText(f.insight['reason'])),
+            if (SelfOsRepresentationLearning.validateChoice(
+                    f.insight['representation'])
+                case final choice?)
+              _line('这次的表达方式',
+                  '${osRepresentationFormats[choice['format']]} · ${osRepresentationWindows[choice['window']]}；实际是否有帮助，行动后再反馈。'),
             if (f.routes.isNotEmpty)
               ExpansionTile(
                   tilePadding: EdgeInsets.zero,
@@ -436,6 +482,9 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
                   children: [
                     for (final route in f.routes)
                       OsSection(title: osText(route['title']), children: [
+                        if (osText(route['mechanismDetail']).isNotEmpty)
+                          _line(
+                              '这条路怎样实现想要的变化', osText(route['mechanismDetail'])),
                         _line('可能得到', osText(route['benefit'])),
                         _line('可能付出', osText(route['cost'])),
                         _line('还不知道', osText(route['unknown'])),
@@ -544,6 +593,27 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
               _input('question', '想验证的问题', d),
               _input('prediction', '我预期会发生什么', d),
               _input('observe', '怎样观察，什么结果会改变判断', d),
+              DropdownButtonFormField<String>(
+                key: ValueKey('guide_${_c.round}_experiment_route'),
+                initialValue: _c.v37.routes.any((r) => r.id == d['routeId'])
+                    ? osText(d['routeId'])
+                    : '',
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '这一步在检验哪条路径？'),
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('跨路径了解，暂不关联')),
+                  for (final r in _c.v37.routes)
+                    DropdownMenuItem(
+                        value: r.id,
+                        child: Text(r.title, overflow: TextOverflow.ellipsis)),
+                ],
+                onChanged: _locked
+                    ? null
+                    : (v) {
+                        setState(() => d['routeId'] = v ?? '');
+                        _draftChanged();
+                      },
+              ),
             ]),
       ]),
       OsSection(title: '让它小到可以开始', children: [
@@ -654,10 +724,12 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
     final snapshot = _c.commitment ?? _c.evidenceSnapshot();
     final fields = osMap(snapshot['fields']);
     final experiment = osMap(snapshot['experiment']);
+    final blocker = SelfOsProgress.actionBlocker(_c);
     return [
-      const Text('这一刻，只走这一步。',
-          style: TextStyle(fontSize: 27, fontWeight: FontWeight.w700)),
+      Text(blocker == null ? '这一刻，只走这一步。' : '先核对变化，再行动。',
+          style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w700)),
       const SizedBox(height: 20),
+      if (SelfOsProgress.next(_c).kind != 'act') _nextStepCard(),
       OsSection(
           title: osText(fields['firstAction']).isEmpty
               ? '你的行动约定'
@@ -669,7 +741,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
               _line('回来时看看', osText(experiment['observe'])),
               _line('做到这里就够了', osText(experiment['boundary'])),
             ],
-            _primary('进入行动现场', _focus, key: 'guide_focus'),
+            if (blocker == null) _primary('进入行动现场', _focus, key: 'guide_focus'),
             const SizedBox(height: 10),
             OutlinedButton(
                 onPressed: _locked
@@ -691,6 +763,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
                           c.guide.draft['correcting'] = true;
                           c.fields['newInformation'] = '出现新情况，待补充与重审';
                           c.v37.settings['newInformationReviewed'] = false;
+                          c.v37.settings['requiresReconsideration'] = true;
                           c.v37.settings['understandingReviewed'] = false;
                         })) {
                           setState(() => _correcting = true);
@@ -778,11 +851,22 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
             const OsNote('这是一条具体情境下的证据。先保留它，也保留其他解释；更多经历会让你看得更清楚。',
                 icon: Icons.spa_outlined),
           ]),
+      if (plan.isNotEmpty) _calibrationCard(r),
+      SelfOsStrengthFeedback(
+          key: ValueKey('guide_strength_${r.id}'),
+          review: r,
+          profile: _profile,
+          onSave: (notes) => _saveStrengthFeedback(r.id, notes)),
+      SelfOsRepresentationFeedback(
+          key: ValueKey('guide_representation_${r.id}'),
+          review: r,
+          onSave: (notes) => _saveRepresentationFeedback(r.id, notes)),
+      _nextStepCard(),
       _primary('带着这个发现再试一轮', () async {
         if (await _transition((c) {
           SelfOsGuidance.nextRound(c);
-          SelfOsGuidance.answer(
-              c, '上一次实际观察：${r.result}\n当时情境：${r.context}\n我的新认识：${r.learning}');
+          SelfOsGuidance.answer(c,
+              '上一次实际观察：${r.result}\n当时情境：${r.context}\n我的新认识：${r.notes['calibrationConclusion'] ?? r.learning}\n适用范围：${r.notes['calibrationScope'] ?? r.context}');
         })) {
           _top();
           await _runAi();
@@ -902,6 +986,7 @@ class _SelfOsGuidePageState extends State<SelfOsGuidePage>
                                   'learn' => _learn(),
                                   _ => _explore(),
                                 },
+                                if (g.phase == 'explore') _nextStepCard(),
                                 const SizedBox(height: 20),
                                 if (g.turns.isNotEmpty)
                                   ExpansionTile(

@@ -9,8 +9,11 @@ import 'self_os_engine.dart';
 import 'self_os_models.dart';
 import 'self_os_repository.dart';
 import 'self_os_widgets.dart';
+import 'self_os_workbench_widgets.dart' show osMoment;
 import 'self_os_insights.dart';
 import 'self_os_v37_rules.dart';
+import 'self_os_progress.dart';
+import 'self_os_learning.dart';
 
 class SelfOsHomePage extends StatefulWidget {
   const SelfOsHomePage({super.key, this.repository, this.ai});
@@ -367,18 +370,62 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
               : values.map((s) => OsNote(s)).toList());
 
   List<Widget> _guidance(List<SelfOsCase> pending) {
-    final gaps = pending
-        .where((c) => c.v37.gaps
-            .any((g) => !g.resolvedBy(c.v37.evidence, DateTime.now())))
+    final nextCases = _cases
+        .where((c) =>
+            !c.reviewed ||
+            ['calibrate', 'verify', 'reentry']
+                .contains(SelfOsProgress.next(c).kind))
         .toList();
+    int rank(SelfOsCase c) =>
+        const {
+          'reconsider': 0,
+          'hold': 1,
+          'verify': 2,
+          'prepare': 3,
+          'calibrate': 4,
+          'reentry': 5,
+          'retrieve': 6,
+          'ask': 7,
+          'experiment': 8,
+          'alignment': 6,
+          'horizon': 6,
+          'gmrc': 6,
+          'conflict': 7,
+          'routes': 7,
+          'engine': 8,
+          'desire': 8,
+          'cognition': 8,
+          'motivation': 8,
+          'action': 8,
+        }[SelfOsProgress.next(c).kind] ??
+        9;
+    nextCases.sort((a, b) => rank(a).compareTo(rank(b)));
+    final nextCase = nextCases.where((c) => rank(c) < 9).firstOrNull;
+    final next = nextCase == null ? null : SelfOsProgress.next(nextCase);
     final attention = pending
         .where((c) => SelfOsV37Rules.attentionBreaks(
                 c.motives.map((m) => m.toJson()).toList())
             .isNotEmpty)
         .toList();
-    final preparation = pending
-        .where((c) => c.v37.interventions.any((i) => !i.completed))
-        .toList();
+    final conflicts = pending.where((c) =>
+        SelfOsV37Rules.conflict(
+            c.v37, c.motives.map((m) => m.toJson()).toList()) !=
+        'unknown');
+    final verifiedStrengths = _profile.strengths
+        .where((s) => SelfOsInsights.strength(s, _cases).verified);
+    String conflictSummary(SelfOsCase c) {
+      final selected = c.motives.where((m) => m.selected);
+      final foreground = selected.where((m) => m.attention == 'foreground');
+      final background = selected.where((m) =>
+          (m.importance ?? 0) >= 60 &&
+          ['background', 'omitted'].contains(m.attention));
+      final type = SelfOsV37Rules.conflict(
+          c.v37, c.motives.map((m) => m.toJson()).toList());
+      return '当前冲突：${SelfOsV37Rules.conflictLabels[type]}\n'
+          '眼前最鲜明：${foreground.isEmpty ? '尚未确认' : foreground.take(2).map((m) => m.title).join('、')}\n'
+          '重要但退到背景：${background.isEmpty ? '尚未发现，仍可补充' : background.take(2).map((m) => m.title).join('、')}';
+    }
+
     Widget card(SelfOsCase c, String title, String detail, int tab,
             IconData icon) =>
         OsSection(title: title, subtitle: detail, children: [
@@ -393,17 +440,45 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
     return [
       for (final warning in SelfOsInsights.pathGuard(_cases, _profile))
         OsNote(warning),
-      if (gaps.isNotEmpty)
-        card(gaps.first, '有一处认识，值得先补上',
-            SelfOsV37Rules.gate(gaps.first.v37).label, 1, Icons.search),
-      if (attention.isNotEmpty)
+      if (nextCase != null && next != null)
+        OsSection(title: next.title, subtitle: next.reason, children: [
+          ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.near_me_outlined, color: osForest),
+              title: Text(nextCase.problem,
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              trailing: const Icon(Icons.arrow_forward),
+              onTap: () => _open(nextCase,
+                  workspace: next.workspace, engine: next.engine)),
+        ]),
+      for (final c in pending
+          .where((c) =>
+              c.v37.futureMoment?.isAfter(DateTime.now()) == true &&
+              c.v37.interventions.any((i) => !i.completed))
+          .take(1))
+        card(
+            c,
+            '为未来那一刻做准备',
+            '${osMoment(c.v37.futureMoment)}\n${c.v37.text('futureMissingMotive')}\n'
+                '${c.v37.interventions.where((i) => !i.completed).take(3).map((i) => '${i.text('task')} · 最晚 ${osMoment(i.dueAt(c.v37.futureMoment, DateTime.now()))}').join('\n')}'
+                '${c.v37.text('holdCue').isEmpty ? '' : '\n现场只带一句：${c.v37.text('holdCue')}'}'
+                '${c.text('firstAction').isEmpty ? '' : '\n第一步：${c.text('firstAction')}'}',
+            3,
+            Icons.event_outlined),
+      if (conflicts.isNotEmpty)
+        card(conflicts.first, '看清这次真实的拉扯', conflictSummary(conflicts.first), 2,
+            Icons.balance),
+      if (attention.isNotEmpty && conflicts.isEmpty)
         card(attention.first, '相信的理由，进入现场了吗？', '看看注意前景与行动连接，让双向动机都被看见。', 2,
             Icons.center_focus_strong),
-      if (preparation.isNotEmpty)
-        card(preparation.first, '为下一个真实时刻准备', '在决定前完成最小的认识准备；现场只留一条有效提示。', 3,
-            Icons.schedule),
-      if (_profile.strengths.isNotEmpty && pending.isNotEmpty)
-        card(pending.first, '把力量用在合适的位置', '结合行动证据，找到恰当使用与过度使用的边界。', 4,
+      for (final strength in verifiedStrengths.take(pending.isEmpty ? 0 : 1))
+        card(
+            pending.first,
+            '从实际行动中看见的力量 · ${strength.title}',
+            '${SelfOsInsights.strength(strength, _cases).supports} 次支持 · ${SelfOsInsights.strength(strength, _cases).counters} 次反证 · ${SelfOsInsights.strength(strength, _cases).overuse} 次过度使用\n'
+                '失效条件：${strength.text('counter').isEmpty ? '仍需继续观察' : strength.text('counter')}\n'
+                '使用边界：${strength.text('overuseGuard').isEmpty ? '还需验证合适的使用程度' : strength.text('overuseGuard')}',
+            4,
             Icons.spa_outlined),
     ];
   }
@@ -537,6 +612,21 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
           style: TextStyle(fontSize: 23, fontWeight: FontWeight.w700)),
       const SizedBox(height: 10),
       OsNote('获得性格 · 证据覆盖 $coverage / 5：欲求、能力、代价、取舍、预测。仅表示已有记录的维度，不是人格分数。'),
+      OsSection(
+          title: '从现实中修订过的认识',
+          subtitle: '每条都保留原来的预期、实际观察和适用范围。以后分析会优先参考这些具体经历。',
+          children: SelfOsLearning.history(_cases).isEmpty
+              ? [const Text('完成一次实际反馈并确认它的含义后，认识会出现在这里。')]
+              : SelfOsLearning.history(_cases)
+                  .take(5)
+                  .map((e) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(osText(e['conclusion'])),
+                      subtitle: Text('实际：${e['actual']}\n适用范围：${e['scope']}'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () =>
+                          _open(_cases.firstWhere((c) => c.id == e['caseId']))))
+                  .toList()),
       OsSection(
           title: '个人使用说明书',
           subtitle: '用可追溯的行动记录，持续修订你的个人模型。',

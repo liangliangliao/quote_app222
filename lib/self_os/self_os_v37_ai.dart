@@ -311,7 +311,10 @@ class OsAnalysisProposal {
     if (signals['longHorizon'] == true) copy.settings['longHorizon'] = true;
     if (signals['repeated'] == true) copy.settings['repeated'] = true;
     // Inferred risk can raise attention, never silently lower the user's gate.
-    if (signals['risk'] == 'high') copy.settings['riskSuggestion'] = 'high';
+    if (signals['risk'] == 'high') {
+      copy.settings['riskSuggestion'] = 'high';
+      copy.settings['riskSuggestionReviewed'] = false;
+    }
     copy.settings['alignmentSuggestion'] = signals['changeObject'];
     copy.settings['analysisSummary'] = summary;
     copy.settings['stopReason'] = osText(data['stopReason']);

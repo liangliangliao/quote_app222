@@ -171,13 +171,21 @@ class OsGap extends OsEntity {
   String get sensitivity {
     if (text('lowScenario').isEmpty ||
         text('highScenario').isEmpty ||
+        text('lowScenario').trim() == text('highScenario').trim() ||
         text('lowChoice').isEmpty ||
         text('highChoice').isEmpty) return 'unknown';
     return text('lowChoice') == text('highChoice') ? 'stable' : 'flip';
   }
 
-  bool get important => !flag('irrelevant') && sensitivity != 'stable';
+  // Model-proposed choices are hypotheses. Only a user's comparison can make
+  // an unknown irrelevant to the decision; an AI cannot waive its own gaps.
+  bool get important =>
+      !flag('irrelevant') &&
+      !(flag('sensitivityReviewed') && sensitivity == 'stable');
   bool resolvedBy(List<OsEvidence> evidence, DateTime now) =>
+      flag('resolutionConfirmed') &&
+      text('resolutionAnswer').trim().isNotEmpty &&
+      text('resolutionScope').trim().isNotEmpty &&
       strings('evidenceIds')
           .any((id) => evidence.any((e) => e.id == id && e.reliableAt(now)));
 }
