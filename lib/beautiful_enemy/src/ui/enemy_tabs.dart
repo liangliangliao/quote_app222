@@ -551,9 +551,9 @@ class _SettingsTabState extends State<SettingsTab> {
   static const List<String> _weekdays = <String>['无', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
   static const List<String> _intensityHelp = <String>[
     '',
-    '1 档：冷静挑刺，只陈述差距。',
-    '2 档：直接强硬，点名拖延，允许讽刺。',
-    '3 档：火力全开，允许粗口作语气词——但只冲着行为和借口，不冲着你这个人。',
+    '1 档：温和但诚实，先确认事实与真实处境。',
+    '2 档：直接指出有证据的行为差距，并提出可行选择。',
+    '3 档：坚定挑战具体行为，但依然尊重人格、边界与自主决定。',
   ];
 
   bool _loaded = false;
@@ -892,6 +892,32 @@ class _SettingsTabState extends State<SettingsTab> {
               ),
             ),
           ),
+        const Card(
+          color: kEnemyCard,
+          child: Padding(
+            padding: EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('角色画像：美丽 × 敌人',
+                    style: TextStyle(color: kEnemyText, fontSize: 15, fontWeight: FontWeight.w700)),
+                SizedBox(height: 8),
+                Text(EnemyCopy.portraitBeautiful,
+                    style: TextStyle(color: kEnemyText, fontSize: 13, height: 1.45)),
+                SizedBox(height: 6),
+                Text(EnemyCopy.portraitEnemy,
+                    style: TextStyle(color: kEnemyText, fontSize: 13, height: 1.45)),
+                SizedBox(height: 10),
+                Text(EnemyCopy.portraitMission,
+                    style: TextStyle(color: kEnemyAccent, fontSize: 12, height: 1.5)),
+                SizedBox(height: 8),
+                Text(EnemyCopy.portraitBoundary,
+                    style: TextStyle(color: kEnemyMuted, fontSize: 12, height: 1.5)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         const Text('它怎么对你', style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700)),
         ListTile(
           contentPadding: EdgeInsets.zero,
@@ -956,7 +982,7 @@ class _SettingsTabState extends State<SettingsTab> {
           contentPadding: EdgeInsets.zero,
           title: const Text('反对党质询', style: TextStyle(color: kEnemyText)),
           subtitle: const Text(
-            '你一声不响的时候它也不闭嘴：从账上缺的东西发起质询、提动议、讽刺你的借口和回避。只冲着行为，不冲着你这个人。',
+            '你长期没有新记录时，它可以温和询问进展或提出建议；没有记录不等于你没做。你可以拒绝、暂停或补充事实。',
             style: TextStyle(color: kEnemyMuted),
           ),
           value: _opposition,
@@ -999,7 +1025,7 @@ class _SettingsTabState extends State<SettingsTab> {
           contentPadding: EdgeInsets.zero,
           title: const Text('自适应动机刺激', style: TextStyle(color: kEnemyText)),
           subtitle: const Text(
-            '不只是“说得更狠”：在事实镜照、言行一致、直接挑战、自我竞争之间选择，并根据你每次的反馈学习。',
+            '不是说得更狠：先理解事实和目标，再选择事实镜照、言行一致、直接挑战或自我竞争，结合反馈调整。',
             style: TextStyle(color: kEnemyMuted),
           ),
           value: _motivationStimulus,
@@ -1012,7 +1038,7 @@ class _SettingsTabState extends State<SettingsTab> {
           contentPadding: EdgeInsets.zero,
           title: const Text('允许轻度挑衅', style: TextStyle(color: kEnemyText)),
           subtitle: const Text(
-            '默认关闭。开启后，2–3 档可用克制挑衅激起“我偏要证明给你看”的证明欲或有益愤怒。只针对借口与回避，不攻击你这个人。',
+            '默认关闭。开启后，2–3 档可以提出温和、可拒绝的挑战；不使用羞辱、粗口或人格攻击。你点“太过了”会降低强度。',
             style: TextStyle(color: kEnemyMuted),
           ),
           value: _allowProvocation,
