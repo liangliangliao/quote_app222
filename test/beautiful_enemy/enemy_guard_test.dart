@@ -78,10 +78,10 @@ void main() {
     );
   });
 
-  test('profanity is only allowed at tier 3', () {
+  test('profanity is rejected at every intensity', () {
     final EnemyDraft d = draft(charge: '少他妈拿「忙」当挡箭牌，失效 2 条。', tone: 2);
-    expect(check(d), contains('profanity_below_tier3'));
-    expect(check(draft(charge: '少他妈拿「忙」当挡箭牌，失效 2 条。', tone: 3)), isEmpty);
+    expect(check(d), contains('profanity_not_allowed'));
+    expect(check(draft(charge: '少他妈拿「忙」当挡箭牌，失效 2 条。', tone: 3)), contains('profanity_not_allowed'));
   });
 
   test('fact-only drafts skip the concreteness rule but not the banned list', () {
