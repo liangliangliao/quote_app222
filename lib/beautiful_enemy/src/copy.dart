@@ -3,11 +3,11 @@ class EnemyCopy {
   const EnemyCopy._();
 
   static const String title = '美丽的敌人';
-  static const String tagline = '关爱与挑战并存：对人保持尊重，对事实保持诚实。';
-  static const String discoverSubtitle = '关爱 · 诚实挑战 · 真实行动 · 成长复盘';
+  static const String tagline = '对人保持关爱，对事实保持诚实，对成长保持要求。';
+  static const String discoverSubtitle = '关爱 · 事实 · 挑战 · 行动 · 复盘';
   static const String discoverSemantics = '打开美丽的敌人';
 
-  static const String insufficient = '现有记录不足以判断，不等于你没有行动。你可以补充实际情况，或自行授权更多记录来源。';
+  static const String insufficient = '证据不足，不评判；这不等于你没有行动。可以先说说处境，或自愿补充记录。';
   static const String portraitBeautiful = '美丽：理解、支持、尊重人格，即使失败也不否定你的价值。';
   static const String portraitEnemy = '敌人：坚持事实、质疑偏差、指出具体行为差距，但不羞辱、不强迫。';
   static const String portraitMission = '主要职责：事实监督 · 认知挑战 · 成长推动 · 动机唤醒 · 行动督促 · 反馈复盘 · 支持守护。';
@@ -24,12 +24,11 @@ class EnemyCopy {
   static const String stakeRejected = '赌注只能是一个行动：不能伤害自己、羞辱自己，也不能涉及钱。换一个。';
 
   static String opening(String address) =>
-      '$address，我是你请来的美丽敌人：我站在你真正选择的目标这边，不站在借口这边。\n'
-      '我会理解你的处境，也会用事实提出挑战。你做到的我会认可，'
-      '你卡住的我们一起核实；只评行为，不评人。'
-      '你先说——今天最想推进什么？';
+      '$address，我站在你这一边，也会诚实指出有证据的差距。\n'
+      '你的价值不由成败决定。我会理解困难、认可真实进步，和你一起把问题变成可验证的小行动。'
+      '我也可能判断错，欢迎补充事实或反驳。今天你最想改变什么？';
 
-  static const String defaultAppealPrompt = '我可能看漏了什么？欢迎补充事实或反驳。';
+  static const String defaultAppealPrompt = '我可能看漏了事实，你愿意补充或纠正吗？';
 
   /// 安全阀触发后的回应。不评判、不提任务、不带敌意。
   static const String crisisMessage = '先停一下，敌人已经收起来了。\n\n'
@@ -44,7 +43,7 @@ class EnemyCopy {
   static const String appealNeedsText = '申辩要写理由。一句具体的话就行。';
 
   static const String attributionTooVague = '这个理由不够具体。补一件真实发生的事：当时你在做什么？';
-  static const String attributionSaved = '记下了。这条教训会在你下次踩同一个坑时被拿出来。';
+  static const String attributionSaved = '记下了。我们会用这条经验调整下一次的方法。';
 
   static const String noCommitments = '还没有承诺。立一条：你打算做什么，什么时候之前。';
 
@@ -85,11 +84,9 @@ class EnemyCopy {
   static const String actionWriteCommitment = '写下一条今晚前要做完的承诺';
 
   static String acknowledgement(String text, int doneStreak) {
-    final String head = '认账。「$text」完成了。';
-    if (doneStreak >= 3) {
-      return '$head连续 $doneStreak 次兑现，这是有记录的进步。要不要商量下一步？';
-    }
-    return '$head这个结果值得看见。要不要继续，由你决定。';
+    final String head = '认账。「$text」完成了，这是一次有记录的进步。';
+    if (doneStreak >= 3) return '$head连续 $doneStreak 次兑现，什么方法帮助你坚持？';
+    return '$head记住有效的方法，下一步由你选择。';
   }
 
   static String lessonText(String category, String reason) =>

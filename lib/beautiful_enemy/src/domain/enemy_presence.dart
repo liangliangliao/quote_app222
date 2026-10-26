@@ -5,6 +5,7 @@ import '../enemy_talker.dart';
 import '../persona.dart';
 import 'claim_check.dart';
 import 'digest_builder.dart';
+import 'growth_guidance.dart';
 import 'enemy_engine.dart';
 import 'guard.dart';
 import 'motivation_profile.dart';
@@ -206,9 +207,9 @@ class EnemyPresence {
     final ClaimAssessment claim = ClaimCheck.assess(clipped, snap.digest.json);
     final EnemyMessage enemy = await _speak(
       snap: snap,
-      situation: '用户在跟你说话。盘问他，别替他找台阶。'
+      situation: '用户在跟你说话。先理解处境，再核对事实与解释，提出可行的小行动。'
           '${pending == null ? '' : '\n【他在回应你的质询】你刚才质询过他：「${_clipText(pending.text, 60)}」。'
-              '判断他是正面回答了，还是在回避：回答了就针对答案追问，回避了就点破。'}'
+              '认真回应其答案；不确定时询问，不把情绪或沉默当作逃避。'}'
           '${claim.hint.isEmpty ? '' : '\n【核对结果】${claim.hint}'}',
       userText: clipped,
       kind: MessageKind.chat,
@@ -382,7 +383,7 @@ class EnemyPresence {
 
     final EnemyMessage msg = await _speak(
       snap: snap,
-      situation: openText.isEmpty ? situation : '$situation 字据「$openText」还开着：点出他在忙别处，别替他找台阶。',
+      situation: openText.isEmpty ? situation : '$situation 字据「$openText」还开着：询问优先级是否需要调整，不预设他在逃避。',
       userText: '',
       kind: MessageKind.interject,
       refId: e.id,
@@ -606,7 +607,8 @@ class EnemyPresence {
     });
     dormant.sort((DormantModule a, DormantModule b) => b.days.compareTo(a.days));
 
-    final List<EnemyCommitment> all = await dao.commitments(limit: 300);
+    final List<EnemyCommitment> all = (await dao.commitments(limit: 300))
+        .where((c) => c.status != CommitmentStatus.proposed && c.status != CommitmentStatus.declined).toList();
     final int open = all.where((EnemyCommitment c) => c.status == CommitmentStatus.open).length;
     final int created24 = all.where((EnemyCommitment c) => now - c.createdMs <= dayMs).length;
     final int done7 = all
@@ -1021,12 +1023,11 @@ class EnemyPresence {
     return MotionResult(ok: true, enemy: msg);
   }
 
-  /// 驳回动议：必须给理由，敌人当场反驳，动议不撤。
+  /// 用户可自主拒绝建议，理由选填；保留真实的拒绝记录。
   Future<MotionResult> rejectMotion(int id, String reason) async {
     final EnemyMotion? m = await dao.motion(id);
     if (m == null || !m.isOpen) return const MotionResult(note: '这项动议已经处理过了。');
     final String text = reason.trim();
-    if (text.length < 4) return const MotionResult(note: '驳回要给理由，写一句具体的话。');
     if (SafetyValve.shouldMute(text)) {
       final bool crisis = SafetyValve.isCrisis(text);
       await engine.muteFor24h(crisis: crisis);
@@ -1043,7 +1044,8 @@ class EnemyPresence {
     final EnemyMessage msg = await _speak(
       snap: snap,
       situation: '他驳回了你的动议「${m.text}」，理由是：「${_clipText(text, 80)}」。'
-          '认真对待他的拒绝；若理由有实际限制就承认。动议已驳回，只可提供一个可选替代方案，不施压。一句话。',
+          '认真对待并尊重他的拒绝；若理由有实际限制就承认，有事实矛盾时只温和核对。'
+          '动议已驳回，只可协商一个可选替代方案，不施压。一句话。',
       userText: text,
       kind: MessageKind.chat,
       fallback: () => PersonaLines.rebut(address: snap.address, reason: text, seed: id),
@@ -1063,7 +1065,7 @@ class EnemyPresence {
     return _patrolSay(
       situation: '早上了，你主动开口做晨报。昨天完成 ${f.yesterdayDone} 件、失败 ${f.yesterdayMissed} 件；'
           '今天开着 ${f.open} 条字据${f.nextText.isEmpty ? '' : '，最近的是「${f.nextText}」'}。'
-          '像对手那样开场：报账，不寒暄，不鼓励。',
+          '先关心状态，再报记录，连接用户选择的目标，商量力所能及的一步。',
       fallback: (String a, int tone) => PersonaLines.morningBrief(
         address: a,
         open: f.open,
@@ -1088,7 +1090,7 @@ class EnemyPresence {
     return _patrolSay(
       situation: '晚间结算，你主动开口。今天完成 ${f.doneToday} 件、失败 ${f.missedToday} 件；'
           '还开着 ${f.open} 条字据${f.nextText.isEmpty ? '' : '，最近的是「${f.nextText}」'}。'
-          '盘点，催他，别替他找台阶。',
+          '认可真实进步，了解未完成的障碍，关联成长档案协商调整，照顾情绪和休息。',
       fallback: (String a, int tone) => PersonaLines.eveningLedger(
         address: a,
         open: f.open,
@@ -1353,7 +1355,10 @@ class EnemyPresence {
         }
       }
     }
-    line ??= fallback();
+    line ??= GrowthGuidance.relate(snap.digest.json, '$situation $userText', fallback());
+    if (engine.validator.validateLine(line, maxTone: snap.intensity).isNotEmpty) {
+      line = PersonaLines.chat(address: snap.address, tone: _tone(snap.intensity));
+    }
     return _store(
       role: MessageRole.enemy,
       kind: kind,

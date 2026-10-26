@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../copy.dart';
 import '../domain/enemy_presence.dart';
+import '../domain/growth_profile.dart';
+import 'enemy_growth_tab.dart';
 import '../enemy_host_tools.dart';
 import '../enemy_reminder.dart';
 import '../enemy_talker.dart';
@@ -17,12 +19,14 @@ class EnemyHomePage extends StatelessWidget {
     required this.voice,
     required this.reminder,
     required this.tools,
+    this.profileImporter,
   });
 
   final EnemyPresence presence;
   final EnemyVoiceOut voice;
   final EnemyReminder reminder;
   final EnemyHostTools tools;
+  final GrowthProfileImporter? profileImporter;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +50,7 @@ class EnemyHomePage extends StatelessWidget {
         ),
       ),
       child: DefaultTabController(
-        length: 6,
+        length: 7,
         child: Scaffold(
           appBar: AppBar(
             backgroundColor: kEnemyBg,
@@ -56,7 +60,8 @@ class EnemyHomePage extends StatelessWidget {
               isScrollable: true,
               indicatorColor: kEnemyAccent,
               tabs: <Tab>[
-                Tab(text: '对峙'),
+                Tab(text: '对话'),
+                Tab(text: '成长档案'),
                 Tab(text: '字据'),
                 Tab(text: '案卷'),
                 Tab(text: '教训'),
@@ -68,6 +73,7 @@ class EnemyHomePage extends StatelessWidget {
           body: TabBarView(
             children: <Widget>[
               ThreadTab(presence: presence, voice: voice),
+              EnemyGrowthTab(engine: presence.engine, importer: profileImporter),
               CommitmentsTab(engine: presence.engine, presence: presence),
               DossierTab(engine: presence.engine),
               LessonsTab(engine: presence.engine),

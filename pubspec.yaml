@@ -30,6 +30,8 @@ dependencies:
   # Camera barcode scanning for packaged food barcode lookup.
   mobile_scanner: ^5.2.3
   file_picker: ^8.0.3
+  read_pdf_text: ^0.3.1
+  enough_convert: 1.6.0
   csv: ^6.0.0
   scrollable_positioned_list: ^0.3.8
   # epub_view 3.x depends on image 3.x through epubx; keep this constraint compatible.

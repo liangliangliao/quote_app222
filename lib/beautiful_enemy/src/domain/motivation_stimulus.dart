@@ -41,7 +41,7 @@ class StimulusStyle {
       case integrity:
         return '把你自己写下的承诺与当前行为并排，让“言行不一致”本身产生推动力。';
       case challenge:
-        return '把问题变成一场现在就能接下的挑战：少解释，先做一个动作。';
+        return '把问题变成一场现在就能接下的挑战：理解障碍后，先试一个小动作。';
       case competition:
         return '只和自己的旧记录、承诺或当前目标较量，不拿别人压你。';
       case provocation:
@@ -123,14 +123,14 @@ class MotivationStimulus {
             '目标是产生可承受的认知张力，然后立刻收束到一个动作。';
       case StimulusStyle.challenge:
         return '使用【直接挑战】刺激：把眼前问题变成一个现在就能接下的小挑战，'
-            '邀请用户自主选择一个现在能做的小动作，证明方法是否有效。'
-            '挑战行为，不挑战人格；拒绝或调整方案同样应被尊重。';
+            '邀请用户自主选择力所能及的一步，并商定验证方式。'
+            '挑战行为，不挑战人格；拒绝或调整方案同样应被尊重，不要羞辱、威胁或激将到失控。';
       case StimulusStyle.competition:
         return '使用【自我竞争】刺激：只让用户和自己的旧记录、当前字据或今天的账竞争。'
             '不要拿别人比较，不制造社会羞耻。目标是让他现在拿下一分。';
       case StimulusStyle.provocation:
-        return '使用【轻度挑衅】刺激：目标是激起“我偏要证明给你看”的证明欲或有益愤怒，'
-            '把情绪转成趋近行动。挑衅只能针对借口、回避、拖延和言行差距，绝不针对人格、'
+        return '使用【轻度挑衅】刺激：仅在用户许可时更直接地质疑行为解释，'
+            '不故意激怒，尊重情绪与选择。挑衅只能针对借口、回避、拖延和言行差距，绝不针对人格、'
             '身份、能力、外貌、处境；不用羞辱、恐吓、孤立、愧疚绑架。'
             '刺激一句后必须马上给一个可执行动作，不能持续拱火；用户可拒绝，绝不粗口。';
       case StimulusStyle.mirror:
@@ -153,13 +153,13 @@ class MotivationStimulus {
         suffix = '你自己把话写在账上了。现在让行动和它对上。';
         break;
       case StimulusStyle.challenge:
-        suffix = '有分歧可以说清；如果愿意，现在选一个可行的小动作验证。';
+        suffix = '有分歧可以说清；你愿意自主选择一个可行的小动作来验证吗？';
         break;
       case StimulusStyle.competition:
         suffix = '这一局只算行动。现在替今天的自己拿下一分。';
         break;
       case StimulusStyle.provocation:
-        suffix = '你可以挑战我的判断：用一个现在可做的动作，或给出更充分的事实。';
+        suffix = '这份解释可能还有别的可能；你可以补充事实，或自主选择一个小实验检验。';
         break;
       case StimulusStyle.mirror:
       default:

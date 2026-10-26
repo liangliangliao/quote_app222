@@ -241,7 +241,7 @@ void main() {
       current = DateTime(2026, 10, 1, 21);
       final EnemyMessage? m = await p.step();
       expect(m, isNotNull);
-      expect(m!.text, contains('一件完成的事都没有'));
+      expect(m!.text, contains('记录完成 0 件'));
     });
 
     test('发呆：人在 App 里 25 分钟、案卷没有新记录、字据还开着', () async {
