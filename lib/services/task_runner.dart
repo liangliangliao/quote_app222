@@ -1,9 +1,8 @@
 import 'dart:ui' as ui;
 
 import '../data/dao.dart';
-import '../services/global_ai_settings.dart';
-import '../services/unified_ai_service.dart';
 import '../services/notification_service.dart';
+import '../services/quote_ai_service.dart';
 import '../platform/native_notify.dart';
 import '../services/native_guard.dart';
 import '../xiangji_goal_mentor/xiangji_dao.dart';
@@ -40,68 +39,72 @@ class TaskRunner {
 
   static Future<void> _runAuto(Map<String,dynamic> t) async {
     final uid = t['task_uid'].toString();
-    final prompt = (t['prompt'] ?? '').toString();
-    final ai = UnifiedAiService();
-    final aiState = await GlobalAiSettings().getState();
+    final config = QuoteAiTaskConfig.fromTask(t);
+    if (!config.autoEnabled) {
+      await LogDao().add(taskUid: uid, detail: '跳过：AI 自动获取开关已关闭');
+      return;
+    }
 
-    int failCount = 0;
-    while (true) {
-      try {
-        final quote = await ai.generateText(
-          prompt: prompt,
-          purpose: 'task_runner.quote_generation',
-          systemPrompt: '你是一位擅长输出简短、积极、鼓舞人心的名人名言的助手。请只输出中文名人名言正文，不要多余解释。',
-          maxTokens: 300,
-          expectJson: false,
-          forcedProvider: aiState['provider'],
-          forcedModel: aiState['model'],
-          temperature: 0.6,
+    try {
+      // One scheduled run performs exactly one structured AI request. We no
+      // longer send local quote history or repeatedly call the model for local
+      // similarity checks; variation is driven by a compact rotation cursor.
+      final generated = await QuoteAiService().generate(t);
+      String? quoteUid;
+      if (config.saveLocally) {
+        final now = DateTime.now();
+        String two(int value) => value.toString().padLeft(2, '0');
+        final insertedAt = '${now.year}-${two(now.month)}-${two(now.day)} '
+            '${two(now.hour)}:${two(now.minute)}:${two(now.second)}';
+        quoteUid = await QuoteDao().insertQuote(
+          taskUid: uid,
+          content: generated.content,
+          theme: generated.theme,
+          authorName: generated.author,
+          sourceFrom: generated.source,
+          explanation: generated.explanation,
+          avatarPath: generated.avatarPath,
+          taskName: (t['name'] ?? '').toString(),
+          taskType: 'auto',
+          insertedAt: insertedAt,
         );
-        if (quote.trim().isEmpty) {
-          throw Exception('统一 AI 返回空内容');
-        }
-        // Dedup
-        final unique = await QuoteDao().isUnique(quote, threshold: 0.90);
-        if (!unique) {
-          failCount++;
-          if (failCount >= 10) {
-            await LogDao().add(taskUid: uid, detail: '错误! 连续调用api10次去重检验未通过！');
-            return;
-          }
-          continue; // retry
-        }
-        // Insert + log
-        final qUid = await QuoteDao().insertQuote(taskUid: uid, content: quote);
-        await LogDao().add(taskUid: uid, detail: '成功!');
-
-        // Send notification
-        final title = (t['name'] ?? '提醒').toString();
-        final avatar = (t['avatar_path'] ?? '').toString();
-        try {
-          var sent = await NativeNotify.show(id: 1001, title: title, body: quote, largeIconPath: avatar.isEmpty ? null : avatar);
-          if (!sent) { await NotificationService.show(title: title, body: quote, largeIconPath: avatar.isEmpty ? null : avatar); }
-        } catch (e) {
-          // rethrow to allow upstream to handle failure
-          throw e;
-        }
-
-        // Update notified
-        await QuoteDao().markNotifiedByUid(qUid);
-        _notifyHomeRefresh();
-        return;
-      } catch (e) {
-        if (e.toString().contains('统一 AI') || e.toString().contains('OPENAI_FAIL') || e.toString().contains('OpenAI API 调用失败')) {
-          await LogDao().add(taskUid: uid, detail: '调用统一 AI 接口发生错误或失败!');
-          throw Exception('OPENAI_FAIL');
-        } else {
-          // Treat as dedup or transient
-          failCount++;
-          if (failCount >= 10) {
-            await LogDao().add(taskUid: uid, detail: '错误! 连续调用api10次去重检验未通过！');
-            return;
-          }
-        }
       }
+
+      // A monotonically increasing cursor gives deterministic ordered cycling
+      // for multiple people and also supplies a tiny variation seed for a
+      // single person, without transmitting previous quotes to the model.
+      await TaskDao().update(uid, <String, dynamic>{'cursor': generated.nextCursor});
+
+      final taskTitle = (t['name'] ?? 'AI 名人名言').toString().trim();
+      final title = generated.author.isEmpty
+          ? (taskTitle.isEmpty ? 'AI 名人名言' : taskTitle)
+          : '${taskTitle.isEmpty ? 'AI 名人名言' : taskTitle} · ${generated.author}';
+      final taskAvatar = (t['avatar_path'] ?? '').toString().trim();
+      final avatar = generated.avatarPath.trim().isNotEmpty ? generated.avatarPath.trim() : taskAvatar;
+      var sent = await NativeNotify.show(
+        id: 1001,
+        title: title,
+        body: generated.content,
+        largeIconPath: avatar.isEmpty ? null : avatar,
+      );
+      if (!sent) {
+        await NotificationService.show(
+          title: title,
+          body: generated.content,
+          largeIconPath: avatar.isEmpty ? null : avatar,
+        );
+      }
+
+      if (quoteUid != null) await QuoteDao().markNotifiedByUid(quoteUid);
+      await LogDao().add(
+        taskUid: uid,
+        detail: '成功! AI 已获取${generated.author.isEmpty ? '' : ' ${generated.author}'}名言'
+            '${config.saveLocally ? '并保存到本地' : ''}',
+      );
+      _notifyHomeRefresh();
+    } catch (error) {
+      await LogDao().add(taskUid: uid, detail: '错误! AI 名人名言获取失败: $error');
+      rethrow;
     }
   }
 

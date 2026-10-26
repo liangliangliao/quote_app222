@@ -60,6 +60,82 @@ class _HistoryPageState extends State<HistoryPage> {
     if (rows.length < 100) _done = true;
   }
 
+  ImageProvider? _avatarProvider(String raw) {
+    final value = raw.trim();
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return NetworkImage(value);
+    }
+    if (value.isNotEmpty) {
+      try {
+        final file = File(value);
+        if (file.existsSync()) return FileImage(file);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<void> _showQuoteDetails(Map<String, dynamic> quote) async {
+    final content = (quote['content'] ?? '').toString().trim();
+    final theme = (quote['theme'] ?? '').toString().trim();
+    final author = (quote['author_name'] ?? '').toString().trim();
+    final source = (quote['source_from'] ?? '').toString().trim();
+    final explanation = (quote['explanation'] ?? '').toString().trim();
+    final avatar = _avatarProvider((quote['avatar'] ?? '').toString());
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(theme.isEmpty ? '名人名言' : theme),
+        content: SingleChildScrollView(
+          child: SelectionArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (avatar != null)
+                  Center(
+                    child: CircleAvatar(radius: 38, backgroundImage: avatar),
+                  ),
+                if (avatar != null) const SizedBox(height: 16),
+                Text(
+                  '“$content”',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    height: 1.6,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (author.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '——$author',
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                  ),
+                ],
+                if (source.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '出处：$source',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ],
+                if (explanation.isNotEmpty) ...[
+                  const Divider(height: 32),
+                  Text(explanation, style: const TextStyle(height: 1.65)),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
@@ -303,9 +379,27 @@ class _HistoryPageState extends State<HistoryPage> {
               itemCount: _items.length,
               itemBuilder: (_, i) {
                 final e = _items[i];
+                final content = (e['content'] ?? '').toString();
+                final author = (e['author_name'] ?? '').toString().trim();
+                final source = (e['source_from'] ?? '').toString().trim();
+                final theme = (e['theme'] ?? '').toString().trim();
+                final taskName = (e['task_name'] ?? '').toString().trim();
+                final avatar = _avatarProvider((e['avatar'] ?? '').toString());
+                final meta = <String>[
+                  if (author.isNotEmpty) author,
+                  if (source.isNotEmpty) '出处：$source',
+                  if (theme.isNotEmpty) theme,
+                  if (taskName.isNotEmpty) taskName,
+                ].join(' · ');
                 return ListTile(
-                  title: Text((e['task_name'] ?? '') as String),
-                  subtitle: Text((e['content'] ?? '') as String, maxLines: 3, overflow: TextOverflow.ellipsis),
+                  leading: CircleAvatar(
+                    backgroundImage: avatar,
+                    child: avatar == null ? const Icon(Icons.format_quote) : null,
+                  ),
+                  title: Text(content, maxLines: 3, overflow: TextOverflow.ellipsis),
+                  subtitle: meta.isEmpty ? null : Text(meta, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showQuoteDetails(e),
                 );
               },
             ),

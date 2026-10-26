@@ -81,6 +81,13 @@ class AppDatabase {
 
     await _db!.execute('PRAGMA foreign_keys = ON');
 
+    // AI quote generation intentionally allows the same authentic quotation to
+    // appear again over time. Older installations may still carry this legacy
+    // content index, which would otherwise reject a valid scheduled save.
+    try {
+      await _db!.execute('DROP INDEX IF EXISTS uq_quotes_content');
+    } catch (_) {}
+
     // This lives at the database boundary (rather than only inside the 知行树
     // DAO) so an already-installed app repairs the legacy table as soon as it
     // opens the database.  It prevents an old schema from reaching the
@@ -1635,8 +1642,6 @@ if (!colsQuotes.contains('quote_uid')) { await db.execute("ALTER TABLE quotes AD
       if (!colsQuotes.contains('task_name')) { await db.execute("ALTER TABLE quotes ADD COLUMN task_name TEXT"); }
       if (!colsQuotes.contains('avatar'))    { await db.execute("ALTER TABLE quotes ADD COLUMN avatar TEXT"); }
       if (!colsQuotes.contains('notified'))  { await db.execute("ALTER TABLE quotes ADD COLUMN notified INTEGER DEFAULT 0"); }
-      // unique for content
-      await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_quotes_content ON quotes(content)");
       await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_quotes_uid ON quotes(quote_uid)");
       await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_uid ON tasks(task_uid)");
       await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_logs_uid ON logs(log_uid)");

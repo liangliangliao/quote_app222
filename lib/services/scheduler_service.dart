@@ -8,6 +8,7 @@ import '../platform/native_scheduler.dart';
 import '../platform/perm_helper.dart';
 import 'task_runner.dart';
 import 'native_wm.dart';
+import 'quote_ai_service.dart';
 import 'dart:convert';
 
 class SchedulerService {
@@ -43,7 +44,7 @@ class SchedulerService {
     DateTime? absDt;
     int hh = 9, mm = 0;
     // 如果包含日期
-    final reAbs = RegExp(r'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?\$');
+    final reAbs = RegExp(r'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?$');
     if (reAbs.hasMatch(start)) {
       try {
         // 标准化为 T 分隔
@@ -74,6 +75,22 @@ class SchedulerService {
     // 如果 start_time 为未来的绝对时间，直接使用
     if (absDt != null && absDt.isAfter(now)) {
       return absDt;
+    }
+    // 自定义间隔：以上一次计划时间为锚点推进，避免每次后台唤醒稍有
+    // 延迟就不断产生漂移。Android WorkManager 的最小可靠间隔为 15 分钟。
+    if (freqType == 'interval') {
+      final minutes = QuoteAiTaskConfig.fromTask(t).intervalMinutes.clamp(15, 24 * 60).toInt();
+      final interval = Duration(minutes: minutes);
+      DateTime? anchor;
+      try {
+        anchor = DateTime.tryParse((t['next_time'] ?? '').toString());
+      } catch (_) {}
+      anchor ??= absDt;
+      if (anchor == null) return now.add(interval);
+      if (anchor.isAfter(now)) return anchor;
+      final elapsed = now.difference(anchor);
+      final steps = elapsed.inMilliseconds ~/ interval.inMilliseconds + 1;
+      return anchor.add(Duration(milliseconds: interval.inMilliseconds * steps));
     }
     // 周期计算
     if (freqType == 'weekly' && weekDay != null) {
@@ -152,6 +169,11 @@ class SchedulerService {
     final t = await TaskDao().getByUid(uid);
     if (t == null) return;
     if ((t['status'] ?? 'on').toString() != 'on') return;
+    if ((t['type'] ?? '').toString() == 'auto' && !QuoteAiTaskConfig.fromTask(t).autoEnabled) {
+      try { await cancelNextForTask(uid); } catch (_) {}
+      await DLog.i('SCH', 'AI 自动获取开关关闭，不注册任务 uid=$uid');
+      return;
+    }
 
     // 计算下一次运行时间
     final nextTime = _computeNextRun(t);
@@ -190,6 +212,42 @@ class SchedulerService {
           await TaskDao().setScheduledRunKey(uid, runKey);
         } catch (_) {}
       }
+    }
+
+    // AI quote tasks must enter the Dart dispatcher because only it owns the
+    // provider-agnostic UnifiedAiService and structured quote pipeline. The
+    // legacy native AM/WM workers can only replay rows already in SQLite, so
+    // routing an auto task through them would notify an old quote without
+    // generating the requested new one.
+    if ((t['type'] ?? '').toString() == 'auto') {
+      try { await NativeScheduler.cancel(_alarmId(uid, runKey)); } catch (_) {}
+      try { await NativeScheduler.cancelKick(uid, runKey); } catch (_) {}
+      try { await NativeScheduler.cancelWmByUnique(_wmUniqueNormal(uid, runKey)); } catch (_) {}
+      try { await NativeScheduler.cancelWmByUnique(_wmUniqueFallback(uid, runKey, 1)); } catch (_) {}
+      try {
+        final uniqueName = _wmUniqueNormal(uid, runKey);
+        await Workmanager().registerOneOffTask(
+          uniqueName,
+          'wm_task',
+          initialDelay: normalDelay,
+          constraints: Constraints(networkType: NetworkType.connected),
+          inputData: <String, dynamic>{
+            'job': 'wm_run',
+            'task_uid': uid,
+            'run_key': runKey,
+            'uid': uid,
+            'runKey': runKey,
+            'chan': 'main-wm',
+            'attempt': 1,
+          },
+          existingWorkPolicy: ExistingWorkPolicy.replace,
+          tag: uid,
+        );
+        await DLog.i('SCH', 'AI 自动名言已通过 Dart WM 注册 uid=$uid run=$runKey');
+      } catch (error) {
+        await DLog.e('SCH', 'AI 自动名言注册失败 uid=$uid err=$error');
+      }
+      return;
     }
 
     bool hasExact = false;
