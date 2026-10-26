@@ -68,6 +68,49 @@ void main() {
     });
   }
 
+  testWidgets('topic and explanation stay out of the framed artwork',
+      (tester) async {
+    await mount(tester, 360, text: '知行合一，止于至善。');
+
+    expect(find.text('成为那样的人'), findsNothing);
+    expect(find.text(note), findsNothing);
+    expect(find.byKey(const ValueKey('quote-topic')), findsNothing);
+    expect(find.byKey(const ValueKey('quote-note')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+    await tester.pumpAndSettle();
+
+    final reader = find.byKey(const ValueKey('quote-full-reading'));
+    expect(find.descendant(of: reader, matching: find.text('成为那样的人')),
+        findsOneWidget);
+    expect(find.descendant(of: reader, matching: find.text(note)),
+        findsOneWidget);
+  });
+
+  testWidgets('short quotation and attribution are vertically balanced',
+      (tester) async {
+    await mount(tester, 360, text: '知行合一，止于至善。');
+
+    final frame = tester.getRect(find.byType(QuoteAdaptiveFrame));
+    final paper = QuoteAdaptiveFrame.scaleRect(
+      QuoteAdaptiveFrame.textSafeRect,
+      frame.size,
+    ).shift(frame.topLeft);
+    final footer = tester.getRect(
+      find.byKey(const ValueKey('quote-read-more-region')),
+    );
+    final body = tester.getRect(find.byKey(const ValueKey('quote-body')));
+    final attribution =
+        tester.getRect(find.byKey(const ValueKey('quote-author')));
+    final contentMidpoint = (paper.top + footer.top) / 2;
+    final artworkMidpoint = (body.top + attribution.bottom) / 2;
+
+    expect(artworkMidpoint, closeTo(contentMidpoint, 1.5));
+    expect(body.top, greaterThanOrEqualTo(paper.top));
+    expect(attribution.bottom, lessThanOrEqualTo(footer.top));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('long content remains available in a scalable complete reader', (tester) async {
     final longQuote = List.filled(8, quote).join();
     final longNote = List.filled(10, note).join();

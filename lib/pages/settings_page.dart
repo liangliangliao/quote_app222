@@ -44,13 +44,76 @@ import '../health_diet/pages/health_diet_settings_page.dart';
 import '../kindling_host/kindling_host_reminder.dart';
 import '../services/notification_service.dart';
 import '../services/read_aloud_service.dart';
+import '../services/quote_calligraphy_settings.dart';
 import '../platform/exact_alarm_permission_coordinator.dart';
+import '../widgets/quote_calligraphy_text.dart';
 // removed duplicate import of native_guard (already imported above)
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
   @override
   State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _CalligraphyStyleChoice extends StatelessWidget {
+  const _CalligraphyStyleChoice({
+    required this.style,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final QuoteCalligraphyStyle style;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: selected ? const Color(0xffede0d3) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: selected
+                ? const Color(0xff8a4b35)
+                : const Color(0xffe4ddd5),
+            width: selected ? 1.35 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('quote-calligraphy-style-${style.storageValue}'),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+            child: Column(
+              children: [
+                Text(
+                  style.label,
+                  style: quoteCalligraphyTextStyle(
+                    const TextStyle(fontSize: 21),
+                    style,
+                  ).copyWith(
+                    color: const Color(0xff2b211c),
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  style.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: selected
+                        ? const Color(0xff7a3d28)
+                        : const Color(0xff877a70),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _SettingsPageState extends State<SettingsPage> {
@@ -170,6 +233,13 @@ class _SettingsPageState extends State<SettingsPage> {
   // 火种：「说不准」7 天后的复问通知，方案规定默认关。
   bool _kindlingReaskNotifyEnabled = false;
   bool _drawerHeaderAiEnabled = false;
+
+  // 首页名言正文书法动画：升级后默认关闭，不改变既有静态呈现。
+  final QuoteCalligraphySettings _quoteCalligraphySettings =
+      QuoteCalligraphySettings();
+  bool _quoteCalligraphyAnimationEnabled = false;
+  QuoteCalligraphyStyle _quoteCalligraphyStyle =
+      QuoteCalligraphyStyle.xingshu;
 
   // ====== 运动设置 ======
   String? _sportBgPath;
@@ -1811,6 +1881,16 @@ Future<void> _clearSportMusicPlaylist() async {
       _esteemScale = 100;
     }
 
+    // 缺失持久化值时严格保持关闭，确保升级不会改变首页原有静态正文。
+    try {
+      final preferences = await _quoteCalligraphySettings.load();
+      _quoteCalligraphyAnimationEnabled = preferences.animationEnabled;
+      _quoteCalligraphyStyle = preferences.style;
+    } catch (_) {
+      _quoteCalligraphyAnimationEnabled = false;
+      _quoteCalligraphyStyle = QuoteCalligraphyStyle.xingshu;
+    }
+
     // 读取首页侧栏 AI 主题开关（默认关闭）
     try {
       _drawerHeaderAiEnabled = await _globalAiSettings.isDrawerHeaderAiEnabled();
@@ -2688,6 +2768,125 @@ const Text('头像（用于通知图标）'),
     );
   }
 
+  Future<void> _setQuoteCalligraphyAnimation(bool enabled) async {
+    final previous = _quoteCalligraphyAnimationEnabled;
+    setState(() => _quoteCalligraphyAnimationEnabled = enabled);
+    try {
+      await _quoteCalligraphySettings.setAnimationEnabled(enabled);
+      if (mounted) showToast(enabled ? '首页动态书法已开启' : '首页已恢复静态正文');
+    } catch (_) {
+      if (mounted) {
+        setState(() => _quoteCalligraphyAnimationEnabled = previous);
+        showToast('书法动画设置保存失败');
+      }
+    }
+  }
+
+  Future<void> _setQuoteCalligraphyStyle(
+    QuoteCalligraphyStyle style,
+  ) async {
+    final previous = _quoteCalligraphyStyle;
+    setState(() => _quoteCalligraphyStyle = style);
+    try {
+      await _quoteCalligraphySettings.setStyle(style);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _quoteCalligraphyStyle = previous);
+        showToast('书体设置保存失败');
+      }
+    }
+  }
+
+  Widget _quoteCalligraphySettingsCard() {
+    const ink = Color(0xff281d17);
+    const paper = Color(0xfffbf8f2);
+    return Card(
+      key: const ValueKey('quote-calligraphy-settings-card'),
+      elevation: 0,
+      margin: const EdgeInsets.fromLTRB(4, 6, 4, 12),
+      color: paper,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xffe5ddd1)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile.adaptive(
+            key: const ValueKey('quote-calligraphy-animation-switch'),
+            secondary: const Icon(Icons.gesture_rounded, color: ink),
+            title: const Text(
+              '首页名言动态书法',
+              style: TextStyle(fontWeight: FontWeight.w600, color: ink),
+            ),
+            subtitle: const Text(
+              '默认关闭；开启后正文按毛笔书写节奏呈现，署名艺术字不受此开关影响。',
+              style: TextStyle(height: 1.45),
+            ),
+            value: _quoteCalligraphyAnimationEnabled,
+            activeColor: const Color(0xff7a3d28),
+            onChanged: _setQuoteCalligraphyAnimation,
+          ),
+          const Divider(height: 1, indent: 20, endIndent: 20),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '正文书体',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xff6f6258),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    for (final style in QuoteCalligraphyStyle.values) ...[
+                      Expanded(
+                        child: _CalligraphyStyleChoice(
+                          style: style,
+                          selected: style == _quoteCalligraphyStyle,
+                          onTap: () => _setQuoteCalligraphyStyle(style),
+                        ),
+                      ),
+                      if (style != QuoteCalligraphyStyle.values.last)
+                        const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 15),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 13,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(.72),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xffeee5da)),
+                  ),
+                  child: Text(
+                    '心有山海，静而不争。',
+                    textAlign: TextAlign.center,
+                    style: quoteCalligraphyTextStyle(
+                      const TextStyle(fontSize: 21, color: ink),
+                      _quoteCalligraphyStyle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cfgFields = Column(
@@ -3443,6 +3642,7 @@ const Text('头像（用于通知图标）'),
         padding: const EdgeInsets.only(left: 12.0, right: 12.0),
         child: ListView(children: [
           ListTile(title: const Text('日记设置'), trailing: const Icon(Icons.chevron_right), onTap: (){ Navigator.push(context, MaterialPageRoute(builder: (_)=>const DiarySettingsPage())); },),
+          _quoteCalligraphySettingsCard(),
           ListTile(
             title: const Text('语义一致性精判配置'),
             subtitle: const Text('Embedding、LLM Judge、严格事实抽取、标题忠实性、Reranker 精排配置'),

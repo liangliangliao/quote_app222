@@ -12,8 +12,10 @@ import 'package:characters/characters.dart';
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
 import 'package:quote_app/widgets/quote_portrait_cutout.dart';
+import 'package:quote_app/widgets/quote_calligraphy_text.dart';
 import 'package:quote_app/services/quote_frame_theme.dart';
 import 'package:quote_app/services/quote_frame_ai_service.dart';
+import 'package:quote_app/services/quote_calligraphy_settings.dart';
 import 'package:quote_app/services/notification_service.dart';
 import '../data/dao.dart';
 import '../utils/debug_logger.dart';
@@ -80,12 +82,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Map<String, dynamic>? _todayData;
 
   final QuoteFrameAiService _frameAi = QuoteFrameAiService();
+  final QuoteCalligraphySettings _calligraphySettings =
+      QuoteCalligraphySettings();
   final Set<String> _frameAttempted = <String>{};
   String _visibleFrameKey = '';
   String? _frameImagePath;
   bool _frameAuto = false;
   bool _frameGenerating = false;
   int _frameRevision = 0;
+  bool _quoteCalligraphyEnabled = false;
+  QuoteCalligraphyStyle _quoteCalligraphyStyle =
+      QuoteCalligraphyStyle.xingshu;
+
+  Future<void> _loadCalligraphyPreference() async {
+    try {
+      final preference = await _calligraphySettings.load();
+      if (!mounted) return;
+      setState(() {
+        _quoteCalligraphyEnabled = preference.animationEnabled;
+        _quoteCalligraphyStyle = preference.style;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _quoteCalligraphyEnabled = false;
+        _quoteCalligraphyStyle = QuoteCalligraphyStyle.xingshu;
+      });
+    }
+  }
+
+  void _onCalligraphyPreferenceChanged() {
+    unawaited(_loadCalligraphyPreference());
+  }
 
   Future<void> _initFramePreference() async {
     try {
@@ -424,6 +452,9 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
     });
     _primeFirstBg();
     unawaited(_initFramePreference());
+    QuoteCalligraphySettings.changeTick
+        .addListener(_onCalligraphyPreferenceChanged);
+    unawaited(_loadCalligraphyPreference());
     _load();
     _pinnedController.addListener(_handlePinnedScroll);
     // Load pinned quotes immediately on first build
@@ -439,6 +470,8 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     SimpleBus.homeTick.removeListener(_onBus);
+    QuoteCalligraphySettings.changeTick
+        .removeListener(_onCalligraphyPreferenceChanged);
     _pinnedController.removeListener(_handlePinnedScroll);
     // Dispose the pinned scroll controller to free resources
     _pinnedController.dispose();
@@ -867,7 +900,7 @@ ImageProvider _imageFrom(String? any) {
                                       SizedBox(height: innerPadV * 0.5 - 5),
                                       Align(
                                         alignment: Alignment.centerRight,
-                                        child: Text(
+                                        child: QuoteAuthorSignature(
                                           _buildAuthorLine(authorName, sourceFrom),
                                           textAlign: TextAlign.right,
                                           softWrap: true,
@@ -876,8 +909,7 @@ ImageProvider _imageFrom(String? any) {
                                             color: Colors.black87,
                                             fontSize: tAuth - 1,
                                             height: 1.40,
-                                            fontStyle: FontStyle.italic,
-                                            fontWeight: FontWeight.w600,
+                                            fontWeight: FontWeight.w400,
                                       letterSpacing: 0, ),
                                         ),
                                       ),
@@ -983,13 +1015,12 @@ ImageProvider _imageFrom(String? any) {
             ),
             Align(
               alignment: Alignment.centerRight,
-              child: Text(
+              child: QuoteAuthorSignature(
                 authorLine,
                 style: TextStyle(
                   color: Colors.black87,
                   fontSize: authorSize,
-                  fontStyle: FontStyle.italic,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w400,
                                       letterSpacing: 0,
                   height: 1.3,
                 ),
@@ -1366,6 +1397,8 @@ ImageProvider _imageFrom(String? any) {
                                 avatar: '${content?['avatar'] ?? content?['avatarUrl'] ?? ''}',
                                 woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
                                 aiFramePath: _frameImagePath,
+                                animateCalligraphy: _quoteCalligraphyEnabled,
+                                calligraphyStyle: _quoteCalligraphyStyle,
                               ),
                             ),
                           ),
