@@ -10,6 +10,11 @@ import 'self_os_workbench_widgets.dart';
 import 'self_os_action_focus.dart';
 import 'self_os_v37_rules.dart';
 import 'self_os_insights.dart';
+import 'self_os_strength_learning.dart';
+import 'self_os_strength_feedback.dart';
+import 'self_os_progress.dart';
+import 'self_os_representation_learning.dart';
+import 'self_os_representation_widgets.dart';
 
 class SelfOsCasePage extends StatefulWidget {
   const SelfOsCasePage(
@@ -19,6 +24,7 @@ class SelfOsCasePage extends StatefulWidget {
       required this.ai,
       required this.history,
       required this.profile,
+      this.initialAiTask,
       this.initialEngine,
       this.initialWorkspace});
   final SelfOsCase value;
@@ -26,6 +32,7 @@ class SelfOsCasePage extends StatefulWidget {
   final SelfOsAiService ai;
   final List<SelfOsCase> history;
   final SelfOsProfile profile;
+  final String? initialAiTask;
   final SelfOsEngine? initialEngine;
   final int? initialWorkspace;
   @override
@@ -56,6 +63,13 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
         _profile.activeRouteId = _c.v37.routes.first.id;
         _profileDirty = true;
       }
+    }
+    final task = widget.initialAiTask;
+    if (task != null &&
+        ['desires', 'motives', 'cognition', 'action'].contains(task)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _runAi(task);
+      });
     }
   }
 
@@ -208,6 +222,7 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
         _c.desires.addAll(values.where((d) => titles.add(d.title)));
       } else if (task == 'motives') {
         final values = await widget.ai.motives(input, _history,
+            profile: _profile,
             isCancelled: () => !mounted || ticket != _request,
             progress: (batch) {
               if (mounted && ticket == _request)
@@ -218,7 +233,8 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
         final titles = _c.motives.map((m) => m.title).toSet();
         _c.motives.addAll(values.where((m) => titles.add(m.title)));
       } else {
-        final values = await widget.ai.suggest(input, _history, task);
+        final values =
+            await widget.ai.suggest(input, _history, task, profile: _profile);
         if (!mounted || ticket != _request) return;
         _c.suggestions[task] = values;
       }
@@ -251,8 +267,10 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
             maxLength: 6000,
             onChanged: (v) {
               if (key == 'k2' || key == 'newInformation') _c.beginCognition();
-              if (key == 'newInformation')
+              if (key == 'newInformation') {
                 _c.v37.settings['newInformationReviewed'] = false;
+                _c.v37.settings['requiresReconsideration'] = true;
+              }
               _c.fields[key] = v;
             }),
       );
@@ -302,6 +320,11 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('AI 候选 · ${s['kind']}',
                 style: const TextStyle(color: osGold, fontSize: 12)),
+            if (SelfOsRepresentationLearning.validateChoice(s['representation'])
+                case final choice?)
+              Text(
+                  '${osRepresentationFormats[choice['format']]} · ${osRepresentationTasks[choice['task']]} · ${osRepresentationWindows[choice['window']]}',
+                  style: const TextStyle(fontSize: 12)),
             const SizedBox(height: 6),
             Text(osText(s['value']), style: const TextStyle(height: 1.6)),
             Text('依据：${s['reason']}',
@@ -327,7 +350,34 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
                     if (yes != true || !mounted) return;
                   }
                   setState(() {
-                    _c.fields[field] = osText(s['value']);
+                    final representation =
+                        SelfOsRepresentationLearning.validateChoice(
+                            s['representation']);
+                    if (task == 'cognition' &&
+                        field == 'k2' &&
+                        representation != null &&
+                        !_c.reviewed &&
+                        !_c.retrospective) {
+                      SelfOsRepresentationLearning.adopt(_c,
+                          choice: representation,
+                          content: osText(s['value']),
+                          source: osText(s['reason']));
+                    } else {
+                      if (task == 'cognition' && field == 'k2')
+                        _c.beginCognition();
+                      _c.fields[field] = osText(s['value']);
+                    }
+                    if (osText(s['strengthId']).isNotEmpty) {
+                      SelfOsStrengthLearning.draftUse(
+                          _c,
+                          osText(s['strengthId']),
+                          task == 'cognition'
+                              ? 'cognition'
+                              : task == 'action'
+                                  ? 'action'
+                                  : 'motivation',
+                          osText(s['value']));
+                    }
                     _revision++;
                   });
                 },
@@ -706,6 +756,7 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
             .compareTo(SelfOsEngineService.motiveRank(a, fingerprint));
       });
     return [
+      if (_profile.strengths.isNotEmpty) _workbenchLink('看看已有力量怎样支持这次选择', 4),
       OsSection(
           title: '让正反动机同时在场',
           subtitle: '不想做的理由同样值得理解。候选先聚类，再由你选择最可能在现场生效的几项。',
@@ -725,6 +776,8 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
                   .map((m) {
                 final history =
                     fingerprint.where((f) => f.label == m.type).toList();
+                final effect =
+                    SelfOsEngineService.currentMotiveEffect(m, fingerprint);
                 return Container(
                     margin: const EdgeInsets.symmetric(vertical: 5),
                     decoration: BoxDecoration(
@@ -760,6 +813,14 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
                           TextButton(
                               onPressed: () => _editMotive(m.side, m),
                               child: const Text('编辑 / 可信度与现场在场度')),
+                          Padding(
+                              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                              child: Text(
+                                  effect == null
+                                      ? '当前作用仍有未知：在冲突与注意中校准重要度和注意，在这里补充可信度与鲜明度。'
+                                      : '当前可用性参考 ${effect.toStringAsFixed(1)} / 100 · 非行动概率',
+                                  style: const TextStyle(
+                                      fontSize: 11, height: 1.5))),
                         ]));
               }),
               TextButton.icon(
@@ -773,7 +834,7 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
                       setState(() => _showAllMotives = !_showAllMotives),
                   child: Text(_showAllMotives ? '收起候选' : '展开全部候选')),
             const OsNote(
-                '历史反馈达到 3 次的类型优先按个人实证排序；不足时参考候选预测。反方动机也会影响选择，历史比例不代表一定能完成行动。'),
+                '已记录的当前作用按重要度 × 可信度 × 鲜明度 × 注意占有 × 历史影响比较。个人反馈达到 3 次后替代 AI 预测；缺项时只展示已有依据。正反方分别保留，这不是行动概率。'),
           ]),
       OsSection(
           title: '把未来搬到现在',
@@ -848,6 +909,23 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
 
   List<Widget> _cognition() => [
         _workbenchLink('进入证据台账与因果地平线', 1),
+        if (_profile.strengths.isNotEmpty) _workbenchLink('用已有力量检查当前解释与边界', 4),
+        ExpansionTile(
+            key: const ValueKey('representation_editor'),
+            tilePadding: EdgeInsets.zero,
+            title: const Text('选择更适合我的表达方式'),
+            subtitle: const Text('查看个人历史，或自己改写一版后果'),
+            children: [
+              SelfOsRepresentationEditor(
+                  value: _c,
+                  history: _history,
+                  enabled:
+                      !_busy && !_saving && !_c.reviewed && !_c.retrospective,
+                  onChanged: (change) => setState(() {
+                        change();
+                        _revision++;
+                      }))
+            ]),
         if (_c.blocker != 'cognition')
           OsNote(
               '当前阻塞判断：${selfOsBlockers[_c.blocker]}。先检验原因；如果目标、手段或环境不合适，可以直接调整它们。'),
@@ -958,8 +1036,7 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
 
   Future<void> _ritual() async {
     if (_c.commitment == null) return;
-    if (_c.text('newInformation').trim().isNotEmpty &&
-        !_c.v37.flag('newInformationReviewed')) {
+    if (SelfOsProgress.actionBlocker(_c) != null) {
       await _openWorkspace(1);
       return;
     }
@@ -1006,6 +1083,16 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
     if (current.isNotEmpty)
       return [
         _reviewCard(current.single),
+        SelfOsStrengthFeedback(
+            key: ValueKey(current.single.id),
+            review: current.single,
+            profile: _profile,
+            onSave: (notes) => _saveStrengthFeedback(current.single.id, notes)),
+        SelfOsRepresentationFeedback(
+            key: ValueKey('representation_${current.single.id}'),
+            review: current.single,
+            onSave: (notes) =>
+                _saveRepresentationFeedback(current.single.id, notes)),
         FilledButton.icon(
             onPressed: () async {
               _c.nextRound();
@@ -1206,29 +1293,75 @@ class _SelfOsCasePageState extends State<SelfOsCasePage> {
             .where((v) => v.isNotEmpty)
             .toList(),
         motiveFeedbackRecorded: _c.text('review.motiveFeedback') == 'yes');
+    setState(() => _saving = true);
     try {
-      _c.addReview(review);
-      final strengthId = review.notes['strengthId'];
-      final strengthEffect = review.notes['strengthEffect'];
-      for (final s in _profile.strengths.where((s) => s.id == strengthId)) {
-        if (['helped', 'notHelped', 'harmed'].contains(strengthEffect)) {
-          final observations = s.observations;
-          observations.removeWhere((o) => o['reviewId'] == review.id);
-          observations.add({
-            'reviewId': review.id,
-            'effect': strengthEffect,
-            'usage': review.notes['strengthUsage'] ?? 'unknown'
-          });
-          s.data['observations'] = observations;
-          _profileDirty = true;
-        }
-      }
-      if (await _save() && mounted) {
-        setState(() {});
+      final draft = _c.copy()..addReview(review);
+      final profile = SelfOsProfile.fromJson(_profile.toJson());
+      SelfOsStrengthLearning.applyFeedback(review, profile);
+      await widget.repository.saveCaseAndProfile(draft, profile);
+      if (mounted) {
+        setState(() {
+          _c = draft;
+          _profile = profile;
+          _profileDirty = false;
+          _error = null;
+        });
         osMessage(context, '已留下新证据，可在「逐渐认识自己」中查看');
       }
-    } on FormatException catch (e) {
-      osMessage(context, e.message);
+    } catch (e) {
+      if (mounted)
+        setState(() =>
+            _error = e is FormatException ? e.message : '保存失败，复盘草稿仍在，请重试。');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<bool> _saveStrengthFeedback(
+      String reviewId, Map<String, String> notes) async {
+    if (_saving || _busy) return false;
+    final draft = _c.copy();
+    final review = draft.reviews.firstWhere((r) => r.id == reviewId);
+    final profile = SelfOsProfile.fromJson(_profile.toJson());
+    review.notes.addAll(notes);
+    SelfOsStrengthLearning.applyFeedback(review, profile);
+    setState(() => _saving = true);
+    try {
+      await widget.repository.saveCaseAndProfile(draft, profile);
+      if (!mounted) return false;
+      setState(() {
+        _c = draft;
+        _profile = profile;
+        _profileDirty = false;
+        _error = null;
+      });
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<bool> _saveRepresentationFeedback(
+      String reviewId, Map<String, String> notes) async {
+    if (_saving || _busy) return false;
+    final draft = _c.copy();
+    SelfOsRepresentationLearning.saveFeedback(
+        draft.reviews.firstWhere((r) => r.id == reviewId), notes);
+    setState(() => _saving = true);
+    try {
+      await widget.repository.saveCase(draft);
+      if (!mounted) return false;
+      setState(() {
+        _c = draft;
+        _error = null;
+      });
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 

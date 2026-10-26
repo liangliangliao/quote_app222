@@ -55,8 +55,8 @@ extension _KnowledgePanel on _SelfOsWorkbenchState {
             children: [
               Wrap(spacing: 8, runSpacing: 8, children: [
                 OsPill(gap.resolvedBy(s.evidence, DateTime.now())
-                    ? '已有可用证据'
-                    : '仍待补证据'),
+                    ? '本次范围内已回答'
+                    : '仍需核对答案与证据'),
                 OsPill(
                     {
                       'flip': '不同答案会翻转选择',
@@ -78,6 +78,12 @@ extension _KnowledgePanel on _SelfOsWorkbenchState {
               if (gap.text('highScenario').isNotEmpty)
                 text(
                     '如果 ${gap.text('highScenario')} → ${routeNames[gap.text('highChoice')] ?? '选择尚不明确'}'),
+              if (gap.sensitivity != 'unknown' &&
+                  !gap.flag('sensitivityReviewed'))
+                const OsNote('情景仍是待确认候选，尚不会用来停止搜索。'),
+              if (gap.flag('resolutionConfirmed'))
+                text(
+                    '已确认的回答：${gap.text('resolutionAnswer')}\n适用范围：${gap.text('resolutionScope')}'),
               Wrap(children: [
                 button('关联回答与证据', Icons.link, () async {
                   final ids = await pickEvidence(gap.strings('evidenceIds'));
@@ -213,7 +219,12 @@ extension _KnowledgePanel on _SelfOsWorkbenchState {
   Future<void> editGap([OsGap? gap]) async {
     final v = await osRecordEditor(context,
         title: '哪一个未知可能改变决定？',
-        initial: gap?.toJson() ?? {'kind': 'fact', 'access': 'private'},
+        initial: {
+          ...?gap?.toJson(),
+          if (gap == null) ...{'kind': 'fact', 'access': 'private'},
+          'sensitivityReviewed': false,
+          'resolutionConfirmed': false
+        },
         fields: [
           const OsInput('question', '关键问题', required: true),
           const OsInput('kind', '缺口类别', required: true, options: osGapKinds),
@@ -229,10 +240,16 @@ extension _KnowledgePanel on _SelfOsWorkbenchState {
           const OsInput('highScenario', '合理情景二'),
           OsInput('highChoice', '情景二我会选哪条路？',
               options: {'': '仍不能判断', ...routeNames}),
+          const OsInput('sensitivityReviewed', '我已比较这两个不同的合理情景，并确认自己的选择',
+              kind: 'bool'),
+          const OsInput('resolutionAnswer', '现有证据具体回答了什么？'),
+          const OsInput('resolutionScope', '这个答案适用于什么情境，仍有哪些边界？'),
+          const OsInput('resolutionConfirmed', '已对照关联的核实证据，足以回答本次范围内的问题',
+              kind: 'bool'),
           const OsInput('unavailable', '关键资料目前不可得 / 无法降低这个未知', kind: 'bool'),
           const OsInput('irrelevant', '经比较，这个问题不影响当前决定', kind: 'bool'),
         ],
-        note: '不同情景指向不同路线时标记“会翻转选择”。相同则允许停止搜索；缺失答案仍为未知。');
+        note: '敏感性情景由你确认后才影响停止搜索。关联材料本身不等于问题已回答；关闭缺口还需要具体答案、适用范围和有效的核实证据。');
     if (v == null || !mounted) return;
     await update((d) => put(d.gaps, OsGap(v)));
   }
@@ -380,7 +397,17 @@ extension _KnowledgePanel on _SelfOsWorkbenchState {
           const OsInput('pruneReason', '剪枝原因：相关性、未知、负担或新增信息不足'),
           const OsInput('observedOutcome', '后续真实结果（未发生就留空）'),
           const OsInput('observedAt', '后续结果观察时间', kind: 'datetime'),
+          if (node?.flag('calibrationNeedsReview') == true) ...[
+            const OsInput('calibrationNeedsReview', '这条推断仍需根据实际反证修订',
+                kind: 'bool'),
+            const OsInput('calibrationRevisionReason', '如何按实际反馈修订条件、后果与不确定性？'),
+          ],
         ], validate: (v) {
+      if (node?.flag('calibrationNeedsReview') == true &&
+          v['calibrationNeedsReview'] != true &&
+          osText(v['calibrationRevisionReason']).trim().isEmpty) {
+        return '请说明怎样处理实际反证，再完成修订';
+      }
       if ((osNumber(v['order'], 12) ?? 0) < 1) return '阶数从 1 开始';
       if (osText(v['observedOutcome']).isNotEmpty &&
           osText(v['observedAt']).isEmpty) return '真实结果需要观察时间';
@@ -406,6 +433,15 @@ extension _KnowledgePanel on _SelfOsWorkbenchState {
           'at': DateTime.now().toIso8601String()
         });
       put(d.nodes, OsConsequence(v));
+      if (node?.flag('calibrationNeedsReview') == true &&
+          v['calibrationNeedsReview'] != true) {
+        for (final option
+            in d.futureOptions.where((o) => o.text('nodeId') == node!.id)) {
+          option.data['needsReview'] = false;
+          option.data['calibrationRevisionReason'] =
+              v['calibrationRevisionReason'];
+        }
+      }
     });
   }
 
@@ -479,13 +515,26 @@ extension _KnowledgePanel on _SelfOsWorkbenchState {
           title: '把新认识带回动机场',
           subtitle: '新增文本不等于完成补全。明确哪个动机新增、增强、减弱或失效，再把选择交回给你。',
           children: [
-            for (final suggestion in c.suggestions['v37.reentry'] ?? [])
+            for (final suggestion in c.suggestions['v37.reentry'] ?? []) ...[
               OsNote('${suggestion['title']} · ${{
                     'added': '可能新增',
                     'strengthened': '可能增强',
                     'weakened': '可能减弱',
                     'invalidated': '可能失效'
                   }[suggestion['change']] ?? '待判断'}\n依据：${suggestion['reason']}'),
+              if (suggestion['reviewStatus'] == null)
+                Wrap(children: [
+                  button('校准这条变化', Icons.tune, () => reviewMotive(suggestion)),
+                  button('不符合我', Icons.close, () async {
+                    suggestion['reviewStatus'] = 'rejected';
+                    await changed();
+                  }),
+                ])
+              else
+                text(suggestion['reviewStatus'] == 'reviewed'
+                    ? '已按你的实际判断调整动机'
+                    : '已保留为不采用的建议'),
+            ],
             Wrap(children: [
               button('调整动机与注意位置', Icons.tune, () {
                 section = 2;

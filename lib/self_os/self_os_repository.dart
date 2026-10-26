@@ -82,6 +82,10 @@ class SelfOsRepository {
         osText(decision['sacrifice']).trim().isEmpty)
       throw const FormatException('请记录选择依据与被舍弃的真实价值');
     if (status == 'active') {
+      if (current.text('newInformation').trim().isNotEmpty &&
+          !current.v37.flag('newInformationReviewed')) {
+        throw const FormatException('先回应现场出现的重要新信息，再确认人生主线');
+      }
       final gate = SelfOsV37Rules.gate(current.v37);
       if (gate.action != 'PASS')
         throw FormatException('${gate.label}：${gate.reasons.first}');

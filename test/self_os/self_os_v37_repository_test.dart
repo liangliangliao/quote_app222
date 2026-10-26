@@ -8,6 +8,12 @@ import 'self_os_domain_test.dart' show plannedCase, reviewFor;
 import 'self_os_v37_rules_test.dart' show decision, node, proof;
 import 'self_os_guide_test.dart' show experimentGuide;
 import 'package:quote_app/self_os/self_os_guidance.dart';
+import 'package:quote_app/self_os/self_os_learning.dart';
+import 'self_os_learning_test.dart' show observedExperiment, calibrate;
+import 'package:quote_app/self_os/self_os_strength_learning.dart';
+import 'self_os_spec37_test.dart' show strengthCase, strengthProfile;
+import 'self_os_representation_test.dart' show expressionCase, expressionNotes;
+import 'package:quote_app/self_os/self_os_representation_learning.dart';
 
 void main() {
   late Directory dir;
@@ -21,6 +27,122 @@ void main() {
   tearDown(() async {
     await repo.close();
     await dir.delete(recursive: true);
+  });
+
+  test('A38：表达效果关闭重开与导出恢复后仍可推荐，撤回反馈不改事前快照', () async {
+    final cases = [
+      for (var i = 0; i < 3; i++) expressionCase(context: '实际情境 $i')
+    ];
+    for (final c in cases) {
+      await repo.saveCase(c);
+    }
+    await repo.close();
+    final restored = await repo.loadCases();
+    expect(
+        SelfOsRepresentationLearning.recommend(
+                restored, 'discomfort', 'evening')!
+            .total,
+        3);
+    final c = restored.first;
+    final frozen = jsonEncode(c.commitment);
+    SelfOsRepresentationLearning.saveFeedback(
+        c.reviews.single, expressionNotes(c.reviews.single, effect: 'unknown'));
+    await repo.saveCase(c);
+    await repo.close();
+    final reread = await repo.loadCases();
+    expect(
+        SelfOsRepresentationLearning.recommend(reread, 'discomfort', 'evening'),
+        isNull);
+    expect(
+        jsonEncode(reread.firstWhere((v) => v.id == c.id).commitment), frozen);
+    expect(
+        SelfOsRepresentationLearning.patterns(reread
+                .map((c) =>
+                    SelfOsCase.fromJson(jsonDecode(jsonEncode(c.toJson()))))
+                .toList())
+            .single
+            .total,
+        2);
+  });
+
+  test('原文 A26：力量分阶段观察与复盘共同持久化，重开不改变封存协议', () async {
+    final c = strengthCase(), profile = strengthProfile();
+    final frozen = jsonEncode(c.commitment);
+    final review = c.reviews.single;
+    review.notes.addAll({
+      'strength.curiosity.cognition.effect': 'helped',
+      'strength.curiosity.cognition.usage': 'optimal',
+      'strength.curiosity.cognition.observation': '把担忧改写成可核对的问题',
+    });
+    SelfOsStrengthLearning.applyFeedback(review, profile);
+    await repo.saveCaseAndProfile(c, profile);
+    await repo.close();
+    final loadedCase = (await repo.loadCases()).single;
+    final loadedProfile = await repo.loadProfile();
+    expect(
+        loadedCase.reviews.single.notes['strength.curiosity.cognition.effect'],
+        'helped');
+    expect(loadedProfile.strengths.single.observations.single['reviewId'],
+        review.id);
+    expect(
+        osMaps(loadedProfile
+                .strengths.single.observations.single['stageEffects'])
+            .single['stage'],
+        'cognition');
+    expect(jsonEncode(loadedCase.commitment), frozen);
+    SelfOsStrengthLearning.applyFeedback(
+        loadedCase.reviews.single, loadedProfile);
+    await repo.saveCaseAndProfile(loadedCase, loadedProfile);
+    await repo.close();
+    expect(
+        (await repo.loadProfile()).strengths.single.observations, hasLength(1));
+  });
+
+  test('实际校准关闭重开不丢证据链，下一轮从修订结论继续', () async {
+    final c = observedExperiment();
+    calibrate(c, resolve: true, conflictsChecked: true);
+    final frozen = jsonEncode(c.commitment);
+    await repo.saveCase(c);
+    await repo.close();
+    final restored = (await repo.loadCases()).single;
+    expect(
+        SelfOsLearning.history([restored]).single['scope'], contains('不能推广'));
+    expect(
+        restored.v37.gaps.single
+            .resolvedBy(restored.v37.evidence, DateTime.now()),
+        isTrue);
+    expect(restored.v37.nodes.any((n) => n.flag('calibrationNeedsReview')),
+        isTrue);
+    expect(jsonEncode(restored.commitment), frozen);
+    restored.nextRound();
+    expect(
+        restored.text('k1'), c.reviews.single.notes['calibrationConclusion']);
+    expect(jsonEncode(restored.reviews.single.snapshot), frozen);
+    expect(restored.round, 2);
+  });
+
+  test('即使旧风险确认仍在，未审视的新信息也不能提升人生主线', () async {
+    final c = plannedCase()..v37 = decision();
+    c.v37.routes.first.data.addAll({
+      'desire': '自主',
+      'ability': '有相应工作样本',
+      'cost': '投入时间',
+      'reality': '可用时间已确认'
+    });
+    c.fields['newInformation'] = '可用时间突然改变';
+    c.v37.settings['newInformationReviewed'] = false;
+    await repo.saveCase(c);
+    await expectLater(
+        repo.transitionRoute(c, 'a', 'active', {
+          'reason': '仍想尝试',
+          'sacrifice': '其他安排',
+          'opportunityCost': '减少其他投入',
+          'accepted': true,
+        }),
+        throwsFormatException);
+    expect((await repo.loadProfile()).activeRouteId, isEmpty);
+    expect((await repo.loadCases()).single.v37.routes.first.status,
+        isNot('active'));
   });
 
   test('引导中断后关闭重开恢复草稿，实验封存与实际反馈保持对应', () async {
@@ -162,6 +284,9 @@ void main() {
     c.v37.gaps.add(OsGap({
       'id': 'g',
       'question': '未来状态',
+      'resolutionConfirmed': true,
+      'resolutionAnswer': '已通过行动日志核对本次所需的状态',
+      'resolutionScope': '这次可逆行动前，日志覆盖的条件',
       'evidenceIds': ['proof']
     }));
     c.beginCognition();
