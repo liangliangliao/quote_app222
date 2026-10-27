@@ -126,7 +126,7 @@ void main() {
     final body = tester.widget<Text>(
       find.byKey(const ValueKey('quote-body')),
     );
-    final families = body.textSpan!.children!
+    final families = (body.textSpan! as TextSpan).children!
         .whereType<TextSpan>()
         .map((span) => span.style?.fontFamily)
         .toSet();
