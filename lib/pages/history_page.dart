@@ -1,11 +1,13 @@
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
 import '../data/dao.dart';
+import '../widgets/quote_history_avatar.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -68,9 +70,19 @@ class _HistoryPageState extends State<HistoryPage> {
 
   ImageProvider? _avatarProvider(String raw) {
     final value = raw.trim();
+    if (value.startsWith('data:')) {
+      try {
+        return MemoryImage(
+          base64Decode(value.substring(value.indexOf(',') + 1)),
+        );
+      } catch (_) {
+        return null;
+      }
+    }
     if (value.startsWith('http://') || value.startsWith('https://')) {
       return NetworkImage(value);
     }
+    if (value.startsWith('assets/')) return AssetImage(value);
     if (value.isNotEmpty) {
       try {
         final file = File(value);
@@ -99,7 +111,11 @@ class _HistoryPageState extends State<HistoryPage> {
               children: [
                 if (avatar != null)
                   Center(
-                    child: CircleAvatar(radius: 38, backgroundImage: avatar),
+                    child: QuoteHistoryAvatar(
+                      key: const ValueKey('quote-history-detail-avatar'),
+                      image: avatar,
+                      diameter: 96,
+                    ),
                   ),
                 if (avatar != null) const SizedBox(height: 16),
                 Text(
@@ -398,9 +414,11 @@ class _HistoryPageState extends State<HistoryPage> {
                   if (taskName.isNotEmpty) taskName,
                 ].join(' · ');
                 return ListTile(
-                  leading: CircleAvatar(
-                    backgroundImage: avatar,
-                    child: avatar == null ? const Icon(Icons.format_quote) : null,
+                  minVerticalPadding: 8,
+                  leading: QuoteHistoryAvatar(
+                    key: ValueKey('quote-history-list-avatar-$i'),
+                    image: avatar,
+                    diameter: 56,
                   ),
                   title: Text(content, maxLines: 3, overflow: TextOverflow.ellipsis),
                   subtitle: meta.isEmpty ? null : Text(meta, maxLines: 2, overflow: TextOverflow.ellipsis),

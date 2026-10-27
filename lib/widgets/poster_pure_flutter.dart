@@ -27,11 +27,13 @@ class PosterPureFlutter extends StatelessWidget {
     this.woodBgAsset = QuoteAdaptiveFrame.defaultBackgroundAsset, this.aiFramePath,
     this.animateCalligraphy = false,
     this.calligraphyStyle = QuoteCalligraphyStyle.xingshu,
+    this.englishFontStyle = QuoteEnglishFontStyle.baskerville,
   });
   final String topic, quote, author, note, avatar, woodBgAsset;
   final String? aiFramePath;
   final bool animateCalligraphy;
   final QuoteCalligraphyStyle calligraphyStyle;
+  final QuoteEnglishFontStyle englishFontStyle;
 
   void _openReading(BuildContext context) {
     final readingQuoteStyle = quotePrefersLiteraryEnglish(quote)
@@ -96,6 +98,7 @@ class PosterPureFlutter extends StatelessWidget {
             quote: quote, author: author, avatar: avatar,
             animateCalligraphy: animateCalligraphy,
             calligraphyStyle: calligraphyStyle,
+            englishFontStyle: englishFontStyle,
             onRead: () => _openReading(context))),
         ]);
       }),
@@ -108,11 +111,13 @@ class _PaperComposition extends StatelessWidget {
     required this.quote, required this.author,
     required this.avatar, required this.onRead,
     required this.animateCalligraphy, required this.calligraphyStyle,
+    required this.englishFontStyle,
   });
   final String quote, author, avatar;
   final VoidCallback onRead;
   final bool animateCalligraphy;
   final QuoteCalligraphyStyle calligraphyStyle;
+  final QuoteEnglishFontStyle englishFontStyle;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -157,7 +162,7 @@ class _PaperComposition extends StatelessWidget {
 
           // The portrait keeps its fixed clipped window. It reserves only its
           // own top band; short quotations can still centre naturally below it.
-          final portraitWidth = (width * .235).clamp(40.0, 76.0).toDouble();
+          final portraitWidth = (width * .275).clamp(46.0, 88.0).toDouble();
           final portraitHeight = portraitWidth / .78;
           final topReserve = hasAvatar ? portraitHeight + gap : 0.0;
           final footerHeight =
@@ -194,6 +199,7 @@ class _PaperComposition extends StatelessWidget {
                 text ?? quote,
                 quoteBaseStyle(),
                 calligraphyStyle,
+                englishFontStyle,
               );
 
           while (quoteSize > minimumSize &&
@@ -224,6 +230,7 @@ class _PaperComposition extends StatelessWidget {
                     : TextOverflow.ellipsis,
                 style: quoteBaseStyle(),
                 calligraphyStyle: calligraphyStyle,
+                englishFontStyle: englishFontStyle,
               );
             }
             return Text.rich(

@@ -12,6 +12,10 @@ void main() {
     expect(preferences.animationEnabled, isFalse);
     expect(preferences.style, QuoteCalligraphyStyle.xingshu);
     expect(
+      preferences.englishFontStyle,
+      QuoteEnglishFontStyle.baskerville,
+    );
+    expect(
       QuoteCalligraphyStyle.parse('unknown'),
       QuoteCalligraphyStyle.xingshu,
     );
@@ -71,12 +75,31 @@ void main() {
     expect(style.fontWeight, FontWeight.w600);
   });
 
+  test('each English quotation style resolves to its bundled typeface', () {
+    const expected = {
+      QuoteEnglishFontStyle.garamond: quoteGaramondFont,
+      QuoteEnglishFontStyle.baskerville: quoteLiterarySerifFont,
+      QuoteEnglishFontStyle.playfairDisplay: quotePlayfairDisplayFont,
+    };
+
+    for (final entry in expected.entries) {
+      final style = quoteLiteraryTextStyle(
+        const TextStyle(fontSize: 20),
+        entry.key,
+      );
+      expect(style.fontFamily, entry.value);
+      expect(style.fontWeight, FontWeight.w600);
+      expect(QuoteEnglishFontStyle.parse(entry.key.storageValue), entry.key);
+    }
+  });
+
   test('mixed quote keeps English fixed and follows selected Chinese font', () {
     const source = 'The obstacle is the way —— 障碍就是道路。';
     final span = quoteBodyTextSpan(
       source,
       const TextStyle(fontSize: 20),
       QuoteCalligraphyStyle.caoshu,
+      QuoteEnglishFontStyle.playfairDisplay,
     );
 
     expect(span.toPlainText(), source);
@@ -87,7 +110,7 @@ void main() {
           .single
           .style
           ?.fontFamily,
-      quoteLiterarySerifFont,
+      quotePlayfairDisplayFont,
     );
     expect(
       children

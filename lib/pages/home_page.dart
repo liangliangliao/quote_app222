@@ -96,6 +96,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _quoteCalligraphyEnabled = false;
   QuoteCalligraphyStyle _quoteCalligraphyStyle =
       QuoteCalligraphyStyle.xingshu;
+  QuoteEnglishFontStyle _quoteEnglishFontStyle =
+      QuoteEnglishFontStyle.baskerville;
 
   Future<void> _loadCalligraphyPreference() async {
     try {
@@ -104,12 +106,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         _quoteCalligraphyEnabled = preference.animationEnabled;
         _quoteCalligraphyStyle = preference.style;
+        _quoteEnglishFontStyle = preference.englishFontStyle;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _quoteCalligraphyEnabled = false;
         _quoteCalligraphyStyle = QuoteCalligraphyStyle.xingshu;
+        _quoteEnglishFontStyle = QuoteEnglishFontStyle.baskerville;
       });
     }
   }
@@ -955,6 +959,7 @@ ImageProvider _imageFrom(String? any) {
                                             letterSpacing: 2.0,
                                           ),
                                           _quoteCalligraphyStyle,
+                                          _quoteEnglishFontStyle,
                                         ),
                                         textScaler: TextScaler.noScaling,
                                       ),
@@ -1071,6 +1076,7 @@ ImageProvider _imageFrom(String? any) {
                     letterSpacing: 2.0,
                   ),
                   _quoteCalligraphyStyle,
+                  _quoteEnglishFontStyle,
                 ),
                 textScaler: TextScaler.noScaling,
                 maxLines: 3,
@@ -1473,6 +1479,7 @@ ImageProvider _imageFrom(String? any) {
                                 aiFramePath: _frameImagePath,
                                 animateCalligraphy: _quoteCalligraphyEnabled,
                                 calligraphyStyle: _quoteCalligraphyStyle,
+                                englishFontStyle: _quoteEnglishFontStyle,
                               ),
                             ),
                           ),

@@ -85,6 +85,12 @@ flutter:
     - family: QuoteLiterarySerif
       fonts:
         - asset: assets/fonts/LibreBaskerville-Variable.ttf
+    - family: QuoteGaramond
+      fonts:
+        - asset: assets/fonts/EBGaramond-Variable.ttf
+    - family: QuotePlayfairDisplay
+      fonts:
+        - asset: assets/fonts/PlayfairDisplay-Variable.ttf
     - family: QuoteXingShu
       fonts:
         - asset: assets/fonts/ZhiMangXing-Regular.ttf

@@ -3,6 +3,8 @@ Copyright 2018 The Zhi Mang Xing Project Authors (https://github.com/googlefonts
 Copyright 2018 The Ma Shan Zheng Project Authors (https://github.com/googlefonts/mashanzheng)
 Copyright 2018 The Liu Jian Mao Cao Project Authors (https://github.com/googlefonts/liujianmaocao)
 Copyright 2012 The Libre Baskerville Project Authors (https://github.com/impallari/Libre-Baskerville)
+Copyright 2017 The EB Garamond Project Authors (https://github.com/octaviopardo/EBGaramond12)
+Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
