@@ -52,3 +52,4 @@ class QuoteHistoryAvatar extends StatelessWidget {
           ),
         ),
       );
+}
