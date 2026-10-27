@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/services/quote_calligraphy_settings.dart';
@@ -108,6 +110,13 @@ void main() {
       span.children!.whereType<TextSpan>().single.style?.fontFamily,
       QuoteCalligraphyStyle.kaishu.fontFamily,
     );
+  });
+
+  test('history list and details stay independent from calligraphy settings', () {
+    final source = File('lib/pages/history_page.dart').readAsStringSync();
+
+    expect(source, isNot(contains('quoteBodyTextSpan(')));
+    expect(source, isNot(contains('QuoteCalligraphySettings')));
   });
 
   testWidgets('writing reveal keeps final paragraph geometry stable',

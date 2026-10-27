@@ -87,6 +87,27 @@ void main() {
         findsOneWidget);
   });
 
+  testWidgets('full reader keeps the original non-calligraphy typography',
+      (tester) async {
+    const mixedQuote =
+        '真理发生于一个观念，它因事件而成为真理。 Truth happens to an idea.';
+    await mount(tester, 360, text: mixedQuote);
+
+    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+    await tester.pumpAndSettle();
+
+    final reader = find.byKey(const ValueKey('quote-full-reading'));
+    final quoteFinder = find.descendant(
+      of: reader,
+      matching: find.text(mixedQuote),
+    );
+    expect(quoteFinder, findsOneWidget);
+    final quoteWidget = tester.widget<Text>(quoteFinder);
+    expect(quoteWidget.data, mixedQuote);
+    expect(quoteWidget.textSpan, isNull);
+    expect(quoteWidget.style?.fontFamily, isNull);
+  });
+
   testWidgets('short quotation and attribution are vertically balanced',
       (tester) async {
     await mount(tester, 360, text: '知行合一，止于至善。');

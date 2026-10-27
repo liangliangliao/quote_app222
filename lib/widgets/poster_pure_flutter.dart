@@ -34,15 +34,15 @@ class PosterPureFlutter extends StatelessWidget {
   final QuoteCalligraphyStyle calligraphyStyle;
 
   void _openReading(BuildContext context) {
-    final readingQuoteSpan = quoteBodyTextSpan(
-      quote,
-      const TextStyle(
-        fontSize: 21,
-        height: 1.65,
-        fontWeight: FontWeight.w600,
-      ),
-      calligraphyStyle,
-    );
+    final readingQuoteStyle = quotePrefersLiteraryEnglish(quote)
+        ? quoteLiteraryTextStyle(
+            const TextStyle(fontSize: 21, height: 1.65),
+          )
+        : const TextStyle(
+            fontSize: 21,
+            height: 1.65,
+            fontWeight: FontWeight.w600,
+          );
     showModalBottomSheet<void>(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.white, showDragHandle: true,
@@ -59,7 +59,7 @@ class PosterPureFlutter extends StatelessWidget {
                     style: const TextStyle(fontSize: 20, height: 1.5)),
                 const SizedBox(height: 20),
               ],
-              Text.rich(readingQuoteSpan),
+              Text(quote, style: readingQuoteStyle),
               if (author.trim().isNotEmpty) ...[
                 const SizedBox(height: 18),
                 QuoteAuthorSignature(author,
