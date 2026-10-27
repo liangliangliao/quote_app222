@@ -10,6 +10,7 @@ class EnemySettings {
   const EnemySettings._();
 
   /// 用户设定的档位 1..3，默认 2。
+  static const String enabled = 'module_enabled';
   static const String intensity = 'intensity';
   static const String quietStartHour = 'quiet_start_hour';
   static const String quietEndHour = 'quiet_end_hour';

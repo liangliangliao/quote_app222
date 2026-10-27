@@ -1,3 +1,4 @@
+import '../enemy_host_tools.dart';
 import 'package:flutter/material.dart';
 
 import '../copy.dart';
@@ -537,11 +538,13 @@ class SettingsTab extends StatefulWidget {
     required this.engine,
     required this.reminder,
     required this.voice,
+    this.tools = const NoopEnemyHostTools(),
   });
 
   final EnemyEngine engine;
   final EnemyReminder reminder;
   final EnemyVoiceOut voice;
+  final EnemyHostTools tools;
 
   @override
   State<SettingsTab> createState() => _SettingsTabState();
@@ -557,6 +560,7 @@ class _SettingsTabState extends State<SettingsTab> {
   ];
 
   bool _loaded = false;
+  bool _enabled = true;
   int _intensity = 2;
   int _quietStart = 23;
   int _quietEnd = 7;
@@ -599,6 +603,7 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _load() async {
+    final bool enabled = await _engine.isEnabled();
     final int intensity = await _dao.intSetting(EnemySettings.intensity, 2);
     final int qs = await _dao.intSetting(EnemySettings.quietStartHour, 23);
     final int qe = await _dao.intSetting(EnemySettings.quietEndHour, 7);
@@ -641,6 +646,7 @@ class _SettingsTabState extends State<SettingsTab> {
     final Map<String, bool> consents = await _engine.consents();
     if (!mounted) return;
     setState(() {
+      _enabled = enabled;
       _opposition = opposition;
       _motivationStimulus = motivationStimulus;
       _allowProvocation = allowProvocation;
@@ -877,6 +883,15 @@ class _SettingsTabState extends State<SettingsTab> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
+        SwitchListTile(title: const Text('美丽的敌人总开关'),
+          subtitle: const Text('关闭后停止对话、AI、巡检、通知和语音；原有设置保留。'),
+          value: _enabled, onChanged: (v) async {
+            await _dao.setBoolSetting(EnemySettings.enabled, v);
+            if (!v) await widget.voice.stop();
+            final tools = widget.tools;
+            if (tools is EnemyHostPower) await (tools as EnemyHostPower).setModuleEnabled(v);
+            if (mounted) setState(() => _enabled = v);
+          }),
         if (_muted)
           Card(
             color: kEnemyCard,
@@ -1180,7 +1195,7 @@ class _SettingsTabState extends State<SettingsTab> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('出声', style: TextStyle(color: kEnemyText)),
-          subtitle: const Text('敌人的话用语音念出来。默认关。', style: TextStyle(color: kEnemyMuted)),
+          subtitle: const Text('开启后包括后台巡检和每日通知的语音。系统省电或强行停止可能影响后台运行。', style: TextStyle(color: kEnemyMuted)),
           value: _voiceOut,
           onChanged: (bool v) async {
             setState(() => _voiceOut = v);

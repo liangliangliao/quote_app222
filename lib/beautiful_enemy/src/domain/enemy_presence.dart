@@ -123,6 +123,7 @@ class EnemyPresence {
 
   /// 时间线是空的就由敌人先开口。
   Future<EnemyMessage?> ensureOpening() async {
+    if (!await engine.isEnabled()) return null;
     if (await dao.messageCount() > 0) return null;
     final String a = await engine.address();
     return _store(
@@ -176,6 +177,7 @@ class EnemyPresence {
   /// 先过安全阀：危机表达或「停战」时敌人立刻退场，这句话**不会**被存储，
   /// 更不会发给模型。
   Future<SayResult> say(String raw) async {
+    if (!await engine.isEnabled()) return const SayResult(muted: true);
     final String text = raw.trim();
     if (text.isEmpty) return const SayResult();
 
@@ -234,6 +236,7 @@ class EnemyPresence {
   /// 敌人只对**新增**的事件开口（第一次调用只是定下起点）；静音、静默时段、
   /// 每日上限、最小间隔都会拦住它。[force] 只绕过间隔和上限，不绕过静音。
   Future<EnemyMessage?> react({bool force = false}) async {
+    if (!await engine.isEnabled()) return null;
     if (_reacting) return null;
     _reacting = true;
     _why = '';
@@ -249,6 +252,7 @@ class EnemyPresence {
   /// （晨报、晚间结算、人在 App 里却没有新记录）。定时器每隔几秒调一次，
   /// 不需要任何人去叫醒它。[force] 用于用户刚做完动作时立即接话，不做主动巡查。
   Future<EnemyMessage?> step({bool force = false, PatrolContext ctx = const PatrolContext()}) async {
+    if (!await engine.isEnabled()) return null;
     if (_reacting) return null;
     _reacting = true;
     _why = '';
@@ -806,6 +810,7 @@ class EnemyPresence {
   /// 用户告诉敌人：这一下点着了 / 没感觉 / 太过了。
   /// “太过了”除了降低这种策略的学习分，还沿用既有的强度治理，未来 72 小时自动降档。
   Future<bool> rateStimulus(int messageId, String feedback) async {
+    if (!await engine.isEnabled()) return false;
     if (!StimulusFeedback.all.contains(feedback)) return false;
     final String style = await stimulusStyleFor(messageId);
     if (!StimulusStyle.all.contains(style)) return false;
@@ -881,6 +886,7 @@ class EnemyPresence {
   /// 用户主动按“刺激我”：绕过主动质询的时间间隔，但仍使用真实案卷、
   /// 安全阀和用户设定的强度；不为了刺激而编造事实。
   Future<EnemyMessage?> stimulateNow() async {
+    if (!await engine.isEnabled()) return null;
     if (await engine.isMuted()) return null;
     final int now = engine.nowMs();
     final ProbeFacts facts =
@@ -992,6 +998,7 @@ class EnemyPresence {
 
   /// 接受动议：立成字据（带你选的赌注）。需要你亲手写具体内容的动议，[text] 必填。
   Future<MotionResult> acceptMotion(int id, {String text = '', String stake = ''}) async {
+    if (!await engine.isEnabled()) return const MotionResult(note: '模块已停用。');
     final EnemyMotion? m = await dao.motion(id);
     if (m == null || !m.isOpen) return const MotionResult(note: '这项动议已经处理过了。');
     final String content = m.needsText ? text.trim() : m.text;
@@ -1025,6 +1032,7 @@ class EnemyPresence {
 
   /// 用户可自主拒绝建议，理由选填；保留真实的拒绝记录。
   Future<MotionResult> rejectMotion(int id, String reason) async {
+    if (!await engine.isEnabled()) return const MotionResult(note: '模块已停用。');
     final EnemyMotion? m = await dao.motion(id);
     if (m == null || !m.isOpen) return const MotionResult(note: '这项动议已经处理过了。');
     final String text = reason.trim();
@@ -1131,6 +1139,7 @@ class EnemyPresence {
   /// 让你亲眼确认它能工作。消息会进时间线，前面带「【演练】」。
   /// 用的是真实的案卷和字据；静音时不演练。
   Future<DrillResult> drill(String kind) async {
+    if (!await engine.isEnabled()) return const DrillResult(note: '美丽的敌人已停用。');
     if (await engine.isMuted()) {
       return const DrillResult(note: '敌人已静音，先在设置里取消静音。');
     }
@@ -1328,7 +1337,7 @@ class EnemyPresence {
   }) async {
     String? line;
     final EnemyTalker? t = talker;
-    if (t != null) {
+    if (t != null && await engine.isEnabled()) {
       final List<EnemyMessage> history = await dao.recentMessages(limit: historyTurns);
       for (int attempt = 0; attempt < 2 && line == null; attempt++) {
         String? raw;
@@ -1347,6 +1356,10 @@ class EnemyPresence {
         } catch (_) {
           raw = null;
         }
+        if (!await engine.isEnabled()) {
+          return EnemyMessage(id: 0, ts: engine.nowMs(), role: MessageRole.enemy,
+              kind: kind, text: '美丽的敌人已停用。');
+        }
         // 模型没产出（不可用、超时）就不再重试。
         if (raw == null) break;
         final String cleaned = raw.trim();
@@ -1354,6 +1367,10 @@ class EnemyPresence {
           line = cleaned;
         }
       }
+    }
+    if (!await engine.isEnabled()) {
+      return EnemyMessage(id: 0, ts: engine.nowMs(), role: MessageRole.enemy,
+          kind: kind, text: '美丽的敌人已停用。');
     }
     line ??= GrowthGuidance.relate(snap.digest.json, '$situation $userText', fallback());
     if (engine.validator.validateLine(line, maxTone: snap.intensity).isNotEmpty) {

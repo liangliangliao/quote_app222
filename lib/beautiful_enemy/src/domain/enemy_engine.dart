@@ -125,7 +125,10 @@ class EnemyEngine {
   // -------------------------------------------------------------------- sync
 
   /// 从已授权的来源拉取证据入库，返回新增条数。
+  Future<bool> isEnabled() => dao.boolSetting(EnemySettings.enabled, fallback: true);
+
   Future<int> sync() async {
+    if (!await isEnabled()) return 0;
     final int since = nowMs() - const Duration(days: lookbackDays).inMilliseconds;
     int added = 0;
     for (final EvidenceSource s in sources) {
@@ -148,6 +151,7 @@ class EnemyEngine {
   /// 只在来源的变更指纹变了才重新收集。敌人每隔几秒问一次，靠它保持便宜。
   /// 指纹只存在内存里：新建的引擎（比如后台任务）第一次会完整收集一遍。
   Future<int> syncIfChanged() async {
+    if (!await isEnabled()) return 0;
     final int since = nowMs() - const Duration(days: lookbackDays).inMilliseconds;
     int added = 0;
     for (final EvidenceSource s in sources) {
@@ -183,6 +187,7 @@ class EnemyEngine {
 
   /// 记一分钟 App 前台时间（需要授权）。静默时段内的算作深夜使用。
   Future<void> recordUsageMinute() async {
+    if (!await isEnabled()) return;
     if (!await dao.boolSetting(EnemySettings.consent(usageSourceId))) return;
     final DateTime d = _now();
     await dao.addUsageMinute(
@@ -215,6 +220,7 @@ class EnemyEngine {
 
   /// 到期还没兑现的承诺一律记为失效，并写进证据。
   Future<int> settleOverdue() async {
+    if (!await isEnabled()) return 0;
     final int now = nowMs();
     final List<EnemyCommitment> overdue = await dao.overdueOpen(now);
     for (final EnemyCommitment c in overdue) {
@@ -252,6 +258,7 @@ class EnemyEngine {
     String origin = 'manual',
     String verify = '',
   }) async {
+    if (!await isEnabled()) return (id: null, crisis: false, error: '模块已停用。');
     final String t = text.trim();
     final String s = stake.trim();
     if (t.isEmpty) return (id: null, crisis: false, error: null);
@@ -278,6 +285,7 @@ class EnemyEngine {
 
   /// 兑现一条承诺，返回认账的那句话。
   Future<String?> complete(int commitmentId) async {
+    if (!await isEnabled()) return '模块已停用。';
     final EnemyCommitment? c = await dao.commitment(commitmentId);
     if (c == null || c.status == CommitmentStatus.done) return null;
     if (c.status == CommitmentStatus.proposed || c.status == CommitmentStatus.declined) return '这是尚未接受的行动建议，请先选择是否接受。';
@@ -317,6 +325,7 @@ class EnemyEngine {
 
   /// 用户自己承认没做到：立刻记为失效并写进证据。
   Future<void> markMissed(int commitmentId) async {
+    if (!await isEnabled()) return;
     final EnemyCommitment? c = await dao.commitment(commitmentId);
     if (c == null || c.status != CommitmentStatus.open) return;
     final int now = nowMs();
@@ -384,6 +393,7 @@ class EnemyEngine {
     required String category,
     required String reason,
   }) async {
+    if (!await isEnabled()) return (ok: false, message: '模块已停用。', lesson: null, crisis: false);
     final String text = reason.trim();
     if (SafetyValve.shouldMute(text)) {
       final String message = await _muteForText(text);
@@ -406,6 +416,7 @@ class EnemyEngine {
   // ------------------------------------------------------------------- judge
 
   Future<EnemyOutcome> judge({String trigger = 'daily', bool manual = false}) async {
+    if (!await isEnabled()) return EnemyOutcome.skipped('disabled', '美丽的敌人已停用。');
     final int now = nowMs();
     final DateTime nowDt = _now();
 
@@ -457,9 +468,11 @@ class EnemyEngine {
           maxTone: intensity,
           nowMs: now,
         );
+        if (!await isEnabled()) return EnemyOutcome.skipped('disabled', '美丽的敌人已停用。');
         if (problems.isEmpty) chosen = d;
       }
     }
+    if (!await isEnabled()) return EnemyOutcome.skipped('disabled', '美丽的敌人已停用。');
     // 降级：只陈列事实。事实来自本地摘要，不含模型生成的语气。
     chosen ??= await fallback.judge(digest: digest.json, intensity: 0, nowMs: now);
     if (chosen == null) return EnemyOutcome.insufficient();
@@ -502,6 +515,7 @@ class EnemyEngine {
       required String obstaclePlan,
       required String evidence,
       required DateTime due}) async {
+    if (!await isEnabled()) throw const FormatException('模块已停用。');
     final p = await growth.load();
     if (p == null ||
         !p.enabled ||
@@ -537,6 +551,7 @@ class EnemyEngine {
 
   Future<void> reviewGrowthAction(
       int id, String observation, String adjustment) async {
+    if (!await isEnabled()) throw const FormatException('模块已停用。');
     final text = '$observation $adjustment';
     if (SafetyValve.shouldMute(text)) {
       await _muteForText(text);
@@ -623,6 +638,7 @@ class EnemyEngine {
   // ---------------------------------------------------------------- response
 
   Future<ResponseResult> acknowledge(int verdictId) async {
+    if (!await isEnabled()) return const ResponseResult(ResponseKind.needsText, '模块已停用。');
     final v = await dao.verdict(verdictId);
     final c = v?.commitmentId == null ? null : await dao.commitment(v!.commitmentId!);
     if (c != null && c.status == CommitmentStatus.proposed) {
@@ -639,6 +655,7 @@ class EnemyEngine {
   }
 
   Future<void> declineSuggestion(int verdictId) async {
+    if (!await isEnabled()) return;
     final v = await dao.verdict(verdictId);
     final c = v?.commitmentId == null ? null : await dao.commitment(v!.commitmentId!);
     if (c == null || c.status != CommitmentStatus.proposed) return;
@@ -650,6 +667,7 @@ class EnemyEngine {
   /// 申辩。理由必须写；理由里出现危机表达时按安全阀处理。
   /// 每周最多豁免 [maxExcusesPerWeek] 条，超出的照记。
   Future<ResponseResult> appeal(int verdictId, String reason) async {
+    if (!await isEnabled()) return const ResponseResult(ResponseKind.needsText, '模块已停用。');
     final String text = reason.trim();
     if (text.isEmpty) {
       return const ResponseResult(ResponseKind.needsText, EnemyCopy.appealNeedsText);

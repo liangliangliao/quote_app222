@@ -30,14 +30,14 @@ void main() {
   });
   tearDown(() async => db.close());
 
-  test('档案持久化、上下文区分自述与证据，并排除原文', () async {
+  test('档案持久化，完整原文作为自述而非行为证据', () async {
     final reloaded = EnemyGrowthStore(db);
     expect((await reloaded.load())!.weaknesses.single.id, 'avoidance');
     final snap = await engine.snapshot();
     final context = snap.digest.json['growth_profile'] as Map;
-    expect(context['source'], 'user_confirmed_self_report');
+    expect(context['source'], 'user_uploaded_self_report');
     expect(jsonEncode(context), contains('拖延求职'));
-    expect(jsonEncode(context), isNot(contains('私密全文')));
+    expect(jsonEncode(context), contains('私密全文'));
     expect(snap.digest.evidenceIds, isEmpty);
     expect(snap.digest.sufficient, isFalse, reason: '自我评价不能成为指控行为的证据');
   });
@@ -182,6 +182,18 @@ void main() {
         evidence: '投递确认记录',
         due: now.add(const Duration(hours: 2)));
     expect((await engine.dao.commitment(id))!.text, action);
+  });
+
+  test('总开关关闭后停止对话、判词和到期监督，恢复后重新工作', () async {
+    final presence = await EnemyEntry.buildPresence(db: db, clock: () => now);
+    await engine.dao.setBoolSetting(EnemySettings.enabled, false);
+    expect((await presence.say('我想改变')).muted, isTrue);
+    expect(await presence.step(), isNull);
+    expect((await engine.judge(manual: true)).reason, 'disabled');
+    expect(await engine.settleOverdue(), 0);
+    await engine.dao.setBoolSetting(EnemySettings.enabled, true);
+    expect(await engine.isEnabled(), isTrue);
+    expect((await presence.say('我想改变')).enemy, isNotNull);
   });
 
   test('高强度仍禁止粗口；缺少记录不推断逃避；完成不自动加码', () {

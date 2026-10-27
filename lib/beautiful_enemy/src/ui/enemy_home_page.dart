@@ -78,7 +78,7 @@ class EnemyHomePage extends StatelessWidget {
               DossierTab(engine: presence.engine),
               LessonsTab(engine: presence.engine),
               StatusTab(presence: presence, tools: tools),
-              SettingsTab(engine: presence.engine, reminder: reminder, voice: voice),
+              SettingsTab(engine: presence.engine, reminder: reminder, voice: voice, tools: tools),
             ],
           ),
         ),

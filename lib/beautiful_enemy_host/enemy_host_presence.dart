@@ -83,6 +83,7 @@ class EnemyHostPresence with WidgetsBindingObserver {
     if (!_resumed) return;
     try {
       final EnemyPresence presence = await _ensure();
+      if (!await presence.engine.isEnabled()) return;
       await presence.engine.recordUsageMinute();
     } catch (_) {
       // 计时失败不该影响 App。
@@ -94,6 +95,7 @@ class EnemyHostPresence with WidgetsBindingObserver {
     _busy = true;
     try {
       final EnemyPresence presence = await _ensure();
+      if (!await presence.engine.isEnabled()) { await _voice.stop(); return; }
       // 心跳：告诉后台巡查「前台有人在盯着」，免得两边同时开口。
       await presence.dao.setSetting(
         EnemySettings.heartbeatMs,
@@ -106,7 +108,7 @@ class EnemyHostPresence with WidgetsBindingObserver {
       final EnemyMessage? msg = await presence.step(
         ctx: PatrolContext(foreground: true, sessionStartMs: _sessionStartMs),
       );
-      if (msg == null) return;
+      if (msg == null || !await presence.engine.isEnabled()) return;
       await NotificationService.show(
         id: notificationId,
         title: '美丽的敌人',

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_tts/flutter_tts.dart';
 
 import '../beautiful_enemy/beautiful_enemy.dart';
@@ -12,6 +13,7 @@ class EnemyHostVoiceOut implements EnemyVoiceOut {
   Future<FlutterTts> _ensure() async {
     final FlutterTts existing = _tts ?? FlutterTts();
     if (_tts == null) {
+      await existing.awaitSpeakCompletion(true);
       await existing.setLanguage('zh-CN');
       await existing.setSpeechRate(0.42);
       await existing.setPitch(0.8);
@@ -31,6 +33,19 @@ class EnemyHostVoiceOut implements EnemyVoiceOut {
     } catch (_) {
       // 没有语音引擎就算了。
     }
+  }
+
+  /// Keep the background worker alive until playback finishes and stop promptly
+  /// if the module or voice switch is turned off from another isolate.
+  Future<void> speakWhileEnabled(EnemyDao dao, String text) async {
+    if (!await dao.boolSetting(EnemySettings.enabled, fallback: true) ||
+        !await dao.boolSetting(EnemySettings.voiceOut)) return;
+    final timer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!await dao.boolSetting(EnemySettings.enabled, fallback: true) ||
+          !await dao.boolSetting(EnemySettings.voiceOut)) await stop();
+    });
+    try { await speak(text).timeout(const Duration(minutes: 2)); }
+    finally { timer.cancel(); await stop(); }
   }
 
   @override

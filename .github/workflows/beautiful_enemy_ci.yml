@@ -49,6 +49,7 @@ jobs:
           test/beautiful_enemy/growth_profile_test.dart
           test/beautiful_enemy/weakness_importer_test.dart
           test/beautiful_enemy/growth_ui_test.dart
+          test/beautiful_enemy/background_voice_test.dart
       - name: Full Beautiful Enemy regression (baseline currently has known failures)
         continue-on-error: true
         run: flutter test --no-pub --reporter expanded test/beautiful_enemy

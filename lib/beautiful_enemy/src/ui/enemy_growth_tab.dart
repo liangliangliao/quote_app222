@@ -58,6 +58,19 @@ class _EnemyGrowthTabState extends State<EnemyGrowthTab> {
         if (document == null) return;
       }
       if (!mounted) return;
+      if (document != null) {
+        final text = document.text.trim();
+        final chunks = <GrowthWeakness>[];
+        for (var start = 0; start < text.length; start += 500) {
+          final end = (start + 500).clamp(0, text.length);
+          chunks.add(GrowthWeakness(id: '${DateTime.now().microsecondsSinceEpoch}_$start',
+            description: text.substring(start, end)));
+        }
+        await widget.engine.growth.save(EnemyGrowthProfile(sourceName: document.name,
+          originalText: text, weaknesses: chunks, updatedMs: DateTime.now().millisecondsSinceEpoch));
+        await _load();
+        return;
+      }
       final profile = await Navigator.of(context).push<EnemyGrowthProfile>(
           MaterialPageRoute(
               builder: (_) => EnemyGrowthEditor(
@@ -103,7 +116,7 @@ class _EnemyGrowthTabState extends State<EnemyGrowthTab> {
         builder: (ctx) => AlertDialog(
                 title: const Text('删除成长档案？'),
                 content:
-                    const Text('原文、确认的弱点和关联复盘会删除。已接受的承诺保留在「字据」；已有对话内容仍在对话记录中。'),
+                    const Text('原文、上传的弱点和关联复盘会删除。已接受的承诺保留在「字据」；已有对话内容仍在对话记录中。'),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
@@ -133,10 +146,10 @@ class _EnemyGrowthTabState extends State<EnemyGrowthTab> {
           const Text('我的弱点与成长档案',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          const Text('上传自我认识后，先核对提取文字，再确认希望改善的弱点。弱点是可修正的自述，你的价值不由它定义。',
+          const Text('上传文件后，文件全部内容会作为需要改善的自我认识，无需逐项填写。',
               style: TextStyle(color: kEnemyMuted, height: 1.5)),
           const SizedBox(height: 8),
-          const Text('原文件在本机读取；启用后，确认的条目和关联行动会随对话提供给设置中选择的 AI 服务。你可以编辑、停用或删除。',
+          const Text('文件在本机读取；启用后，文件文字和关联行动会提供给设置中选择的 AI 服务。你可以查看、停用或删除。',
               style: TextStyle(color: kEnemyMuted, height: 1.5)),
           const SizedBox(height: 12),
           Wrap(spacing: 8, children: [
@@ -390,9 +403,7 @@ class _EnemyGrowthEditorState extends State<EnemyGrowthEditor> {
                             maxLength: 300,
                             decoration:
                                 const InputDecoration(labelText: '希望改变的具体行为'),
-                            validator: (v) => v == null || v.trim().isEmpty
-                                ? '请说明希望改变什么行为'
-                                : null),
+                            ),
                         TextButton(
                             onPressed: () {
                               setState(() => _items.remove(w));
