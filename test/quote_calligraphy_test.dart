@@ -69,6 +69,47 @@ void main() {
     expect(style.fontWeight, FontWeight.w600);
   });
 
+  test('mixed quote keeps English fixed and follows selected Chinese font', () {
+    const source = 'The obstacle is the way —— 障碍就是道路。';
+    final span = quoteBodyTextSpan(
+      source,
+      const TextStyle(fontSize: 20),
+      QuoteCalligraphyStyle.caoshu,
+    );
+
+    expect(span.toPlainText(), source);
+    final children = span.children!.whereType<TextSpan>().toList();
+    expect(
+      children
+          .where((child) => child.text!.contains('The obstacle'))
+          .single
+          .style
+          ?.fontFamily,
+      quoteLiterarySerifFont,
+    );
+    expect(
+      children
+          .where((child) => child.text!.contains('障碍就是道路'))
+          .single
+          .style
+          ?.fontFamily,
+      QuoteCalligraphyStyle.caoshu.fontFamily,
+    );
+  });
+
+  test('Chinese quote body always follows settings even without animation', () {
+    final span = quoteBodyTextSpan(
+      '知行合一',
+      const TextStyle(fontSize: 20),
+      QuoteCalligraphyStyle.kaishu,
+    );
+
+    expect(
+      span.children!.whereType<TextSpan>().single.style?.fontFamily,
+      QuoteCalligraphyStyle.kaishu.fontFamily,
+    );
+  });
+
   testWidgets('writing reveal keeps final paragraph geometry stable',
       (tester) async {
     const key = ValueKey('animated-calligraphy');

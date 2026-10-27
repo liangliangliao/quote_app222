@@ -996,6 +996,28 @@ class TaskDao {
     await db.update('tasks', patch, where: 'task_uid=?', whereArgs: [uid]);
   }
 
+  Future<void> markLastRun(String uid, {DateTime? at}) async {
+    final value = (at ?? DateTime.now()).toIso8601String();
+    final db = await AppDatabase.instance();
+    try {
+      await db.update(
+        'tasks',
+        <String, Object?>{'last_run_at': value},
+        where: 'task_uid=?',
+        whereArgs: <Object?>[uid],
+      );
+    } on DatabaseException catch (error) {
+      if (!error.toString().contains('last_run_at')) rethrow;
+      await ensureExtraTaskColumns();
+      await db.update(
+        'tasks',
+        <String, Object?>{'last_run_at': value},
+        where: 'task_uid=?',
+        whereArgs: <Object?>[uid],
+      );
+    }
+  }
+
   Future<void> delete(String uid) async {
     final db = await AppDatabase.instance();
     // Fill snapshots in logs before deleting the task
@@ -1917,6 +1939,7 @@ class _AuxTablesTasksExt {
     final db = await AppDatabase.instance();
     await _AuxTables._addColumnIfMissing(db, "tasks", "scheduled_run_key", "TEXT");
     await _AuxTables._addColumnIfMissing(db, "tasks", "next_time", "TEXT");
+    await _AuxTables._addColumnIfMissing(db, "tasks", "last_run_at", "TEXT");
   }
 }
 

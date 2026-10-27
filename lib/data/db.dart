@@ -285,6 +285,7 @@ if (!colsEmotions.contains('type'))           await db.execute("ALTER TABLE emot
       if (!colsTasks.contains('prompt'))     await db.execute("ALTER TABLE tasks ADD COLUMN prompt TEXT");
       if (!colsTasks.contains('avatar'))     await db.execute("ALTER TABLE tasks ADD COLUMN avatar TEXT");
       if (!colsTasks.contains('status'))     await db.execute("ALTER TABLE tasks ADD COLUMN status TEXT");
+      if (!colsTasks.contains('last_run_at')) await db.execute("ALTER TABLE tasks ADD COLUMN last_run_at TEXT");
       // Ensure cursor column exists; used by bulk import tasks for quote navigation
       if (!colsTasks.contains('cursor'))     await db.execute("ALTER TABLE tasks ADD COLUMN cursor INTEGER DEFAULT 0");
       // Ensure carousel_order column exists; used by carousel tasks to store play order
@@ -490,6 +491,7 @@ if (!colsEmotions.contains('type'))           await db.execute("ALTER TABLE emot
         freq_day_of_month INTEGER,  -- 1-31 when monthly
         freq_custom TEXT,            -- reserved
         next_time TEXT,              -- ISO8601 next run time
+        last_run_at TEXT,            -- ISO8601 most recent successful execution
         scheduled_run_key TEXT,      -- last scheduled runKey for cancellation
         cursor INTEGER DEFAULT 0,     -- index into quotes for bulk import tasks
         carousel_order TEXT DEFAULT 'desc'    -- order for carousel tasks: desc | asc | random
@@ -1311,6 +1313,7 @@ await _addColumnIfMissing(db, 'quotes', 'avatar', 'TEXT');
 // Legacy camelCase columns for older builds
 await _addColumnIfMissing(db, 'quotes', 'taskType', 'TEXT');
 await _addColumnIfMissing(db, 'quotes', 'taskName', 'TEXT');
+await _addColumnIfMissing(db, 'tasks', 'last_run_at', 'TEXT');
 
 await _addColumnIfMissing(db, 'configs', 'recent_hours', 'INTEGER DEFAULT 2');
 

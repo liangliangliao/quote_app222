@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
 import '../data/dao.dart';
+import '../services/quote_calligraphy_settings.dart';
+import '../widgets/quote_calligraphy_text.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -32,22 +34,40 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   final _dao = QuoteDao();
+  final _calligraphySettings = QuoteCalligraphySettings();
   final _scroll = ScrollController();
   String _q = '';
   List<Map<String,dynamic>> _items = [];
   int _offset = 0;
   bool _loading = false;
   bool _done = false;
+  QuoteCalligraphyStyle _quoteCalligraphyStyle = QuoteCalligraphyStyle.xingshu;
 
   @override
   void initState() {
     super.initState();
     _loadMore();
+    _loadCalligraphyStyle();
+    QuoteCalligraphySettings.changeTick.addListener(_loadCalligraphyStyle);
     _scroll.addListener(() {
       if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 100 && !_loading && !_done) {
         _loadMore();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    QuoteCalligraphySettings.changeTick.removeListener(_loadCalligraphyStyle);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCalligraphyStyle() async {
+    try {
+      final preferences = await _calligraphySettings.load();
+      if (mounted) setState(() => _quoteCalligraphyStyle = preferences.style);
+    } catch (_) {}
   }
 
   Future<void> _loadMore() async {
@@ -96,8 +116,16 @@ class _HistoryPageState extends State<HistoryPage> {
                     child: CircleAvatar(radius: 38, backgroundImage: avatar),
                   ),
                 if (avatar != null) const SizedBox(height: 16),
-                Text(
-                  '“$content”',
+                Text.rich(
+                  quoteBodyTextSpan(
+                    '“$content”',
+                    const TextStyle(
+                      fontSize: 18,
+                      height: 1.6,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    _quoteCalligraphyStyle,
+                  ),
                   style: const TextStyle(
                     fontSize: 18,
                     height: 1.6,
@@ -396,7 +424,15 @@ class _HistoryPageState extends State<HistoryPage> {
                     backgroundImage: avatar,
                     child: avatar == null ? const Icon(Icons.format_quote) : null,
                   ),
-                  title: Text(content, maxLines: 3, overflow: TextOverflow.ellipsis),
+                  title: Text.rich(
+                    quoteBodyTextSpan(
+                      content,
+                      const TextStyle(),
+                      _quoteCalligraphyStyle,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   subtitle: meta.isEmpty ? null : Text(meta, maxLines: 2, overflow: TextOverflow.ellipsis),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _showQuoteDetails(e),

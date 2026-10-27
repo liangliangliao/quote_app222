@@ -472,6 +472,8 @@ static Future<void> wmRunTask(String uid, String? runKey, {String? chan, int att
 
     try {
       await TaskRunner.run(uid);
+      await TaskDao().markLastRun(uid);
+      try { SimpleBus.pokeSettings(); } catch (_) {}
       // 成功：标记成功日志
       try {
         await DLog.i('SCH', '发送成功 chan='+source+' attempt='+attempt.toString()+' uid='+uid+' run='+(runKey ?? ''));

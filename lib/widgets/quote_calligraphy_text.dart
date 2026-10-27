@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 
 import '../services/quote_calligraphy_settings.dart';
@@ -10,6 +9,8 @@ const String quoteChineseSignatureFont = 'QuoteXingShu';
 const String quoteLiterarySerifFont = 'QuoteLiterarySerif';
 
 enum _SignatureScript { latin, han }
+
+enum _QuoteBodyScript { latin, han }
 
 bool _isHan(String character) {
   if (character.isEmpty) return false;
@@ -163,6 +164,60 @@ TextStyle quoteCalligraphyTextStyle(
   );
 }
 
+/// Applies the selected settings-page brush face only to Han characters while
+/// keeping Latin text on the existing literary serif face. This is deliberately
+/// span-based: a font fallback alone is insufficient because the bundled brush
+/// fonts can also contain Latin glyphs.
+TextSpan quoteBodyTextSpan(
+  String text,
+  TextStyle baseStyle,
+  QuoteCalligraphyStyle calligraphyStyle,
+) {
+  final characters = text.characters.toList(growable: false);
+  var firstScript = _QuoteBodyScript.han;
+  for (final character in characters) {
+    if (_isHan(character)) {
+      firstScript = _QuoteBodyScript.han;
+      break;
+    }
+    if (_isLatinOrDigit(character)) {
+      firstScript = _QuoteBodyScript.latin;
+      break;
+    }
+  }
+
+  TextStyle styleFor(_QuoteBodyScript script) =>
+      script == _QuoteBodyScript.han
+          ? quoteCalligraphyTextStyle(baseStyle, calligraphyStyle)
+          : quoteLiteraryTextStyle(baseStyle);
+
+  final spans = <TextSpan>[];
+  var active = firstScript;
+  var buffer = StringBuffer();
+
+  void flush() {
+    if (buffer.isEmpty) return;
+    spans.add(TextSpan(text: buffer.toString(), style: styleFor(active)));
+    buffer = StringBuffer();
+  }
+
+  for (final character in characters) {
+    _QuoteBodyScript? next;
+    if (_isHan(character)) {
+      next = _QuoteBodyScript.han;
+    } else if (_isLatinOrDigit(character)) {
+      next = _QuoteBodyScript.latin;
+    }
+    if (next != null && next != active) {
+      flush();
+      active = next;
+    }
+    buffer.write(character);
+  }
+  flush();
+  return TextSpan(style: baseStyle, children: spans);
+}
+
 /// Keeps the complete final paragraph laid out from frame one, then reveals
 /// each glyph in place. This avoids the line jumping of a typewriter effect
 /// while producing a restrained brush-on-paper rhythm.
@@ -209,6 +264,7 @@ class _CalligraphyWritingTextState extends State<CalligraphyWritingText>
   void didUpdateWidget(covariant CalligraphyWritingText oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.text != widget.text ||
+        oldWidget.style != widget.style ||
         oldWidget.calligraphyStyle != widget.calligraphyStyle) {
       _controller.duration = _duration;
       _controller.forward(from: 0);
@@ -224,9 +280,14 @@ class _CalligraphyWritingTextState extends State<CalligraphyWritingText>
   @override
   Widget build(BuildContext context) {
     final style = widget.style;
+    final span = quoteBodyTextSpan(
+      widget.text,
+      style,
+      widget.calligraphyStyle,
+    );
     return LayoutBuilder(builder: (context, constraints) {
       final painter = TextPainter(
-        text: TextSpan(text: widget.text, style: style),
+        text: span,
         textDirection: Directionality.of(context),
         textAlign: widget.textAlign,
         textScaler: TextScaler.noScaling,
@@ -247,7 +308,7 @@ class _CalligraphyWritingTextState extends State<CalligraphyWritingText>
             builder: (context, _) => CustomPaint(
               painter: _InkWritingPainter(
                 text: widget.text,
-                style: style,
+                textSpan: span,
                 textDirection: Directionality.of(context),
                 textAlign: widget.textAlign,
                 maxLines: widget.maxLines,
@@ -266,7 +327,7 @@ class _CalligraphyWritingTextState extends State<CalligraphyWritingText>
 class _InkWritingPainter extends CustomPainter {
   const _InkWritingPainter({
     required this.text,
-    required this.style,
+    required this.textSpan,
     required this.textDirection,
     required this.textAlign,
     required this.maxLines,
@@ -275,7 +336,7 @@ class _InkWritingPainter extends CustomPainter {
   });
 
   final String text;
-  final TextStyle style;
+  final InlineSpan textSpan;
   final TextDirection textDirection;
   final TextAlign textAlign;
   final int? maxLines;
@@ -285,7 +346,7 @@ class _InkWritingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
+      text: textSpan,
       textDirection: textDirection,
       textAlign: textAlign,
       textScaler: TextScaler.noScaling,
@@ -345,6 +406,6 @@ class _InkWritingPainter extends CustomPainter {
   bool shouldRepaint(covariant _InkWritingPainter oldDelegate) =>
       oldDelegate.progress != progress ||
       oldDelegate.text != text ||
-      oldDelegate.style != style ||
+      oldDelegate.textSpan != textSpan ||
       oldDelegate.maxLines != maxLines;
 }

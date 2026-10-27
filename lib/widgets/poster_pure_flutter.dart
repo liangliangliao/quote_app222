@@ -34,15 +34,15 @@ class PosterPureFlutter extends StatelessWidget {
   final QuoteCalligraphyStyle calligraphyStyle;
 
   void _openReading(BuildContext context) {
-    final readingQuoteStyle = quotePrefersLiteraryEnglish(quote)
-        ? quoteLiteraryTextStyle(
-            const TextStyle(fontSize: 21, height: 1.65),
-          )
-        : const TextStyle(
-            fontSize: 21,
-            height: 1.65,
-            fontWeight: FontWeight.w600,
-          );
+    final readingQuoteSpan = quoteBodyTextSpan(
+      quote,
+      const TextStyle(
+        fontSize: 21,
+        height: 1.65,
+        fontWeight: FontWeight.w600,
+      ),
+      calligraphyStyle,
+    );
     showModalBottomSheet<void>(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.white, showDragHandle: true,
@@ -59,7 +59,7 @@ class PosterPureFlutter extends StatelessWidget {
                     style: const TextStyle(fontSize: 20, height: 1.5)),
                 const SizedBox(height: 20),
               ],
-              Text(quote, style: readingQuoteStyle),
+              Text.rich(readingQuoteSpan),
               if (author.trim().isNotEmpty) ...[
                 const SizedBox(height: 18),
                 QuoteAuthorSignature(author,
@@ -138,25 +138,6 @@ class _PaperComposition extends StatelessWidget {
             fontWeight: FontWeight.w600,
           );
 
-          double measure(
-            String text,
-            TextStyle style,
-            double maxWidth, {
-            int? maxLines,
-          }) {
-            if (text.trim().isEmpty) return 0;
-            final painter = TextPainter(
-              text: TextSpan(text: text, style: style),
-              textDirection: direction,
-              textScaler: TextScaler.noScaling,
-              maxLines: maxLines,
-              ellipsis: maxLines == null ? null : '…',
-            )..layout(maxWidth: maxWidth);
-            final result = painter.height;
-            painter.dispose();
-            return result;
-          }
-
           double measureSpan(
             InlineSpan span,
             double maxWidth, {
@@ -199,35 +180,35 @@ class _PaperComposition extends StatelessWidget {
               ? (width * .057).clamp(11.5, 17.5).toDouble()
               : (width * .067).clamp(12.0, 19.5).toDouble();
 
-          TextStyle quoteStyle() {
-            final original = baseStyle.copyWith(
+          TextStyle quoteBaseStyle() {
+            return baseStyle.copyWith(
               fontSize: quoteSize,
               height: 1.47,
               letterSpacing: .45,
               fontWeight: FontWeight.w800,
               color: const Color(0xff25211d),
             );
-            if (isLiteraryEnglish) {
-              return quoteLiteraryTextStyle(original);
-            }
-            return animateCalligraphy
-                ? quoteCalligraphyTextStyle(original, calligraphyStyle)
-                : original;
           }
 
+          TextSpan quoteSpan([String? text]) => quoteBodyTextSpan(
+                text ?? quote,
+                quoteBaseStyle(),
+                calligraphyStyle,
+              );
+
           while (quoteSize > minimumSize &&
-              measure(quote, quoteStyle(), width) > quoteCapacity) {
+              measureSpan(quoteSpan(), width) > quoteCapacity) {
             quoteSize = math.max(minimumSize, quoteSize - .25);
           }
 
-          final fullQuoteHeight = measure(quote, quoteStyle(), width);
+          final fullQuoteHeight = measureSpan(quoteSpan(), width);
           final lineProbe = isLiteraryEnglish ? 'Ag' : '名言';
-          final quoteLineHeight = measure(lineProbe, quoteStyle(), width);
+          final quoteLineHeight = measureSpan(quoteSpan(lineProbe), width);
           final quoteLines = fullQuoteHeight <= quoteCapacity + .5
               ? null
               : math.max(1, (quoteCapacity / quoteLineHeight).floor());
           final quoteHeight =
-              measure(quote, quoteStyle(), width, maxLines: quoteLines);
+              measureSpan(quoteSpan(), width, maxLines: quoteLines);
           final blockHeight = quoteHeight + authorGap + authorHeight;
           final blockTop = topReserve +
               math.max(0.0, (contentHeight - blockHeight) / 2);
@@ -241,18 +222,17 @@ class _PaperComposition extends StatelessWidget {
                 overflow: quoteLines == null
                     ? TextOverflow.visible
                     : TextOverflow.ellipsis,
-                style: quoteStyle(),
+                style: quoteBaseStyle(),
                 calligraphyStyle: calligraphyStyle,
               );
             }
-            return Text(
-              quote,
+            return Text.rich(
+              quoteSpan(),
               key: const ValueKey('quote-body'),
               maxLines: quoteLines,
               overflow: quoteLines == null
                   ? TextOverflow.visible
                   : TextOverflow.ellipsis,
-              style: quoteStyle(),
             );
           }
 

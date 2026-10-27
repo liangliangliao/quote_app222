@@ -944,17 +944,20 @@ ImageProvider _imageFrom(String? any) {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                       quote,
-                                       textScaleFactor: 1.0,
-                                       style: const TextStyle(
-                                         color: Colors.black87,
-                                         fontSize: 20,
-                                         height: 1.45,
-                                         fontWeight: FontWeight.w700,
-                                         letterSpacing: 2.0,
-                                       ),
-                                       ),
+                                      Text.rich(
+                                        quoteBodyTextSpan(
+                                          quote,
+                                          const TextStyle(
+                                            color: Colors.black87,
+                                            fontSize: 20,
+                                            height: 1.45,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 2.0,
+                                          ),
+                                          _quoteCalligraphyStyle,
+                                        ),
+                                        textScaler: TextScaler.noScaling,
+                                      ),
                                       SizedBox(height: innerPadV * 0.5 - 5),
                                       Align(
                                         alignment: Alignment.centerRight,
@@ -1057,19 +1060,22 @@ ImageProvider _imageFrom(String? any) {
             ),
             SizedBox(height: w * 0.05),
             Expanded(
-              child: Text(
-                                       quote,
-                                       textScaleFactor: 1.0,
-                                       style: const TextStyle(
-                                         color: Colors.black87,
-                                         fontSize: 20,
-                                         height: 1.45,
-                                         fontWeight: FontWeight.w700,
-                                         letterSpacing: 2.0,
-                                       ),
-                                      maxLines: 3,
-                                      overflow: TextOverflow.visible,
-                                    ),
+              child: Text.rich(
+                quoteBodyTextSpan(
+                  quote,
+                  const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 20,
+                    height: 1.45,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2.0,
+                  ),
+                  _quoteCalligraphyStyle,
+                ),
+                textScaler: TextScaler.noScaling,
+                maxLines: 3,
+                overflow: TextOverflow.visible,
+              ),
             ),
             Align(
               alignment: Alignment.centerRight,

@@ -142,6 +142,27 @@ public final class DbRepository {
     }
 
     public static void markLatestSuccess(Context ctx, String uid) {
+        Contract cc = DbInspector.loadOrLightScan(ctx);
+        SQLiteDatabase db = cc == null ? null : openOrCreateFallback(ctx, cc);
+        if (db != null) {
+            try {
+                String table = TextUtils.isEmpty(cc.tasksSource) ? "tasks" : cc.tasksSource;
+                String uidCol = cc.taskColMap.containsKey("uid") ? cc.taskColMap.get("uid") : "task_uid";
+                java.util.Set<String> columns = DbInspector.listColumns(db, table);
+                if (columns == null || !columns.contains("last_run_at")) {
+                    db.execSQL("ALTER TABLE " + table + " ADD COLUMN last_run_at TEXT");
+                }
+                java.text.SimpleDateFormat formatter =
+                        new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US);
+                ContentValues values = new ContentValues();
+                values.put("last_run_at", formatter.format(new java.util.Date()));
+                db.update(table, values, uidCol + "=?", new String[]{uid});
+            } catch (Throwable error) {
+                Log.e("DbRepository", "markLatestSuccess task timestamp error", error);
+            } finally {
+                try { db.close(); } catch (Throwable ignore) {}
+            }
+        }
         log(ctx, uid, "成功!");
     }
 

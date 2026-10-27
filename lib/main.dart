@@ -117,6 +117,9 @@ Future<void> _bootstrapAfterFirstFrame() async {
   // Workmanager 必须先完成初始化，再同步各模块的后台计划。
   try { await Workmanager().initialize(workmanagerCallbackDispatcher, isInDebugMode: false); } catch (_) {}
   try { await SchedulerService.init(); } catch (_) {}
+  // 在插件初始化完成后恢复名言任务。这样普通进程回收后的冷启动不会因
+  // Workmanager 尚未就绪而静默丢失注册；开机恢复也复用同一条逻辑。
+  try { await SchedulerService.scheduleNextForAll(); } catch (_) {}
 
   // 其余初始化互不依赖，并行执行，避免把首页交互串行卡住。
   await Future.wait<void>([
@@ -625,7 +628,6 @@ class _RootShellState extends State<RootShell> {
   @override
   void initState() {
     super.initState();
-    SchedulerService.scheduleNextForAll();
     // 美丽的敌人：App 开着时，它也能在其它页面插话（开关在它的设置里）。
     EnemyHostPresence.start();
     // Ensure runtime unlock receivers on first launch (post-frame)

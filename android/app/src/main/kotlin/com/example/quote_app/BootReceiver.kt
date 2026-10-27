@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import androidx.work.Constraints
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import dev.fluttercommunity.workmanager.BackgroundWorker
 import java.util.concurrent.TimeUnit
 
 /**
@@ -44,17 +46,30 @@ class BootReceiver : BroadcastReceiver() {
         // WorkManager boot reinitialization best-effort.
         try { VoiceAlarmScheduler.restore(context.applicationContext) } catch (_: Throwable) {}
 
-        try {
-            val data = Data.Builder()
-                .putString("job", "wm_boot")
-                .build()
-            val request = OneTimeWorkRequestBuilder<AlarmProxyWorker>()
-                .setInputData(data)
-                .build()
-            WorkManager.getInstance(context).enqueue(request)
-        } catch (_: Throwable) {
-            // WorkManager is not direct-boot friendly on all devices; do not let it
-            // prevent direct-boot alarm restoration.
+        // The workmanager plugin only forwards keys prefixed with `payload_` to
+        // Dart.  The old implementation used AlarmProxyWorker with an unprefixed
+        // `job`, so wm_boot never reached workmanagerCallbackDispatcher and quote
+        // tasks were not rebuilt after a reboot.  Credential-protected Flutter
+        // state is available after BOOT_COMPLETED/USER_UNLOCKED (not locked boot).
+        if (intent.action != Intent.ACTION_LOCKED_BOOT_COMPLETED) {
+            try {
+                val data = Data.Builder()
+                    .putString(BackgroundWorker.DART_TASK_KEY, "wm_task")
+                    .putString("payload_job", "wm_boot")
+                    .build()
+                val request = OneTimeWorkRequestBuilder<BackgroundWorker>()
+                    .setInputData(data)
+                    .addTag("quote-task-recovery")
+                    .build()
+                WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+                    "quote_task_boot_restore",
+                    ExistingWorkPolicy.REPLACE,
+                    request,
+                )
+            } catch (_: Throwable) {
+                // A persisted WorkManager request remains the fallback. The next
+                // USER_UNLOCKED/app-start recovery will try again as well.
+            }
         }
 
         // 兜底：周期性恢复 UnlockPulse 的 Alarm（避免长时间待机/ROM 冻结/清理后台后链路断掉）。

@@ -36,6 +36,7 @@ import '../services/global_ai_settings.dart';
 import '../services/global_ai_request_settings.dart';
 import '../services/unified_ai_service.dart';
 import '../services/quote_ai_service.dart';
+import '../platform/native_scheduler.dart';
 import 'ai_prompt_settings_page.dart';
 import '../movie_role_lab/movie_role_lab_settings_page.dart';
 import '../voice_lab/voice_lab_home_page.dart';
@@ -46,7 +47,9 @@ import '../services/notification_service.dart';
 import '../services/read_aloud_service.dart';
 import '../services/quote_calligraphy_settings.dart';
 import '../platform/exact_alarm_permission_coordinator.dart';
+import '../platform/bg_guard_helper.dart';
 import '../widgets/quote_calligraphy_text.dart';
+import '../widgets/task_schedule_status.dart';
 // removed duplicate import of native_guard (already imported above)
 
 class SettingsPage extends StatefulWidget {
@@ -116,7 +119,7 @@ class _CalligraphyStyleChoice extends StatelessWidget {
       );
 }
 
-class _SettingsPageState extends State<SettingsPage> {
+class _SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver {
   final _configDao = ConfigDao();
   final _taskDao = TaskDao();
   final _kvDao = KeyValueDao();
@@ -222,6 +225,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   bool _editingConfig = false;
   List<Map<String, dynamic>> _tasks = [];
+  Timer? _taskRefreshTimer;
+  bool _taskRefreshInProgress = false;
 
   // ====== EMA / SSES 设置 ======
   // 是否启用 EMA / SSES 自尊问答
@@ -461,13 +466,27 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // 监听设置页刷新 bus，在切换到设置页或数据变更时刷新配置和任务列表
     SimpleBus.settingsTick.addListener(_onBus);
     _load();
+    _taskRefreshTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _refreshTaskRuntimeState(),
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // 回到前台时先恢复可能被系统清理或因重启而丢失的注册，再读取最新执行时间。
+    unawaited(_restoreAndRefreshTaskSchedules());
   }
 
   @override
   void dispose() {
+    _taskRefreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _apiKeyCtrl.dispose();
     _modelCtrl.dispose();
     _endpointCtrl.dispose();
@@ -528,7 +547,29 @@ class _SettingsPageState extends State<SettingsPage> {
     _load();
   }
 
-  
+  Future<void> _restoreAndRefreshTaskSchedules() async {
+    try {
+      await SchedulerService.scheduleNextForAll();
+    } catch (_) {}
+    await _refreshTaskRuntimeState();
+  }
+
+  Future<void> _refreshTaskRuntimeState() async {
+    if (_taskRefreshInProgress) return;
+    _taskRefreshInProgress = true;
+    try {
+      final latest = await _taskDao.all();
+      if (!mounted) return;
+      final before = jsonEncode(_tasks);
+      final after = jsonEncode(latest);
+      if (before != after) setState(() => _tasks = latest);
+    } catch (_) {
+      // 后台 isolate 可能正在短暂写库；下一个刷新周期会再次读取。
+    } finally {
+      _taskRefreshInProgress = false;
+    }
+  }
+
   Future<void> _reloadTasksAfterSave() async {
     _tasks = await _taskDao.all();
       if (mounted) setState(() {});
@@ -2572,13 +2613,21 @@ const Text('头像（用于通知图标）'),
                 onPressed: () async {
                   if (formKey.currentState?.validate() != true) return;
 
-                  if (status == 'on' && type != 'auto') {
-                    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
-                      ctx,
-                      featureName: '定时任务通知',
-                      explanation: '启用中的任务会在下一次计划时间准确触发。',
-                    );
-                    if (!exactGranted) return;
+                  if (status == 'on') {
+                    final notificationGranted = !Platform.isAndroid ||
+                        await NativeScheduler.requestNotificationPermissionSystem();
+                    if (!notificationGranted) {
+                      showToast('请先允许通知权限，否则后台任务无法送达');
+                      return;
+                    }
+                    if (type != 'auto') {
+                      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+                        ctx,
+                        featureName: '定时任务通知',
+                        explanation: '启用中的任务会在下一次计划时间准确触发。',
+                      );
+                      if (!exactGranted) return;
+                    }
                   }
 
                   String? uidToSchedule;
@@ -2702,8 +2751,15 @@ const Text('头像（用于通知图标）'),
                   if (uidToSchedule != null) {
                     await SchedulerService.scheduleNextForTask(uidToSchedule!);
                   }
+                  await _refreshTaskRuntimeState();
                   showToast('已保存');
                   if (context.mounted) Navigator.pop(context);
+                  if (status == 'on' && context.mounted) {
+                    unawaited(BgGuardHelper.maybeShowGuide(
+                      context,
+                      feature: type == 'auto' ? 'AI 自动获取名人名言' : '定时任务通知',
+                    ));
+                  }
                 }
                   ,
                 child: const Text('保存'),
@@ -3997,6 +4053,11 @@ const Text('头像（用于通知图标）'),
             const SizedBox(height: 16),
 
             const Text('任务列表', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            const Text(
+              '“最近成功执行”来自实际通知完成时间；“下次计划执行”来自系统已登记的下一次任务。倒计时每秒更新，执行后列表会自动读取新时间。',
+              style: TextStyle(color: Colors.black54, fontSize: 12, height: 1.4),
+            ),
             const SizedBox(height: 8),
             for (final t in _tasks)
               ListTile(
@@ -4004,7 +4065,13 @@ const Text('头像（用于通知图标）'),
                   onTap: () => _openTaskDialog(task: t),
                   child: Text((t['name'] ?? '') as String, style: const TextStyle(decoration: TextDecoration.underline)),
                 ),
-                subtitle: Text('时间: ${(t['start_time'] ?? '') as String}   下一次: ${((t['next_time'] ?? '') as String).toString().replaceFirst('T', ' ').split('.').first}   频率: ${(t['freq_type'] ?? '') as String}  状态: ${(t['status'] ?? '') as String}'),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: TaskScheduleStatusView(
+                    key: ValueKey('task-schedule-${t['task_uid']}'),
+                    task: t,
+                  ),
+                ),
               ),
           ],
         ),
