@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 53609)
-Total output lines: 4813
-
 import '../diary/diary_settings_page.dart';
 import 'package:path/path.dart' as p;
 import '../services/sport_music_service.dart';
@@ -2368,7 +2365,293 @@ Future<String?> _saveAvatarTemp(File file) async {
                       const Text('选择多个人物后，将严格按所选顺序循环获取。', style: TextStyle(color: Colors.black54, fontSize: 12)),
                       const SizedBox(height: 8),
                       ...quoteFigureCatalog.entries.map((entry) => Padding(
-                        paddi…3609 tokens truncated…          if (isEdit)
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(entry.key, style: const TextStyle(fontSize: 13, color: Colors.black54)),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: entry.value.map((figure) => FilterChip(
+                                label: Text(figure),
+                                selected: selectedQuoteFigures.contains(figure),
+                                onSelected: (selected) {
+                                  setStateDialog(() {
+                                    if (selected) {
+                                      selectedQuoteFigures.add(figure);
+                                    } else {
+                                      selectedQuoteFigures.remove(figure);
+                                    }
+                                  });
+                                },
+                              )).toList(),
+                            ),
+                          ],
+                        ),
+                      )),
+                      const Text('自定义人物'),
+                      TextFormField(
+                        initialValue: customQuoteFigures,
+                        decoration: const InputDecoration(
+                          hintText: '例如：汉娜·阿伦特、费曼（用逗号或顿号分隔）',
+                        ),
+                        onChanged: (value) => customQuoteFigures = value,
+                      ),
+                      const SizedBox(height: 10),
+                      const Text('主题或类别'),
+                      DropdownButtonFormField<String>(
+                        value: quoteAiThemeChoice,
+                        isExpanded: true,
+                        items: quoteThemeOptions
+                            .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
+                            .toList(),
+                        onChanged: (value) => setStateDialog(() => quoteAiThemeChoice = value ?? '不限主题'),
+                      ),
+                      if (quoteAiThemeChoice == '自定义主题') ...[
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: customQuoteTheme,
+                          decoration: const InputDecoration(hintText: '输入自定义主题'),
+                          onChanged: (value) => customQuoteTheme = value,
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      const Text('描述你想表达或面对的内容'),
+                      TextFormField(
+                        initialValue: quoteAiDescription,
+                        decoration: const InputDecoration(
+                          hintText: 'AI 会分析核心思想，并匹配语义最接近的名言',
+                        ),
+                        onChanged: (value) => quoteAiDescription = value,
+                        minLines: 3,
+                        maxLines: 6,
+                        keyboardType: TextInputType.multiline,
+                      ),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('自动下载人物头像'),
+                        subtitle: const Text('从 Wikipedia/Wikimedia 获取并保存到应用目录'),
+                        value: quoteAiDownloadAvatar,
+                        onChanged: (value) => setStateDialog(() => quoteAiDownloadAvatar = value),
+                      ),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('自动保存到本地'),
+                        subtitle: const Text('保存正文、署名、出处、头像和完整思想分析'),
+                        value: quoteAiSaveLocally,
+                        onChanged: (value) => setStateDialog(() => quoteAiSaveLocally = value),
+                      ),
+                    ],
+                    if (type == 'manual' || type == '批量导入任务') ...[
+                      const Text('名人名言'),
+                      
+TextFormField(
+            initialValue: manualQuote,
+                        onChanged: (v)=> manualQuote = v,
+                        validator: (v)=> (type=='manual' && (v==null || v.trim().isEmpty)) ? '请输入名人名言' : null,
+                        minLines: 3,
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                      ),
+
+  const SizedBox(height: 8),
+  const Text('主题'),
+  TextFormField(
+    initialValue: theme,
+    onChanged: (v) => theme = v,
+  ),
+  const SizedBox(height: 8),
+  const Text('署名'),
+  TextFormField(
+    initialValue: authorName,
+    onChanged: (v) => authorName = v,
+  ),
+  const SizedBox(height: 8),
+  const Text('出处'),
+  TextFormField(
+    initialValue: sourceFrom,
+    onChanged: (v) => sourceFrom = v,
+  ),
+  const SizedBox(height: 8),
+  const Text('简明解释'),
+  TextFormField(
+    initialValue: explanation,
+    onChanged: (v) => explanation = v,
+    minLines: 3,
+    maxLines: null,
+    keyboardType: TextInputType.multiline,
+    textInputAction: TextInputAction.newline,
+  ),
+],
+                    // When creating or editing a carousel task, allow the user to select the play order
+                    if (type == 'carousel') ...[
+                      const Text('轮播顺序'),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RadioListTile<String>(
+                            title: const Text('降序'),
+                            value: 'desc',
+                            groupValue: carouselOrder,
+                            onChanged: (v) {
+                              setStateDialog(() => carouselOrder = v ?? 'desc');
+                            },
+                          ),
+                          RadioListTile<String>(
+                            title: const Text('升序'),
+                            value: 'asc',
+                            groupValue: carouselOrder,
+                            onChanged: (v) {
+                              setStateDialog(() => carouselOrder = v ?? 'desc');
+                            },
+                          ),
+                          RadioListTile<String>(
+                            title: const Text('随机'),
+                            value: 'random',
+                            groupValue: carouselOrder,
+                            onChanged: (v) {
+                              setStateDialog(() => carouselOrder = v ?? 'desc');
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+const SizedBox(height: 8),
+const Text('头像（用于通知图标）'),
+                    Row(
+                      children: [
+                        // 显示文件名；若未选择则显示提示文字；不展示图片
+                        Flexible(
+                          child: Text(
+                            avatarPath.isNotEmpty ? p.basename(avatarPath) : '未选择',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final picker = ImagePicker();
+                            final x = await picker.pickImage(source: ImageSource.gallery);
+                            if (x != null) {
+                              final p = await _saveAvatarTemp(File(x.path));
+                              setStateDialog(()=> avatarPath = p ?? '');
+                            }
+                          },
+                          icon: const Icon(Icons.photo),
+                          label: const Text('选择图片'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('状态'),
+                    DropdownButton<String>(
+                      value: status,
+                      onChanged: (v){ setStateDialog(()=> status = v ?? 'on'); },
+                      items: const [
+                        DropdownMenuItem(value: 'on', child: Text('开启')),
+                        DropdownMenuItem(value: 'off', child: Text('关闭')),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('自动获取频率与时间：'),
+                    // frequency row
+                    Row(
+                      children: [
+                        DropdownButton<String>(
+                          value: freqType,
+                          onChanged: (v){ setStateDialog(()=> freqType = v ?? 'daily'); },
+                          items: [
+                            if (type == 'auto')
+                              const DropdownMenuItem(value: 'interval', child: Text('按间隔')),
+                            const DropdownMenuItem(value: 'daily', child: Text('每天')),
+                            const DropdownMenuItem(value: 'weekly', child: Text('每周')),
+                            const DropdownMenuItem(value: 'monthly', child: Text('每月')),
+                          ],
+                        ),
+                        const SizedBox(width: 12),
+                        if (freqType=='interval')
+                          DropdownButton<int>(
+                            value: intervalMinutes,
+                            onChanged: (value) => setStateDialog(() => intervalMinutes = value ?? 60),
+                            items: const [
+                              DropdownMenuItem(value: 15, child: Text('15 分钟')),
+                              DropdownMenuItem(value: 30, child: Text('30 分钟')),
+                              DropdownMenuItem(value: 60, child: Text('1 小时')),
+                              DropdownMenuItem(value: 120, child: Text('2 小时')),
+                              DropdownMenuItem(value: 240, child: Text('4 小时')),
+                              DropdownMenuItem(value: 480, child: Text('8 小时')),
+                              DropdownMenuItem(value: 720, child: Text('12 小时')),
+                              DropdownMenuItem(value: 1440, child: Text('24 小时')),
+                            ],
+                          ),
+                        if (freqType=='weekly')
+                          DropdownButton<int>(
+                            value: selectedWeekday ?? 1,
+                            onChanged: (v){ setStateDialog(()=> selectedWeekday = v ?? 1); },
+                            items: const [
+                              DropdownMenuItem(value: 1, child: Text('周一')),
+                              DropdownMenuItem(value: 2, child: Text('周二')),
+                              DropdownMenuItem(value: 3, child: Text('周三')),
+                              DropdownMenuItem(value: 4, child: Text('周四')),
+                              DropdownMenuItem(value: 5, child: Text('周五')),
+                              DropdownMenuItem(value: 6, child: Text('周六')),
+                              DropdownMenuItem(value: 7, child: Text('周日')),
+                            ],
+                          ),
+                        if (freqType=='monthly')
+                          DropdownButton<int>(
+                            value: (selectedMonthDay ?? 1).clamp(1, 28),
+                            onChanged: (v){ setStateDialog(()=> selectedMonthDay = (v ?? 1).clamp(1, 28)); },
+                            items: [
+                              for (int d=1; d<=28; d++)
+                                DropdownMenuItem(value: d, child: Text('$d日')),
+                            ],
+                          ),
+                        if (freqType!='interval') ...[
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () async {
+                              final t = await showTimePicker(context: ctx, initialTime: time);
+                              if (t != null) setStateDialog(()=> time = t);
+                            },
+                            icon: const Icon(Icons.access_time),
+                          ),
+                          Text('${two(time.hour)}:${two(time.minute)}'),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      () {
+                        final hhmm = '${two(time.hour)}:${two(time.minute)}';
+                        if (freqType=='interval') {
+                          final label = intervalMinutes < 60
+                              ? '$intervalMinutes 分钟'
+                              : intervalMinutes % 60 == 0
+                                  ? '${intervalMinutes ~/ 60} 小时'
+                                  : '$intervalMinutes 分钟';
+                          return '每 $label 自动获取一次（下一次：$nextStr）';
+                        } else if (freqType=='weekly') {
+                          final w = selectedWeekday ?? 1;
+                          return '每周${weekdayText(w)} $hhmm （下一次：$nextStr）';
+                        } else if (freqType=='monthly') {
+                          final d = selectedMonthDay ?? 1;
+                          return '每月${d}日 $hhmm （下一次：$nextStr）';
+                        } else {
+                          return '每天 $hhmm （下一次：$nextStr）';
+                        }
+                      }(),
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              if (isEdit)
                 TextButton(
                   onPressed: () async {
                     final uid = task!['task_uid'] as String;
