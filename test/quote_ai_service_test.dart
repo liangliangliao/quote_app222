@@ -58,6 +58,10 @@ void main() {
         expect(prompt, contains('我害怕改变，但也不想停在原地'));
         expect(prompt, contains('语义匹配优先级最高'));
         expect(prompt, contains('应用不会发送历史名言正文'));
+        expect(prompt, contains('practice_activities'));
+        expect(prompt, contains('现实中亲自完成、观察和感受'));
+        expect(prompt, contains('历史事件或典故'));
+        expect(prompt, contains('用户应可随时暂停'));
       },
     );
 
@@ -73,6 +77,18 @@ void main() {
   "problem_addressed": "应对未经辨析便随波逐流的问题。",
   "related_person": "孔子",
   "related_thought": "吾日三省吾身，同样强调持续自省。",
+  "practice_activities": [
+    {
+      "title": "三分钟自省停顿",
+      "concept_to_experience": "未经审视的自动反应与主动反思之间的差别",
+      "duration": "5分钟",
+      "setting": "今天一次准备立即回应消息或做决定的时刻",
+      "steps": ["暂停三次呼吸并写下原本想立即采取的动作", "写出支持与反对这个动作的各一条事实", "依据审视结果决定照旧行动或做一个最小调整"],
+      "experience_focus": "留意暂停前后的急迫感、确定感和选择感是否变化",
+      "reflection_questions": ["审视改变了什么？", "我看见了哪个原先忽略的假设？"],
+      "inspiration": "哲学对话的类比练习；这是模拟，不冒充《申辩篇》的具体情节"
+    }
+  ],
   "source_confidence": "高：有古典文本记录",
   "avatar_search_query": "苏格拉底 Socrates",
   "avatar_url": "https://example.com/not-trusted.jpg"
@@ -92,11 +108,17 @@ void main() {
       expect(result.explanation, contains('核心思想匹配：强调主动反思'));
       expect(result.explanation, contains('它试图回应的问题'));
       expect(result.explanation, contains('关联思想（孔子）'));
+      expect(result.practiceActivities, hasLength(1));
+      expect(result.practiceActivities.single.steps, hasLength(3));
+      expect(result.explanation, contains('现实实践：把抽象概念变成亲身经验'));
+      expect(result.explanation, contains('活动 1｜三分钟自省停顿'));
+      expect(result.explanation, contains('借鉴或类比：哲学对话的类比练习'));
+      expect(result.explanation, contains('• 审视改变了什么？'));
     });
 
     test('uses explicit uncertainty instead of inventing a missing source', () {
       final result = QuoteAiService.parseResponse(
-        '{"quote":"先行动，再修正。","author":"某思想家"}',
+        '{"quote":"先行动，再修正。","author":"某思想家","practice_activities":["选择一件可在十分钟内开始的小事，先完成第一步并记录行动前后的感受。"]}',
         selectedFigure: '',
         fallbackTheme: '勇气与行动',
         nextCursor: 1,
@@ -104,6 +126,61 @@ void main() {
 
       expect(result.source, '出处待考');
       expect(result.theme, '勇气与行动');
+      expect(result.practiceActivities.single.steps, hasLength(1));
+    });
+
+    test('normalizes provider variants for multiple practice activities', () {
+      final result = QuoteAiService.parseResponse(
+        '''{
+          "quote":"认识你自己。",
+          "author":"苏格拉底",
+          "实践活动":[
+            {
+              "活动名称":"缺点观察实验",
+              "体验目标":"觉察自我评价如何形成",
+              "实践内容":"选一个确实存在但风险很低的小缺点，只写事实描述，不写人格定论。",
+              "复盘问题":"我把事实扩大成了什么结论？"
+            },
+            "请信任的人只描述他观察到的一个具体行为；先复述，不急着辩解。"
+          ]
+        }''',
+        selectedFigure: '苏格拉底',
+        fallbackTheme: '自我认识',
+        nextCursor: 2,
+      );
+
+      expect(result.practiceActivities, hasLength(2));
+      expect(result.practiceActivities.first.title, '缺点观察实验');
+      expect(result.practiceActivities.first.reflectionQuestions, hasLength(1));
+      expect(result.practiceActivities.last.steps.single, contains('具体行为'));
+    });
+
+    test('rejects a quote without an executable practice activity', () {
+      expect(
+        () => QuoteAiService.parseResponse(
+          '{"quote":"保持前进。","author":"某思想家"}',
+          selectedFigure: '',
+          fallbackTheme: '',
+          nextCursor: 1,
+        ),
+        throwsFormatException,
+      );
+    });
+
+    test('accepts a provider that returns activities as encoded JSON', () {
+      final result = QuoteAiService.parseResponse(
+        r'''{
+          "quote":"一步也是前进。",
+          "author":"某思想家",
+          "practice_activities":"[{\"title\":\"最小一步\",\"steps\":[{\"step\":\"把任务缩小成两分钟内能完成的第一个动作。\"}]}]"
+        }''',
+        selectedFigure: '',
+        fallbackTheme: '行动',
+        nextCursor: 3,
+      );
+
+      expect(result.practiceActivities.single.title, '最小一步');
+      expect(result.practiceActivities.single.steps.single, contains('两分钟'));
     });
 
     test('rejects a response attributed to a different selected person', () {

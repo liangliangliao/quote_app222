@@ -179,6 +179,58 @@ class QuoteAiTaskConfig {
   }
 }
 
+class QuotePracticeActivity {
+  final String title;
+  final String conceptToExperience;
+  final String duration;
+  final String setting;
+  final List<String> steps;
+  final String experienceFocus;
+  final List<String> reflectionQuestions;
+  final String inspiration;
+
+  const QuotePracticeActivity({
+    required this.title,
+    required this.conceptToExperience,
+    required this.duration,
+    required this.setting,
+    required this.steps,
+    required this.experienceFocus,
+    required this.reflectionQuestions,
+    required this.inspiration,
+  });
+
+  String formatForReading(int index) {
+    final lines = <String>[
+      '活动 $index｜${title.isEmpty ? '把概念带回现实' : title}',
+    ];
+    if (conceptToExperience.isNotEmpty) {
+      lines.add('要体验的概念：$conceptToExperience');
+    }
+    if (duration.isNotEmpty) lines.add('建议时长：$duration');
+    if (setting.isNotEmpty) lines.add('场景与准备：$setting');
+    if (steps.isNotEmpty) {
+      lines.add('行动步骤：');
+      for (var stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+        lines.add('${stepIndex + 1}. ${steps[stepIndex]}');
+      }
+    }
+    if (experienceFocus.isNotEmpty) {
+      lines.add('体验时重点观察：$experienceFocus');
+    }
+    if (inspiration.isNotEmpty) {
+      lines.add('借鉴或类比：$inspiration');
+    }
+    if (reflectionQuestions.isNotEmpty) {
+      lines.add('完成后复盘：');
+      for (final question in reflectionQuestions) {
+        lines.add('• $question');
+      }
+    }
+    return lines.join('\n');
+  }
+}
+
 class GeneratedQuote {
   final String content;
   final String author;
@@ -189,6 +241,7 @@ class GeneratedQuote {
   final String problemAddressed;
   final String relatedPerson;
   final String relatedThought;
+  final List<QuotePracticeActivity> practiceActivities;
   final String sourceConfidence;
   final String avatarSearchQuery;
   final String avatarSourceUrl;
@@ -206,6 +259,7 @@ class GeneratedQuote {
     required this.problemAddressed,
     required this.relatedPerson,
     required this.relatedThought,
+    required this.practiceActivities,
     required this.sourceConfidence,
     required this.avatarSearchQuery,
     required this.avatarSourceUrl,
@@ -222,6 +276,14 @@ class GeneratedQuote {
     if (relatedThought.isNotEmpty) {
       final prefix = relatedPerson.isEmpty ? '高度相关的思想' : '关联思想（$relatedPerson）';
       sections.add('$prefix：$relatedThought');
+    }
+    if (practiceActivities.isNotEmpty) {
+      final activities = practiceActivities
+          .asMap()
+          .entries
+          .map((entry) => entry.value.formatForReading(entry.key + 1))
+          .join('\n\n');
+      sections.add('现实实践：把抽象概念变成亲身经验\n$activities');
     }
     if (sourceConfidence.isNotEmpty) sections.add('出处可信度：$sourceConfidence');
     return sections.join('\n\n');
@@ -244,6 +306,7 @@ class GeneratedQuote {
       problemAddressed: problemAddressed,
       relatedPerson: relatedPerson,
       relatedThought: relatedThought,
+      practiceActivities: practiceActivities,
       sourceConfidence: sourceConfidence,
       avatarSearchQuery: avatarSearchQuery,
       avatarSourceUrl:
@@ -284,8 +347,8 @@ class QuoteAiService {
       prompt: prompt,
       purpose: 'quote_ai.structured_generation',
       systemPrompt:
-          '你是严谨的名言研究与思想分析助手。只返回一个合法 JSON 对象；不得编造名言、作者或具体出处，不确定时必须明确标注“出处待考”。',
-      maxTokens: 2200,
+          '你是严谨的名言研究、思想分析与现实实践设计助手。只返回一个合法 JSON 对象；不得编造名言、作者、具体出处或历史事实，不确定时必须明确标注“出处待考”。实践活动必须安全、具体、可自愿停止。',
+      maxTokens: 3200,
       expectJson: true,
       temperature: 0.55,
     );
@@ -367,8 +430,11 @@ class QuoteAiService {
 4. 必须忠于可核验的原意。出处不确定时 source 写“出处待考”，source_confidence 写明原因；禁止为了显得完整而编造书名、演讲、年份或章节。
 5. analysis 要解释作者为何这样说及其思想语境；problem_addressed 要说明它试图解决、纠正或应对什么问题。
 6. related_person 与 related_thought 要给出最容易由此联想到的另一位人物及其高度相关思想，并说明关键联系或差异。
-7. avatar_search_query 返回适合在维基百科检索人物肖像的名称（优先通行中文名，可附原文名）。avatar_url 只有在确信是 Wikimedia/Wikipedia 的人物肖像直链时才填写，否则留空。
-8. 只返回 JSON，不要 Markdown、代码围栏或额外说明。
+7. practice_activities 必须包含 1 至 3 个实践活动，把这句名言中的抽象概念转化为用户能在现实中亲自完成、观察和感受的经验。至少一个活动应当今天就能开始，通常可在 5 至 30 分钟内完成。不要只给建议、观点或阅读清单；必须给出有先后顺序、可以观察到是否完成的动作，以及体验重点和复盘问题。
+8. 实践活动可以准确借鉴古今历史事件或典故，也可以借用电影人物、小说、文学、新闻、神话或艺术作品进行类比、角色模拟与情境想象；必须明确它是史实、作品情节、神话还是虚构模拟，不得把虚构当史实。没有可靠或真正相关的素材时，inspiration 留空，不要硬凑。
+9. 活动应让用户在感受、选择、行动及结果中理解概念，而不是要求用户证明名言必然正确。活动必须低风险、尊重本人和他人同意，不得包含违法、危险、自伤、羞辱、强迫公开隐私、冒充医疗治疗或故意诱发创伤的内容；用户应可随时暂停。
+10. avatar_search_query 返回适合在维基百科检索人物肖像的名称（优先通行中文名，可附原文名）。avatar_url 只有在确信是 Wikimedia/Wikipedia 的人物肖像直链时才填写，否则留空。
+11. 只返回 JSON，不要 Markdown、代码围栏或额外说明。
 
 JSON 字段必须完整：
 {
@@ -381,6 +447,18 @@ JSON 字段必须完整：
   "problem_addressed": "试图解决或应对的问题",
   "related_person": "相关人物",
   "related_thought": "相关人物的思想及联系",
+  "practice_activities": [
+    {
+      "title": "实践活动名称",
+      "concept_to_experience": "希望用户亲身体验的抽象概念或内在张力",
+      "duration": "预计时长",
+      "setting": "适合的场景、材料或准备；不需要时写无",
+      "steps": ["具体步骤1", "具体步骤2", "具体步骤3"],
+      "experience_focus": "过程中要留意的身体感受、念头、选择或现实变化",
+      "reflection_questions": ["完成后的复盘问题1", "复盘问题2"],
+      "inspiration": "可选：史实/典故/电影/小说/新闻/神话/艺术/类比/原创情境，并明确类型；无则留空"
+    }
+  ],
   "source_confidence": "高/中/低及简短理由",
   "avatar_search_query": "人物肖像搜索词",
   "avatar_url": "可信的 Wikimedia/Wikipedia 图片直链或空字符串"
@@ -441,6 +519,10 @@ JSON 字段必须完整：
       'avatarSearchQuery',
       '头像搜索词',
     ]);
+    final practiceActivities = _readPracticeActivities(map);
+    if (practiceActivities.isEmpty) {
+      throw const FormatException('AI 返回缺少可执行的 practice_activities');
+    }
 
     return GeneratedQuote(
       content: content,
@@ -473,6 +555,7 @@ JSON 字段必须完整：
         'relatedThought',
         '相关思想',
       ]),
+      practiceActivities: practiceActivities,
       sourceConfidence: _readString(map, const <String>[
         'source_confidence',
         'sourceConfidence',
@@ -559,6 +642,186 @@ JSON 字段必须完整：
       }
     }
     return '';
+  }
+
+  static List<QuotePracticeActivity> _readPracticeActivities(
+    Map<String, dynamic> map,
+  ) {
+    dynamic raw;
+    for (final key in const <String>[
+      'practice_activities',
+      'practiceActivities',
+      'practice_activity',
+      'practice',
+      'activities',
+      '实践活动',
+      '现实实践',
+    ]) {
+      if (map[key] != null) {
+        raw = map[key];
+        break;
+      }
+    }
+    if (raw is String) {
+      final encoded = raw.trim();
+      if (encoded.startsWith('[') || encoded.startsWith('{')) {
+        try {
+          final decoded = jsonDecode(encoded);
+          if (decoded is List || decoded is Map) raw = decoded;
+        } catch (_) {
+          // Keep a normal string as a single executable activity.
+        }
+      }
+    }
+    if (raw is Map && raw['activities'] != null) raw = raw['activities'];
+    final values = raw is List ? raw : <dynamic>[raw];
+    final result = <QuotePracticeActivity>[];
+    for (final value in values) {
+      if (result.length >= 3) break;
+      if (value is String) {
+        final step = value.trim();
+        if (step.isEmpty) continue;
+        result.add(
+          QuotePracticeActivity(
+            title: '把概念带回现实',
+            conceptToExperience: '',
+            duration: '',
+            setting: '',
+            steps: <String>[step],
+            experienceFocus: '',
+            reflectionQuestions: const <String>[],
+            inspiration: '',
+          ),
+        );
+        continue;
+      }
+      if (value is! Map) continue;
+      final activity = Map<String, dynamic>.from(value);
+      var steps = _readTextList(
+        _firstValue(activity, const <String>[
+          'steps',
+          'actions',
+          'activity_steps',
+          '行动步骤',
+          '活动步骤',
+          '步骤',
+        ]),
+      );
+      if (steps.isEmpty) {
+        final singleAction = _readString(activity, const <String>[
+          'activity',
+          'action',
+          'exercise',
+          '实践内容',
+          '实践方式',
+        ]);
+        if (singleAction.isNotEmpty) steps = <String>[singleAction];
+      }
+      if (steps.isEmpty) continue;
+      result.add(
+        QuotePracticeActivity(
+          title: _readString(activity, const <String>[
+            'title',
+            'name',
+            '活动名称',
+            '标题',
+          ]),
+          conceptToExperience: _readString(activity, const <String>[
+            'concept_to_experience',
+            'conceptToExperience',
+            'concept',
+            'purpose',
+            '体验概念',
+            '体验目标',
+          ]),
+          duration: _readString(activity, const <String>[
+            'duration',
+            'time',
+            '预计时长',
+            '时长',
+          ]),
+          setting: _readString(activity, const <String>[
+            'setting',
+            'context',
+            'materials',
+            '场景与准备',
+            '场景',
+            '准备',
+          ]),
+          steps: steps.take(8).toList(growable: false),
+          experienceFocus: _readString(activity, const <String>[
+            'experience_focus',
+            'experienceFocus',
+            'observation',
+            '体验重点',
+            '观察重点',
+          ]),
+          reflectionQuestions: _readTextList(
+            _firstValue(activity, const <String>[
+              'reflection_questions',
+              'reflectionQuestions',
+              'reflection',
+              '复盘问题',
+              '反思问题',
+            ]),
+          ).take(4).toList(growable: false),
+          inspiration: _readString(activity, const <String>[
+            'inspiration',
+            'reference',
+            'analogy',
+            'story',
+            '借鉴与类比',
+            '灵感来源',
+            '参考素材',
+          ]),
+        ),
+      );
+    }
+    return List<QuotePracticeActivity>.unmodifiable(result);
+  }
+
+  static dynamic _firstValue(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      if (map[key] != null) return map[key];
+    }
+    return null;
+  }
+
+  static List<String> _readTextList(dynamic value) {
+    final result = <String>[];
+    void addItem(dynamic item) {
+      if (item == null) return;
+      if (item is List) {
+        for (final nested in item) {
+          addItem(nested);
+        }
+        return;
+      }
+      final text = item is Map
+          ? _readString(Map<String, dynamic>.from(item), const <String>[
+              'text',
+              'step',
+              'action',
+              'question',
+              '内容',
+              '步骤',
+              '问题',
+            ])
+          : item.toString().trim();
+      if (text.isEmpty || text.toLowerCase() == 'null') return;
+      final lines =
+          text.contains('\n') ? text.split(RegExp(r'\r?\n+')) : <String>[text];
+      for (final line in lines) {
+        final cleaned =
+            line.replaceFirst(RegExp(r'^\s*(?:[-*•]|\d+[.)、])\s*'), '').trim();
+        if (cleaned.isNotEmpty && !result.contains(cleaned)) {
+          result.add(cleaned);
+        }
+      }
+    }
+
+    addItem(value);
+    return result;
   }
 
   static bool _trustedWikimediaUrl(String value) {
