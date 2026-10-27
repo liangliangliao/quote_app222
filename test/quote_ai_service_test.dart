@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/services/quote_ai_service.dart';
 
@@ -111,6 +116,243 @@ void main() {
         ),
         throwsFormatException,
       );
+    });
+  });
+
+  group('quote avatar resolution', () {
+    test('maps Chinese author names to packaged portraits', () {
+      expect(
+        QuoteAvatarAssetResolver.forAuthor('尼采'),
+        'assets/avatars/Friedrich Nietzsche.jpg',
+      );
+      expect(
+        QuoteAvatarAssetResolver.forAuthor('——威廉·詹姆斯《心理学原理》'),
+        'assets/avatars/250px-William_James_b1842c.jpg',
+      );
+      expect(QuoteAvatarAssetResolver.forAuthor('不存在的人物'), isEmpty);
+      expect(
+        QuoteAvatarDownloader.isIdentityVerifiedLocalPath(
+          '/data/quote_avatars/quote_avatar_old.jpg',
+        ),
+        isFalse,
+      );
+    });
+
+    test(
+      'ignores an unverified preferred URL and falls back to the original',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'quote-avatar-test-',
+        );
+        addTearDown(() => directory.delete(recursive: true));
+        final requested = <Uri>[];
+        const thumbnail =
+            'https://thumb.wikimedia.org/wikipedia/commons/thumb/nietzsche.jpg';
+        const original =
+            'https://upload.wikimedia.org/wikipedia/commons/nietzsche.jpg';
+
+        final downloader = QuoteAvatarDownloader(
+          clientFactory: () => MockClient((request) async {
+            requested.add(request.url);
+            if (request.url.host == 'www.wikidata.org') {
+              return http.Response(
+                jsonEncode(<String, dynamic>{
+                  'claims': <String, dynamic>{
+                    'P31': <Map<String, dynamic>>[
+                      <String, dynamic>{
+                        'mainsnak': <String, dynamic>{
+                          'datavalue': <String, dynamic>{
+                            'value': <String, String>{'id': 'Q5'},
+                          },
+                        },
+                      },
+                    ],
+                  },
+                }),
+                200,
+                headers: const <String, String>{
+                  'content-type': 'application/json',
+                },
+              );
+            }
+            if (request.url.path == '/w/api.php') {
+              return http.Response(
+                jsonEncode(<String, dynamic>{
+                  'query': <String, dynamic>{
+                    'pages': <Map<String, dynamic>>[
+                      <String, dynamic>{
+                        'title': '弗里德里希·尼采',
+                        'index': 1,
+                        'thumbnail': <String, String>{'source': thumbnail},
+                        'original': <String, String>{'source': original},
+                        'pageprops': <String, String>{
+                          'wikibase_item': 'Q9358',
+                        },
+                      },
+                    ],
+                  },
+                }),
+                200,
+                headers: const <String, String>{
+                  'content-type': 'application/json',
+                },
+              );
+            }
+            if (request.url.toString() == thumbnail) {
+              return http.Response('missing', 404);
+            }
+            if (request.url.toString() == original) {
+              return http.Response.bytes(
+                const <int>[0xff, 0xd8, 0xff, 0xd9],
+                200,
+                headers: const <String, String>{'content-type': 'image/jpeg'},
+              );
+            }
+            return http.Response(
+              '<html>article</html>',
+              200,
+              headers: const <String, String>{'content-type': 'text/html'},
+            );
+          }),
+          documentsDirectory: () async => directory,
+        );
+
+        final result = await downloader.resolveAndDownload(
+          author: '尼采',
+          searchQuery: '弗里德里希·尼采 Friedrich Nietzsche',
+          preferredUrl: 'https://zh.wikipedia.org/wiki/弗里德里希·尼采',
+        );
+
+        expect(result, isNotNull);
+        expect(result!.sourceUrl, original);
+        expect(await File(result.path).readAsBytes(), const <int>[
+          0xff,
+          0xd8,
+          0xff,
+          0xd9,
+        ]);
+        expect(requested.where((uri) => uri.path == '/w/api.php'), isNotEmpty);
+        expect(
+          requested.any((uri) => uri.queryParameters.containsKey('gsrwhat')),
+          isFalse,
+        );
+        expect(
+          requested.any(
+            (uri) => uri.toString() == 'https://zh.wikipedia.org/wiki/弗里德里希·尼采',
+          ),
+          isFalse,
+        );
+        expect(
+          QuoteAvatarDownloader.isIdentityVerifiedLocalPath(result.path),
+          isTrue,
+        );
+      },
+    );
+
+    test('rejects buildings and non-human entities before downloading',
+        () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'quote-avatar-identity-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final requested = <Uri>[];
+      const building =
+          'https://upload.wikimedia.org/wikipedia/commons/auschwitz.jpg';
+      const institute =
+          'https://upload.wikimedia.org/wikipedia/commons/frankl-institute.jpg';
+      const portrait =
+          'https://upload.wikimedia.org/wikipedia/commons/Viktor_Frankl2.jpg';
+
+      final downloader = QuoteAvatarDownloader(
+        clientFactory: () => MockClient((request) async {
+          requested.add(request.url);
+          if (request.url.host == 'www.wikidata.org') {
+            final entity = request.url.queryParameters['entity'];
+            return http.Response(
+              jsonEncode(<String, dynamic>{
+                'claims': <String, dynamic>{
+                  'P31': <Map<String, dynamic>>[
+                    <String, dynamic>{
+                      'mainsnak': <String, dynamic>{
+                        'datavalue': <String, dynamic>{
+                          'value': <String, String>{
+                            'id': entity == 'Q154723' ? 'Q5' : 'Q43229',
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              }),
+              200,
+              headers: const <String, String>{
+                'content-type': 'application/json',
+              },
+            );
+          }
+          if (request.url.path == '/w/api.php') {
+            return http.Response(
+              jsonEncode(<String, dynamic>{
+                'query': <String, dynamic>{
+                  // MediaWiki does not guarantee this JSON list is already in
+                  // search-rank order. The old implementation picked Auschwitz.
+                  'pages': <Map<String, dynamic>>[
+                    <String, dynamic>{
+                      'title': '奥斯威辛集中营',
+                      'index': 3,
+                      'original': <String, String>{'source': building},
+                      'pageprops': <String, String>{'wikibase_item': 'Q7341'},
+                    },
+                    <String, dynamic>{
+                      'title': 'Viktor Frankl',
+                      'index': 0,
+                      'original': <String, String>{'source': institute},
+                      'pageprops': <String, String>{
+                        'wikibase_item': 'Q999999',
+                      },
+                    },
+                    <String, dynamic>{
+                      'title': '维克多·弗兰克',
+                      'index': 1,
+                      'original': <String, String>{'source': portrait},
+                      'pageprops': <String, String>{
+                        'wikibase_item': 'Q154723',
+                      },
+                    },
+                  ],
+                },
+              }),
+              200,
+              headers: const <String, String>{
+                'content-type': 'application/json',
+              },
+            );
+          }
+          if (request.url.toString() == portrait) {
+            return http.Response.bytes(
+              const <int>[0xff, 0xd8, 0xff, 0xd9],
+              200,
+              headers: const <String, String>{'content-type': 'image/jpeg'},
+            );
+          }
+          return http.Response('wrong image', 200, headers: const {
+            'content-type': 'image/jpeg',
+          });
+        }),
+        documentsDirectory: () async => directory,
+      );
+
+      final result = await downloader.resolveAndDownload(
+        author: '维克多·弗兰克尔',
+        searchQuery: '维克多·弗兰克尔 Viktor Frankl',
+        preferredUrl: building,
+      );
+
+      expect(result, isNotNull);
+      expect(result!.sourceUrl, portrait);
+      expect(requested, isNot(contains(Uri.parse(building))));
+      expect(requested, isNot(contains(Uri.parse(institute))));
+      expect(requested, contains(Uri.parse(portrait)));
     });
   });
 }

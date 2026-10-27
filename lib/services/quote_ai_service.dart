@@ -106,12 +106,11 @@ class QuoteAiTaskConfig {
         _readStringList(values['custom_figures'] ?? values['customFigures']),
       ),
       theme: (values['theme'] ?? '').toString().trim(),
-      userDescription:
-          (values['user_description'] ??
-                  values['userDescription'] ??
-                  legacyPrompt)
-              .toString()
-              .trim(),
+      userDescription: (values['user_description'] ??
+              values['userDescription'] ??
+              legacyPrompt)
+          .toString()
+          .trim(),
       intervalMinutes: interval,
     );
   }
@@ -127,16 +126,16 @@ class QuoteAiTaskConfig {
   }
 
   String encode() => jsonEncode(<String, dynamic>{
-    'version': currentVersion,
-    'auto_enabled': autoEnabled,
-    'save_locally': saveLocally,
-    'download_avatar': downloadAvatar,
-    'selected_figures': selectedFigures,
-    'custom_figures': customFigures,
-    'theme': theme,
-    'user_description': userDescription,
-    'interval_minutes': intervalMinutes.clamp(15, 24 * 60),
-  });
+        'version': currentVersion,
+        'auto_enabled': autoEnabled,
+        'save_locally': saveLocally,
+        'download_avatar': downloadAvatar,
+        'selected_figures': selectedFigures,
+        'custom_figures': customFigures,
+        'theme': theme,
+        'user_description': userDescription,
+        'interval_minutes': intervalMinutes.clamp(15, 24 * 60),
+      });
 
   static List<String> parseFigureInput(String value) {
     return normalizeFigures(value.split(RegExp(r'[,，、;；\n]+')));
@@ -230,6 +229,11 @@ class GeneratedQuote {
 
   GeneratedQuote withAvatar(DownloadedQuoteAvatar? avatar) {
     if (avatar == null) return this;
+    return withAvatarPath(avatar.path, sourceUrl: avatar.sourceUrl);
+  }
+
+  GeneratedQuote withAvatarPath(String path, {String sourceUrl = ''}) {
+    if (path.trim().isEmpty) return this;
     return GeneratedQuote(
       content: content,
       author: author,
@@ -242,8 +246,9 @@ class GeneratedQuote {
       relatedThought: relatedThought,
       sourceConfidence: sourceConfidence,
       avatarSearchQuery: avatarSearchQuery,
-      avatarSourceUrl: avatar.sourceUrl,
-      avatarPath: avatar.path,
+      avatarSourceUrl:
+          sourceUrl.trim().isEmpty ? avatarSourceUrl : sourceUrl.trim(),
+      avatarPath: path.trim(),
       selectedFigure: selectedFigure,
       nextCursor: nextCursor,
     );
@@ -257,8 +262,8 @@ class QuoteAiService {
   QuoteAiService({
     UnifiedAiService? ai,
     QuoteAvatarDownloader? avatarDownloader,
-  }) : _ai = ai ?? UnifiedAiService(),
-       _avatarDownloader = avatarDownloader ?? QuoteAvatarDownloader();
+  })  : _ai = ai ?? UnifiedAiService(),
+        _avatarDownloader = avatarDownloader ?? QuoteAvatarDownloader();
 
   Future<GeneratedQuote> generate(Map<String, dynamic> task) async {
     final config = QuoteAiTaskConfig.fromTask(task);
@@ -302,9 +307,24 @@ class QuoteAiService {
           searchQuery: result.avatarSearchQuery,
           preferredUrl: result.avatarSourceUrl,
         );
-        result = result.withAvatar(avatar);
+        if (avatar != null) {
+          result = result.withAvatar(avatar);
+        } else {
+          final bundled = QuoteAvatarAssetResolver.forAuthor(result.author);
+          if (bundled.isNotEmpty) {
+            result = result.withAvatarPath(bundled);
+            await DLog.i('QUOTE_AI', '网络头像暂不可用，已使用内置人物头像：${result.author}');
+          } else {
+            await DLog.w('QUOTE_AI', '未找到可用人物头像：${result.author}；名言正文仍会保存');
+          }
+        }
       } catch (error) {
-        await DLog.w('QUOTE_AI', '人物头像下载失败，名言仍会保存：$error');
+        final bundled = QuoteAvatarAssetResolver.forAuthor(result.author);
+        if (bundled.isNotEmpty) result = result.withAvatarPath(bundled);
+        await DLog.w(
+          'QUOTE_AI',
+          '人物头像下载失败${bundled.isEmpty ? '' : '，已使用内置头像'}；名言仍会保存：$error',
+        );
       }
     }
     return result;
@@ -398,9 +418,7 @@ JSON 字段必须完整：
     }
     if (expectedAuthor.isNotEmpty &&
         !_sameSelectedAuthor(expectedAuthor, author)) {
-      throw FormatException(
-        'AI 返回作者“$author”与本轮指定人物“$expectedAuthor”不一致',
-      );
+      throw FormatException('AI 返回作者“$author”与本轮指定人物“$expectedAuthor”不一致');
     }
     var source = _readString(map, const <String>[
       'source',
@@ -553,9 +571,10 @@ JSON 字段必须完整：
   }
 
   static bool _sameSelectedAuthor(String expected, String actual) {
-    String normalize(String value) => value
-        .toLowerCase()
-        .replaceAll(RegExp(r'[\s·•・\-_.，,。；;：:（）()《》〈〉]'), '');
+    String normalize(String value) => value.toLowerCase().replaceAll(
+          RegExp(r'[\s·•・\-_.，,。；;：:（）()《》〈〉]'),
+          '',
+        );
 
     final expectedKey = normalize(expected);
     final actualKey = normalize(actual);
@@ -573,91 +592,325 @@ class DownloadedQuoteAvatar {
   const DownloadedQuoteAvatar({required this.path, required this.sourceUrl});
 }
 
+/// Resolves packaged portraits without depending on the network. These aliases
+/// also bridge Chinese author names returned by the quote task with the English
+/// filenames already shipped in assets/avatars.
+class QuoteAvatarAssetResolver {
+  static const Map<String, String> _assetsByAlias = <String, String>{
+    'talbenshahar': 'assets/avatars/talbenshahar .jpeg',
+    '泰勒本沙哈尔': 'assets/avatars/talbenshahar .jpeg',
+    '泰尔本沙哈尔': 'assets/avatars/talbenshahar .jpeg',
+    '本沙哈尔': 'assets/avatars/talbenshahar .jpeg',
+    'albertcamus': 'assets/avatars/Albert_Camus_1945_(cropped).jpg',
+    '阿尔贝加缪': 'assets/avatars/Albert_Camus_1945_(cropped).jpg',
+    '加缪': 'assets/avatars/Albert_Camus_1945_(cropped).jpg',
+    '卡缪': 'assets/avatars/Albert_Camus_1945_(cropped).jpg',
+    'friedrichnietzsche': 'assets/avatars/Friedrich Nietzsche.jpg',
+    '弗里德里希尼采': 'assets/avatars/Friedrich Nietzsche.jpg',
+    '尼采': 'assets/avatars/Friedrich Nietzsche.jpg',
+    'williamjames': 'assets/avatars/250px-William_James_b1842c.jpg',
+    '威廉詹姆斯': 'assets/avatars/250px-William_James_b1842c.jpg',
+    'immanuelkant': 'assets/avatars/Immanuel Kant.jpg',
+    '伊曼努尔康德': 'assets/avatars/Immanuel Kant.jpg',
+    '康德': 'assets/avatars/Immanuel Kant.jpg',
+    'arthurschopenhauer': 'assets/avatars/schopenhauer.jpg',
+    '亚瑟叔本华': 'assets/avatars/schopenhauer.jpg',
+    '叔本华': 'assets/avatars/schopenhauer.jpg',
+    'wangyangming': 'assets/avatars/wangyangming.jpeg',
+    '王阳明': 'assets/avatars/wangyangming.jpeg',
+    'eckharttolle': 'assets/avatars/eckhart tolle.jpg',
+    '埃克哈特托利': 'assets/avatars/eckhart tolle.jpg',
+    '艾克哈特托利': 'assets/avatars/eckhart tolle.jpg',
+  };
+
+  static String forAuthor(String author) {
+    final normalized = _normalize(author);
+    if (normalized.isEmpty) return '';
+    for (final entry in _assetsByAlias.entries) {
+      final alias = _normalize(entry.key);
+      if (normalized == alias ||
+          normalized.contains(alias) ||
+          (normalized.length >= 4 && alias.contains(normalized))) {
+        return entry.value;
+      }
+    }
+    return '';
+  }
+
+  static String _normalize(String value) =>
+      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\u4e00-\u9fff]+'), '');
+}
+
 /// Resolves a public portrait through Wikipedia's pageimages API and stores a
-/// bounded image file in the app documents directory. AI-provided URLs are
-/// accepted only from Wikimedia/Wikipedia hosts.
+/// bounded image file in the app documents directory. Search candidates must
+/// match the author name and be verified by Wikidata as a human (Q5).
 class QuoteAvatarDownloader {
   static const int _maximumBytes = 6 * 1024 * 1024;
+
+  final http.Client Function() _clientFactory;
+  final Future<Directory> Function() _documentsDirectory;
+
+  QuoteAvatarDownloader({
+    http.Client Function()? clientFactory,
+    Future<Directory> Function()? documentsDirectory,
+  })  : _clientFactory = clientFactory ?? http.Client.new,
+        _documentsDirectory =
+            documentsDirectory ?? getApplicationDocumentsDirectory;
 
   Future<DownloadedQuoteAvatar?> resolveAndDownload({
     required String author,
     required String searchQuery,
     required String preferredUrl,
   }) async {
-    final client = http.Client();
+    final client = _clientFactory();
     try {
-      String url = '';
-      if (QuoteAiService._trustedWikimediaUrl(preferredUrl)) {
-        url = preferredUrl.trim();
+      final attemptedUrls = <String>{};
+      final humanEntityCache = <String, bool>{};
+      Future<DownloadedQuoteAvatar?> tryUrl(String value) async {
+        final url = value.trim();
+        if (!QuoteAiService._trustedWikimediaUrl(url) ||
+            !attemptedUrls.add(url)) {
+          return null;
+        }
+        try {
+          return await _download(client, author: author, url: url);
+        } catch (_) {
+          return null;
+        }
       }
-      if (url.isEmpty) {
-        final query = searchQuery.trim().isEmpty
-            ? author.trim()
-            : searchQuery.trim();
-        if (query.isEmpty) return null;
-        url = await _resolveWikipediaImage(client, query);
+
+      // Do not download an AI-provided URL before independently resolving the
+      // author. A syntactically valid Wikimedia URL may still point at a book,
+      // institution, memorial, or another person.
+      final identityAliases = _identityAliases(author, searchQuery);
+      final queries = <String>[];
+      for (final value in <String>[
+        author,
+        ...identityAliases,
+        searchQuery,
+      ]) {
+        final query = value.trim();
+        if (query.isNotEmpty && !queries.contains(query)) queries.add(query);
       }
-      if (url.isEmpty || !QuoteAiService._trustedWikimediaUrl(url)) return null;
-      return _download(client, author: author, url: url);
+      for (final query in queries) {
+        for (final language in const <String>['zh', 'en']) {
+          final urls = await _resolveWikipediaImages(
+            client,
+            query,
+            language: language,
+            identityAliases: identityAliases,
+            humanEntityCache: humanEntityCache,
+          );
+          for (final url in urls) {
+            final downloaded = await tryUrl(url);
+            if (downloaded != null) return downloaded;
+          }
+        }
+      }
+      return null;
     } finally {
       client.close();
     }
   }
 
-  Future<String> _resolveWikipediaImage(
+  Future<List<String>> _resolveWikipediaImages(
     http.Client client,
-    String query,
-  ) async {
-    for (final language in const <String>['zh', 'en']) {
-      final uri = Uri.https(
-        '$language.wikipedia.org',
-        '/w/api.php',
-        <String, String>{
-          'action': 'query',
-          'generator': 'search',
-          'gsrsearch': query,
-          'gsrnamespace': '0',
-          'gsrlimit': '3',
-          'prop': 'pageimages',
-          'piprop': 'thumbnail|original',
-          'pithumbsize': '640',
-          'redirects': '1',
-          'format': 'json',
-          'formatversion': '2',
-        },
-      );
-      try {
-        final response = await client
-            .get(
-              uri,
-              headers: const <String, String>{
-                'Accept': 'application/json',
-                'User-Agent': 'quote_app/0.1 (portrait lookup)',
-              },
-            )
-            .timeout(const Duration(seconds: 15));
-        if (response.statusCode < 200 || response.statusCode >= 300) continue;
-        final decoded = jsonDecode(response.body);
-        if (decoded is! Map) continue;
-        final queryMap = decoded['query'];
-        if (queryMap is! Map || queryMap['pages'] is! List) continue;
-        for (final page in queryMap['pages'] as List) {
-          if (page is! Map) continue;
-          final thumbnail = page['thumbnail'];
-          final original = page['original'];
-          var candidate = thumbnail is Map
-              ? (thumbnail['source'] ?? '').toString()
-              : '';
-          if (candidate.isEmpty && original is Map) {
-            candidate = (original['source'] ?? '').toString();
-          }
-          if (QuoteAiService._trustedWikimediaUrl(candidate)) return candidate;
-        }
-      } catch (_) {
-        // Try the English Wikipedia fallback before giving up.
+    String query, {
+    required String language,
+    required List<String> identityAliases,
+    required Map<String, bool> humanEntityCache,
+  }) async {
+    final result = <String>[];
+    void addCandidate(dynamic value) {
+      final candidate = (value ?? '').toString().trim();
+      if (QuoteAiService._trustedWikimediaUrl(candidate) &&
+          !result.contains(candidate)) {
+        result.add(candidate);
       }
     }
-    return '';
+
+    final uri =
+        Uri.https('$language.wikipedia.org', '/w/api.php', <String, String>{
+      'action': 'query',
+      'generator': 'search',
+      'gsrsearch': query,
+      'gsrnamespace': '0',
+      'gsrlimit': '5',
+      'prop': 'pageimages|pageprops',
+      'piprop': 'thumbnail|original',
+      'pithumbsize': '640',
+      'redirects': '1',
+      'format': 'json',
+      'formatversion': '2',
+    });
+    try {
+      final response = await client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/json',
+          'User-Agent': 'quote_app/0.1 (portrait lookup)',
+        },
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return result;
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return result;
+      final queryMap = decoded['query'];
+      if (queryMap is! Map || queryMap['pages'] is! List) return result;
+      final pages = (queryMap['pages'] as List).whereType<Map>().toList()
+        ..sort((left, right) {
+          final leftIndex = int.tryParse('${left['index'] ?? 9999}') ?? 9999;
+          final rightIndex = int.tryParse('${right['index'] ?? 9999}') ?? 9999;
+          return leftIndex.compareTo(rightIndex);
+        });
+      for (final page in pages) {
+        final title = (page['title'] ?? '').toString();
+        if (!_titleMatchesIdentity(title, identityAliases)) continue;
+        final pageProperties = page['pageprops'];
+        final wikidataId = pageProperties is Map
+            ? (pageProperties['wikibase_item'] ?? '').toString()
+            : '';
+        if (!await _isHumanEntity(
+          client,
+          wikidataId,
+          humanEntityCache,
+        )) {
+          continue;
+        }
+        final thumbnail = page['thumbnail'];
+        final original = page['original'];
+        if (thumbnail is Map) addCandidate(thumbnail['source']);
+        if (original is Map) addCandidate(original['source']);
+      }
+    } catch (_) {
+      // The caller will try the next language or author query.
+    }
+    return result;
+  }
+
+  Future<bool> _isHumanEntity(
+    http.Client client,
+    String wikidataId,
+    Map<String, bool> cache,
+  ) async {
+    if (!RegExp(r'^Q\d+$').hasMatch(wikidataId)) return false;
+    final cached = cache[wikidataId];
+    if (cached != null) return cached;
+    final uri = Uri.https('www.wikidata.org', '/w/api.php', <String, String>{
+      'action': 'wbgetclaims',
+      'entity': wikidataId,
+      'property': 'P31',
+      'format': 'json',
+      'formatversion': '2',
+    });
+    var isHuman = false;
+    try {
+      final response = await client.get(
+        uri,
+        headers: const <String, String>{
+          'Accept': 'application/json',
+          'User-Agent': 'quote_app/0.1 (portrait identity verification)',
+        },
+      ).timeout(const Duration(seconds: 12));
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        final claims = decoded is Map ? decoded['claims'] : null;
+        final instances = claims is Map ? claims['P31'] : null;
+        if (instances is List) {
+          isHuman = instances.any((claim) {
+            if (claim is! Map) return false;
+            final mainSnak = claim['mainsnak'];
+            final dataValue = mainSnak is Map ? mainSnak['datavalue'] : null;
+            final value = dataValue is Map ? dataValue['value'] : null;
+            return value is Map && value['id'] == 'Q5';
+          });
+        }
+      }
+    } catch (_) {
+      // Fail closed: a missing portrait is safer than an unrelated image.
+    }
+    cache[wikidataId] = isHuman;
+    return isHuman;
+  }
+
+  static List<String> _identityAliases(String author, String searchQuery) {
+    final result = <String>[];
+    void add(String value) {
+      final candidate = value.trim();
+      if (candidate.isNotEmpty && !result.contains(candidate)) {
+        result.add(candidate);
+      }
+    }
+
+    add(author);
+    for (final source in <String>[author, searchQuery]) {
+      for (final match in RegExp(
+        r'[\u3400-\u9fff](?:[\u3400-\u9fff·•・\s]*[\u3400-\u9fff])?',
+      ).allMatches(source)) {
+        add(match.group(0) ?? '');
+      }
+      for (final match in RegExp(
+        r"[A-Za-zÀ-ÖØ-öø-ÿ](?:[A-Za-zÀ-ÖØ-öø-ÿ.'’\-\s]*[A-Za-zÀ-ÖØ-öø-ÿ])?",
+      ).allMatches(source)) {
+        add(match.group(0) ?? '');
+      }
+    }
+    return result;
+  }
+
+  static bool _titleMatchesIdentity(String title, List<String> aliases) {
+    final normalizedTitle = _normalizeIdentity(title);
+    if (normalizedTitle.isEmpty) return false;
+    for (final alias in aliases) {
+      final normalizedAlias = _normalizeIdentity(alias);
+      if (normalizedAlias.length < 2) continue;
+      if (normalizedTitle == normalizedAlias) return true;
+      final lengthDifference =
+          (normalizedTitle.length - normalizedAlias.length).abs();
+      if (normalizedAlias.length >= 4 &&
+          lengthDifference <= 2 &&
+          (normalizedTitle.contains(normalizedAlias) ||
+              normalizedAlias.contains(normalizedTitle))) {
+        return true;
+      }
+      final longest = normalizedTitle.length > normalizedAlias.length
+          ? normalizedTitle.length
+          : normalizedAlias.length;
+      if (longest >= 5 &&
+          1 - (_editDistance(normalizedTitle, normalizedAlias) / longest) >=
+              0.80) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static String _normalizeIdentity(String value) =>
+      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\u3400-\u9fff]+'), '');
+
+  static int _editDistance(String left, String right) {
+    if (left == right) return 0;
+    if (left.isEmpty) return right.length;
+    if (right.isEmpty) return left.length;
+    var previous = List<int>.generate(right.length + 1, (index) => index);
+    for (var leftIndex = 0; leftIndex < left.length; leftIndex++) {
+      final current = List<int>.filled(right.length + 1, 0);
+      current[0] = leftIndex + 1;
+      for (var rightIndex = 0; rightIndex < right.length; rightIndex++) {
+        final substitution = previous[rightIndex] +
+            (left.codeUnitAt(leftIndex) == right.codeUnitAt(rightIndex)
+                ? 0
+                : 1);
+        final insertion = current[rightIndex] + 1;
+        final deletion = previous[rightIndex + 1] + 1;
+        current[rightIndex + 1] = substitution < insertion
+            ? (substitution < deletion ? substitution : deletion)
+            : (insertion < deletion ? insertion : deletion);
+      }
+      previous = current;
+    }
+    return previous.last;
   }
 
   Future<DownloadedQuoteAvatar?> _download(
@@ -670,9 +923,8 @@ class QuoteAvatarDownloader {
       'Accept': 'image/*',
       'User-Agent': 'quote_app/0.1 (portrait download)',
     });
-    final response = await client
-        .send(request)
-        .timeout(const Duration(seconds: 20));
+    final response =
+        await client.send(request).timeout(const Duration(seconds: 20));
     if (response.statusCode < 200 || response.statusCode >= 300) return null;
     if ((response.contentLength ?? 0) > _maximumBytes) return null;
 
@@ -688,10 +940,12 @@ class QuoteAvatarDownloader {
         .convert(utf8.encode('${author.trim()}|$url'))
         .toString()
         .substring(0, 24);
-    final documents = await getApplicationDocumentsDirectory();
+    final documents = await _documentsDirectory();
     final directory = Directory(p.join(documents.path, 'quote_avatars'));
     if (!await directory.exists()) await directory.create(recursive: true);
-    final file = File(p.join(directory.path, 'quote_avatar_$digest$extension'));
+    final file = File(
+      p.join(directory.path, 'quote_avatar_v2_$digest$extension'),
+    );
     if (await file.exists() && await file.length() > 0) {
       return DownloadedQuoteAvatar(path: file.path, sourceUrl: url);
     }
@@ -725,5 +979,11 @@ class QuoteAvatarDownloader {
         return extension == '.jpeg' ? '.jpg' : extension;
     }
     return '.jpg';
+  }
+
+  static bool isIdentityVerifiedLocalPath(String value) {
+    final path = value.trim();
+    if (path.isEmpty || path.startsWith('assets/')) return false;
+    return p.basename(path).startsWith('quote_avatar_v2_');
   }
 }

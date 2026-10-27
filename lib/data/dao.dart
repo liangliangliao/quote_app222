@@ -1112,6 +1112,19 @@ Future<List<Map<String,dynamic>>> all({int limit=100, int offset=0, String q=''}
     return uid;
   }
 
+  Future<void> updateAvatarByUid(String quoteUid, String avatarPath) async {
+    final uid = quoteUid.trim();
+    final path = avatarPath.trim();
+    if (uid.isEmpty || path.isEmpty) return;
+    final db = await AppDatabase.instance();
+    await db.update(
+      'quotes',
+      <String, dynamic>{'avatar': path},
+      where: 'quote_uid=?',
+      whereArgs: <Object?>[uid],
+    );
+  }
+
   // Deduplication: return true if content is unique against all existing quotes
   Future<bool> isUnique(String content, {double threshold = 0.90}) async {
     final db = await AppDatabase.instance();

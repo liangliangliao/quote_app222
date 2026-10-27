@@ -1,11 +1,8 @@
 
 import 'dart:async';
-import 'dart:io';
 import 'dart:convert';
-import 'dart:typed_data';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
@@ -17,6 +14,7 @@ import 'package:quote_app/services/quote_frame_theme.dart';
 import 'package:quote_app/services/quote_frame_ai_service.dart';
 import 'package:quote_app/services/quote_calligraphy_settings.dart';
 import 'package:quote_app/services/notification_service.dart';
+import 'package:quote_app/services/quote_ai_service.dart';
 import '../data/dao.dart';
 import '../utils/debug_logger.dart';
 import 'package:quote_app/services/native_guard.dart';
@@ -63,6 +61,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _truncateForLog(String? s, {int maxLen = 140}) {
     if (s == null) return '';
     final str = s;
+    if (str.startsWith('data:image/')) {
+      final comma = str.indexOf(',');
+      final header = comma < 0 ? 'data:image' : str.substring(0, comma);
+      return '$header,<omitted ${str.length} chars>';
+    }
     if (str.length <= maxLen) return str;
     return str.substring(0, maxLen) + '...(truncated)';
   }
@@ -318,6 +321,9 @@ String _extractAuthorName(String author) {
 
 /// Match avatar asset by checking if filename contains author signature (fuzzy).
 Future<String?> _matchAvatarAssetByAuthor(String author) async {
+  final knownAsset = QuoteAvatarAssetResolver.forAuthor(author);
+  if (knownAsset.isNotEmpty) return knownAsset;
+
   final assets = await _listAvatarAssets();
   if (assets.isEmpty) return null;
 
@@ -349,7 +355,7 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
 
   bool _liked = false;
   bool _notifAsked = false;
-  String? _firstBg; // first-frame bg data URI cache
+  final Set<String> _avatarRepairAttempted = <String>{};
 
   // Pinned (fixed) quotes state.  These lists store the loaded fixed quotes for
   // the bottom grey area.  `_pinnedQuotes` holds the current batch of
@@ -374,29 +380,6 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
   static const double _pinnedCardGap = 0;
   double get _pinnedShift => _pinnedCardWidth + _pinnedCardGap;
   double _pinnedAreaExtraWidth = 0.0; // extra width for grey area, expands symmetrically when pin/unpin
-
-  // 将背景图读取为 data URI（base64）。如果加载失败，返回 file uri 路径。
-  Future<String> _getBgDataUrl() async {
-    try {
-      final data = await rootBundle.load('assets/bg-wood-upload.jpg');
-      final bytes = data.buffer.asUint8List();
-      final b64 = base64Encode(bytes);
-      return 'data:image/jpeg;base64,$b64';
-    } catch (_) {
-      // fallback to file uri
-      return 'file:///android_asset/flutter_assets/assets/bg-wood-upload.jpg';
-    }
-  }
-
-  Future<void> _primeFirstBg() async {
-    try {
-      final s = await _getBgDataUrl();
-      if (!mounted) return;
-      setState(() { _firstBg = s; });
-    } catch (_){ }
-  }
-
-
 
   void _openLeftDrawer() {
     try {
@@ -450,7 +433,6 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
       NotificationService.markHomeVisible();
       _checkNotificationPermission();
     });
-    _primeFirstBg();
     unawaited(_initFramePreference());
     QuoteCalligraphySettings.changeTick
         .addListener(_onCalligraphyPreferenceChanged);
@@ -480,24 +462,84 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
 
   // removed redundant lifecycle reload to avoid non-first re-render
 
-  Future<String> _avatarToDataUrl(String raw) async {
-    final s = (raw).toString().trim();
+  Future<String> _resolveAvatarSource(String raw) async {
+    final s = raw.trim();
     if (s.isEmpty) return '';
-    if (s.startsWith('data:') || s.startsWith('http://') || s.startsWith('https://')) return s;
+    if (s.startsWith('data:') ||
+        s.startsWith('http://') ||
+        s.startsWith('https://') ||
+        s.startsWith('assets/')) {
+      return s;
+    }
     try {
       final f = File(s);
-      if (await f.exists()) {
-        final bytes = await f.readAsBytes();
-        String mime = 'image/png';
-        final lower = s.toLowerCase();
-        if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
-        else if (lower.endsWith('.webp')) mime = 'image/webp';
-        else if (lower.endsWith('.gif')) mime = 'image/gif';
-        final b64 = base64Encode(bytes);
-        return 'data:$mime;base64,$b64';
-      }
+      if (await f.exists() && await f.length() > 0) return s;
     } catch (_) {}
     return '';
+  }
+
+  bool _isIdentityVerifiedAvatar(
+    Map<String, dynamic> quote,
+    String author,
+    String avatar,
+  ) {
+    final value = avatar.trim();
+    if (value.isEmpty) return false;
+    if (QuoteAvatarDownloader.isIdentityVerifiedLocalPath(value)) return true;
+    // Covers AI quote rows created before task_type was consistently stored.
+    if (p.basename(value).startsWith('quote_avatar_')) return false;
+    if ((quote['task_type'] ?? '').toString() != 'auto') return true;
+    final bundled = QuoteAvatarAssetResolver.forAuthor(author);
+    if (bundled.isNotEmpty && value == bundled) return true;
+    return false;
+  }
+
+  Future<void> _repairQuoteAvatar(
+    Map<String, dynamic> quote,
+    String author,
+  ) async {
+    final quoteUid = (quote['quote_uid'] ?? '').toString().trim();
+    final taskUid = (quote['task_uid'] ?? '').toString().trim();
+    final key = quoteUid.isNotEmpty
+        ? quoteUid
+        : '${quote['id'] ?? ''}|$author';
+    if (author.trim().isEmpty ||
+        taskUid.isEmpty ||
+        !_avatarRepairAttempted.add(key)) {
+      return;
+    }
+
+    try {
+      final task = await TaskDao().getByUid(taskUid);
+      if (task == null || (task['type'] ?? '').toString() != 'auto') return;
+      if (!QuoteAiTaskConfig.fromTask(task).downloadAvatar) return;
+
+      final avatar = await QuoteAvatarDownloader().resolveAndDownload(
+        author: author,
+        searchQuery: author,
+        preferredUrl: '',
+      );
+      if (avatar == null) {
+        await DLog.w('QUOTE_AI', '首页校验或补全人物头像失败：$author');
+        return;
+      }
+      if (quoteUid.isNotEmpty) {
+        await QuoteDao().updateAvatarByUid(quoteUid, avatar.path);
+      }
+      if (!mounted ||
+          (_latestRow?['quote_uid'] ?? '').toString() != quoteUid) {
+        return;
+      }
+      final source = await _resolveAvatarSource(avatar.path);
+      if (!mounted || source.isEmpty) return;
+      setState(() {
+        _latestRow = <String, dynamic>{...?_latestRow, 'avatar': avatar.path};
+        _todayData = <String, dynamic>{...?_todayData, 'avatarUrl': source};
+      });
+      await DLog.i('QUOTE_AI', '首页已校验、补全并保存人物头像：$author');
+    } catch (error) {
+      await DLog.w('QUOTE_AI', '首页校验或补全人物头像异常：$author；$error');
+    }
   }
 
 
@@ -605,10 +647,23 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         await _checkPinnedState();
         _requestNotifAfterFirstFrame();
       } else {
-        final avatarUrl = await _avatarToDataUrl((latest['avatar'] ?? '').toString());
         // 根据署名和出处组装 author 字段。若存在署名或出处则前缀“——”，否则为空
         final String authorName = (latest['author_name'] ?? latest['author'] ?? '').toString().trim();
         final String source = (latest['source_from'] ?? latest['source'] ?? '').toString().trim();
+        final storedAvatar = (latest['avatar'] ?? '').toString().trim();
+        final storedAvatarVerified =
+            _isIdentityVerifiedAvatar(latest, authorName, storedAvatar);
+        // Old auto-downloaded files were selected without identity checking.
+        // Never render them while the new resolver validates the author again.
+        var avatarUrl = storedAvatarVerified
+            ? await _resolveAvatarSource(storedAvatar)
+            : '';
+        if (avatarUrl.isEmpty) {
+          avatarUrl = (await _matchAvatarAssetByAuthor(authorName)) ?? '';
+        }
+        if (!storedAvatarVerified || avatarUrl.isEmpty) {
+          unawaited(_repairQuoteAvatar(latest, authorName));
+        }
         String authorLine = '';
         if (authorName.isNotEmpty || source.isNotEmpty) {
           // 如果署名不为空，使用“——署名 出处”，否则仅加前缀
@@ -617,8 +672,6 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
             authorLine += authorName; if (source.isNotEmpty) { authorLine += '《' + source + '》'; }
           } else { authorLine += (source.isNotEmpty ? ('《' + source + '》') : ''); }
         }
-        // 读取背景图为 data URI，使背景在各平台上稳定显示
-        final bgUrl = await _getBgDataUrl();
         final payload = <String, dynamic>{
           'topic': (latest['theme'] ?? latest['topic'] ?? '').toString(),
           'quote': (latest['content'] ?? latest['quote'] ?? '').toString(),
@@ -627,8 +680,6 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
           'source': source,
           'note': (latest['explanation'] ?? latest['note'] ?? '').toString(),
           'avatarUrl': avatarUrl,
-          // 将背景图片路径作为 data uri 传入，供 HTML 页通过 setBackground 使用。
-          'bgUrl': bgUrl,
         };
         await DLog.i('HOME', '已检索到今日最新已通知记录：准备注入');
         await _logInject('db', payload);
@@ -666,13 +717,20 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
       final dao = QuoteFixedDao();
       final offset = reset ? 0 : _pinnedQuotes.length;
       final rows = await dao.all(limit: 20, offset: offset);
+      final hydratedRows = rows.map((row) {
+        final avatar = (row['avatar'] ?? '').toString().trim();
+        final author = (row['author_name'] ?? row['author'] ?? '').toString();
+        if (_isIdentityVerifiedAvatar(row, author, avatar)) return row;
+        final asset = QuoteAvatarAssetResolver.forAuthor(author);
+        return <String, dynamic>{...row, 'avatar': asset};
+      }).toList();
       if (!mounted) return;
       setState(() {
         if (reset) {
-          _pinnedQuotes = List<Map<String, dynamic>>.from(rows);
+          _pinnedQuotes = List<Map<String, dynamic>>.from(hydratedRows);
           _pinnedEndToastShown = false;
         } else {
-          _pinnedQuotes.addAll(rows);
+          _pinnedQuotes.addAll(hydratedRows);
         }
         _pinnedHasMore = rows.length == 20;
         _loadingPinned = false;
@@ -1244,7 +1302,13 @@ ImageProvider _imageFrom(String? any) {
       authorName: (row['author_name'] ?? row['author'] ?? '').toString(),
       sourceFrom: (row['source_from'] ?? row['source'] ?? '').toString(),
       explanation: (row['explanation'] ?? row['note'] ?? '').toString(),
-      avatar: (row['avatar'] ?? row['avatarUrl'] ?? '').toString(),
+      avatar: () {
+        final saved = (row['avatar'] ?? row['avatarUrl'] ?? '').toString();
+        if (saved.trim().isNotEmpty) return saved;
+        return QuoteAvatarAssetResolver.forAuthor(
+          (row['author_name'] ?? row['author'] ?? '').toString(),
+        );
+      }(),
       quoteId: quoteId,
     );
     if (mounted) {
@@ -1278,10 +1342,16 @@ ImageProvider _imageFrom(String? any) {
   /// corresponding payload and updates [_todayData], then refreshes the
   /// pinned state.
   Future<void> _switchToPinned(Map<String, dynamic> row) async {
-    final avatarUrl = await _avatarToDataUrl((row['avatar'] ?? '').toString());
+    final authorName = (row['author_name'] ?? '').toString().trim();
+    final savedAvatar = (row['avatar'] ?? '').toString();
+    var avatarUrl = _isIdentityVerifiedAvatar(row, authorName, savedAvatar)
+        ? await _resolveAvatarSource(savedAvatar)
+        : '';
+    if (avatarUrl.isEmpty) {
+      avatarUrl = QuoteAvatarAssetResolver.forAuthor(authorName);
+    }
     final String theme = (row['theme'] ?? '').toString();
     final String quote = (row['content'] ?? '').toString();
-    final String authorName = (row['author_name'] ?? '').toString().trim();
     final String source = (row['source_from'] ?? '').toString().trim();
     final String note = (row['explanation'] ?? '').toString();
     String authorLine = '';
@@ -1296,7 +1366,6 @@ ImageProvider _imageFrom(String? any) {
         authorLine += (source.isNotEmpty ? ('《' + source + '》') : '');
       }
     }
-    final bgUrl = await _getBgDataUrl();
     final payload = <String, dynamic>{
       'topic': theme,
       'quote': quote,
@@ -1304,7 +1373,6 @@ ImageProvider _imageFrom(String? any) {
       'source': source,
       'note': note,
       'avatarUrl': avatarUrl,
-      'bgUrl': bgUrl,
     };
     if (!mounted) return;
     setState(() {
