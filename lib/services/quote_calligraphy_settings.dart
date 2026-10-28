@@ -40,15 +40,62 @@ enum QuoteCalligraphyStyle {
       };
 }
 
+/// Classical Latin faces available for English quotation text on the home
+/// artwork. Baskerville remains the default so existing installations keep
+/// the typography introduced by the previous artwork update.
+enum QuoteEnglishFontStyle {
+  garamond,
+  baskerville,
+  playfairDisplay;
+
+  static QuoteEnglishFontStyle parse(String? raw) {
+    switch ((raw ?? '').trim().toLowerCase()) {
+      case 'garamond':
+        return QuoteEnglishFontStyle.garamond;
+      case 'playfair_display':
+      case 'playfairdisplay':
+        return QuoteEnglishFontStyle.playfairDisplay;
+      default:
+        return QuoteEnglishFontStyle.baskerville;
+    }
+  }
+
+  String get storageValue => switch (this) {
+        QuoteEnglishFontStyle.garamond => 'garamond',
+        QuoteEnglishFontStyle.baskerville => 'baskerville',
+        QuoteEnglishFontStyle.playfairDisplay => 'playfair_display',
+      };
+
+  String get label => switch (this) {
+        QuoteEnglishFontStyle.garamond => 'Garamond',
+        QuoteEnglishFontStyle.baskerville => 'Baskerville',
+        QuoteEnglishFontStyle.playfairDisplay => 'Playfair Display',
+      };
+
+  String get description => switch (this) {
+        QuoteEnglishFontStyle.garamond => '人文古典',
+        QuoteEnglishFontStyle.baskerville => '端庄理性',
+        QuoteEnglishFontStyle.playfairDisplay => '优雅戏剧',
+      };
+
+  String get fontFamily => switch (this) {
+        QuoteEnglishFontStyle.garamond => 'QuoteGaramond',
+        QuoteEnglishFontStyle.baskerville => 'QuoteLiterarySerif',
+        QuoteEnglishFontStyle.playfairDisplay => 'QuotePlayfairDisplay',
+      };
+}
+
 @immutable
 class QuoteCalligraphyPreferences {
   const QuoteCalligraphyPreferences({
     this.animationEnabled = false,
     this.style = QuoteCalligraphyStyle.xingshu,
+    this.englishFontStyle = QuoteEnglishFontStyle.baskerville,
   });
 
   final bool animationEnabled;
   final QuoteCalligraphyStyle style;
+  final QuoteEnglishFontStyle englishFontStyle;
 }
 
 /// Persists the optional home calligraphy presentation.
@@ -61,6 +108,7 @@ class QuoteCalligraphySettings {
   static const animationEnabledKey =
       'quote_calligraphy_animation_enabled_v1';
   static const styleKey = 'quote_calligraphy_style_v1';
+  static const englishFontStyleKey = 'quote_english_font_style_v1';
 
   static final ValueNotifier<int> changeTick = ValueNotifier<int>(0);
 
@@ -71,9 +119,13 @@ class QuoteCalligraphySettings {
         (await _dao.getString(animationEnabledKey))?.trim().toLowerCase() ==
             'true';
     final style = QuoteCalligraphyStyle.parse(await _dao.getString(styleKey));
+    final englishFontStyle = QuoteEnglishFontStyle.parse(
+      await _dao.getString(englishFontStyleKey),
+    );
     return QuoteCalligraphyPreferences(
       animationEnabled: enabled,
       style: style,
+      englishFontStyle: englishFontStyle,
     );
   }
 
@@ -84,6 +136,11 @@ class QuoteCalligraphySettings {
 
   Future<void> setStyle(QuoteCalligraphyStyle style) async {
     await _dao.setString(styleKey, style.storageValue);
+    changeTick.value += 1;
+  }
+
+  Future<void> setEnglishFontStyle(QuoteEnglishFontStyle style) async {
+    await _dao.setString(englishFontStyleKey, style.storageValue);
     changeTick.value += 1;
   }
 }

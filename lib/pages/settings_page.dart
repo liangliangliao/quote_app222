@@ -119,6 +119,76 @@ class _CalligraphyStyleChoice extends StatelessWidget {
       );
 }
 
+class _EnglishFontStyleChoice extends StatelessWidget {
+  const _EnglishFontStyleChoice({
+    required this.style,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final QuoteEnglishFontStyle style;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: selected ? const Color(0xffede0d3) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: selected
+                ? const Color(0xff8a4b35)
+                : const Color(0xffe4ddd5),
+            width: selected ? 1.35 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('quote-english-font-${style.storageValue}'),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
+            child: Column(
+              children: [
+                Text(
+                  'Aa',
+                  style: quoteLiteraryTextStyle(
+                    const TextStyle(fontSize: 24),
+                    style,
+                  ).copyWith(height: 1.05),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  style.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: selected
+                        ? const Color(0xff65341f)
+                        : const Color(0xff62584f),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  style.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: Color(0xff877a70),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
 class _SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver {
   final _configDao = ConfigDao();
   final _taskDao = TaskDao();
@@ -245,6 +315,8 @@ class _SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver
   bool _quoteCalligraphyAnimationEnabled = false;
   QuoteCalligraphyStyle _quoteCalligraphyStyle =
       QuoteCalligraphyStyle.xingshu;
+  QuoteEnglishFontStyle _quoteEnglishFontStyle =
+      QuoteEnglishFontStyle.baskerville;
 
   // ====== 运动设置 ======
   String? _sportBgPath;
@@ -1927,9 +1999,11 @@ Future<void> _clearSportMusicPlaylist() async {
       final preferences = await _quoteCalligraphySettings.load();
       _quoteCalligraphyAnimationEnabled = preferences.animationEnabled;
       _quoteCalligraphyStyle = preferences.style;
+      _quoteEnglishFontStyle = preferences.englishFontStyle;
     } catch (_) {
       _quoteCalligraphyAnimationEnabled = false;
       _quoteCalligraphyStyle = QuoteCalligraphyStyle.xingshu;
+      _quoteEnglishFontStyle = QuoteEnglishFontStyle.baskerville;
     }
 
     // 读取首页侧栏 AI 主题开关（默认关闭）
@@ -2853,6 +2927,21 @@ const Text('头像（用于通知图标）'),
     }
   }
 
+  Future<void> _setQuoteEnglishFontStyle(
+    QuoteEnglishFontStyle style,
+  ) async {
+    final previous = _quoteEnglishFontStyle;
+    setState(() => _quoteEnglishFontStyle = style);
+    try {
+      await _quoteCalligraphySettings.setEnglishFontStyle(style);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _quoteEnglishFontStyle = previous);
+        showToast('英文字体设置保存失败');
+      }
+    }
+  }
+
   Widget _quoteCalligraphySettingsCard() {
     const ink = Color(0xff281d17);
     const paper = Color(0xfffbf8f2);
@@ -2877,7 +2966,7 @@ const Text('头像（用于通知图标）'),
               style: TextStyle(fontWeight: FontWeight.w600, color: ink),
             ),
             subtitle: const Text(
-              '默认关闭；开启后正文按毛笔书写节奏呈现，署名艺术字不受此开关影响。',
+              '默认关闭；开关仅控制毛笔书写动画，中英文正文的字体选择始终应用于首页。',
               style: TextStyle(height: 1.45),
             ),
             value: _quoteCalligraphyAnimationEnabled,
@@ -2891,7 +2980,7 @@ const Text('头像（用于通知图标）'),
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '正文书体',
+                  '中文正文书体',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -2932,6 +3021,54 @@ const Text('头像（用于通知图标）'),
                     style: quoteCalligraphyTextStyle(
                       const TextStyle(fontSize: 21, color: ink),
                       _quoteCalligraphyStyle,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Divider(height: 1),
+                const SizedBox(height: 15),
+                const Text(
+                  '英文正文古典字体',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xff6f6258),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    for (final style in QuoteEnglishFontStyle.values) ...[
+                      Expanded(
+                        child: _EnglishFontStyleChoice(
+                          style: style,
+                          selected: style == _quoteEnglishFontStyle,
+                          onTap: () => _setQuoteEnglishFontStyle(style),
+                        ),
+                      ),
+                      if (style != QuoteEnglishFontStyle.values.last)
+                        const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 15),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 13,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(.72),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xffeee5da)),
+                  ),
+                  child: Text(
+                    'No man is an island.',
+                    textAlign: TextAlign.center,
+                    style: quoteLiteraryTextStyle(
+                      const TextStyle(fontSize: 20, color: ink),
+                      _quoteEnglishFontStyle,
                     ),
                   ),
                 ),

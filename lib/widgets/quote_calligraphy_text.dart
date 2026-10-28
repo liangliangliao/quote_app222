@@ -7,6 +7,8 @@ import '../services/quote_calligraphy_settings.dart';
 const String quoteLatinSignatureFont = 'QuoteSignatureLatin';
 const String quoteChineseSignatureFont = 'QuoteXingShu';
 const String quoteLiterarySerifFont = 'QuoteLiterarySerif';
+const String quoteGaramondFont = 'QuoteGaramond';
+const String quotePlayfairDisplayFont = 'QuotePlayfairDisplay';
 
 enum _SignatureScript { latin, han }
 
@@ -40,8 +42,12 @@ bool quotePrefersLiteraryEnglish(String text) {
   return latin > 0 && latin >= math.max(3, han * 2);
 }
 
-TextStyle quoteLiteraryTextStyle(TextStyle base) => base.copyWith(
-      fontFamily: quoteLiterarySerifFont,
+TextStyle quoteLiteraryTextStyle(
+  TextStyle base, [
+  QuoteEnglishFontStyle style = QuoteEnglishFontStyle.baskerville,
+]) =>
+    base.copyWith(
+      fontFamily: style.fontFamily,
       fontWeight: FontWeight.w600,
       fontStyle: FontStyle.normal,
       height: 1.56,
@@ -171,7 +177,9 @@ TextStyle quoteCalligraphyTextStyle(
 TextSpan quoteBodyTextSpan(
   String text,
   TextStyle baseStyle,
-  QuoteCalligraphyStyle calligraphyStyle,
+  QuoteCalligraphyStyle calligraphyStyle, [
+  QuoteEnglishFontStyle englishFontStyle = QuoteEnglishFontStyle.baskerville,
+]
 ) {
   final characters = text.characters.toList(growable: false);
   var firstScript = _QuoteBodyScript.han;
@@ -189,7 +197,7 @@ TextSpan quoteBodyTextSpan(
   TextStyle styleFor(_QuoteBodyScript script) =>
       script == _QuoteBodyScript.han
           ? quoteCalligraphyTextStyle(baseStyle, calligraphyStyle)
-          : quoteLiteraryTextStyle(baseStyle);
+          : quoteLiteraryTextStyle(baseStyle, englishFontStyle);
 
   final spans = <TextSpan>[];
   var active = firstScript;
@@ -227,6 +235,7 @@ class CalligraphyWritingText extends StatefulWidget {
     required this.text,
     required this.style,
     required this.calligraphyStyle,
+    this.englishFontStyle = QuoteEnglishFontStyle.baskerville,
     this.maxLines,
     this.overflow = TextOverflow.visible,
     this.textAlign = TextAlign.start,
@@ -235,6 +244,7 @@ class CalligraphyWritingText extends StatefulWidget {
   final String text;
   final TextStyle style;
   final QuoteCalligraphyStyle calligraphyStyle;
+  final QuoteEnglishFontStyle englishFontStyle;
   final int? maxLines;
   final TextOverflow overflow;
   final TextAlign textAlign;
@@ -265,7 +275,8 @@ class _CalligraphyWritingTextState extends State<CalligraphyWritingText>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.text != widget.text ||
         oldWidget.style != widget.style ||
-        oldWidget.calligraphyStyle != widget.calligraphyStyle) {
+        oldWidget.calligraphyStyle != widget.calligraphyStyle ||
+        oldWidget.englishFontStyle != widget.englishFontStyle) {
       _controller.duration = _duration;
       _controller.forward(from: 0);
     }
@@ -284,6 +295,7 @@ class _CalligraphyWritingTextState extends State<CalligraphyWritingText>
       widget.text,
       style,
       widget.calligraphyStyle,
+      widget.englishFontStyle,
     );
     return LayoutBuilder(builder: (context, constraints) {
       final painter = TextPainter(

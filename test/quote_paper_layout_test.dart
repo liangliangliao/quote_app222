@@ -11,6 +11,8 @@ import 'package:image/image.dart' as img;
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
 import 'package:quote_app/widgets/quote_portrait_cutout.dart';
+import 'package:quote_app/widgets/quote_calligraphy_text.dart';
+import 'package:quote_app/services/quote_calligraphy_settings.dart';
 
 const quote = '你的大脑分不清现实和想象的区别，因此你可以先在内心模拟自己想成为的样子。当你在脑海中一遍遍练习变得轻松、冷静和包容，你就更容易在现实中真的那样去做。';
 const author = '— Tal Ben-Shahar, Harvard Positive Psychology (Happiness) Course';
@@ -29,6 +31,8 @@ void main() {
   Future<void> mount(WidgetTester tester, double width, {
     String text = quote, String explanation = note, bool portrait = false,
     double scale = 1,
+    QuoteEnglishFontStyle englishFontStyle =
+        QuoteEnglishFontStyle.baskerville,
   }) async {
     await tester.binding.setSurfaceSize(Size(width, width * 1.5));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -43,6 +47,7 @@ void main() {
               topic: '成为那样的人', quote: text, author: author,
               note: explanation,
               avatar: portrait ? 'assets/avatars/talbenshahar .jpeg' : '',
+              englishFontStyle: englishFontStyle,
             ))),
         ),
       ),
@@ -108,6 +113,27 @@ void main() {
     expect(quoteWidget.style?.fontFamily, isNull);
   });
 
+  testWidgets('selected English font is applied to the home artwork',
+      (tester) async {
+    const englishQuote = 'No man is an island, entire of itself.';
+    await mount(
+      tester,
+      360,
+      text: englishQuote,
+      englishFontStyle: QuoteEnglishFontStyle.playfairDisplay,
+    );
+
+    final body = tester.widget<Text>(
+      find.byKey(const ValueKey('quote-body')),
+    );
+    final families = (body.textSpan! as TextSpan).children!
+        .whereType<TextSpan>()
+        .map((span) => span.style?.fontFamily)
+        .toSet();
+    expect(families, contains(quotePlayfairDisplayFont));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('short quotation and attribution are vertically balanced',
       (tester) async {
     await mount(tester, 360, text: '知行合一，止于至善。');
@@ -168,6 +194,7 @@ void main() {
     expect(tester.takeException(), isNull);
     final viewport = tester.getRect(
       find.byKey(const ValueKey('quote-portrait-viewport')));
+    expect(viewport.width, greaterThanOrEqualTo(68));
     expect(viewport.width / viewport.height, closeTo(.78, .001));
     expect(tester.getRect(composited), viewport,
       reason: 'The source image must fill exactly the clipped safe viewport');
