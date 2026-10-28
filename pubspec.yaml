@@ -101,6 +101,7 @@ flutter:
       fonts:
         - asset: assets/fonts/LiuJianMaoCao-Regular.ttf
   assets:
+    - assets/journey/
     - assets/settings/
     - assets/mental_health_checkup/
     - assets/html/poster-wall-only-frame-v23-1.html

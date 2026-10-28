@@ -52,8 +52,9 @@ import '../zhaojian_host/zhaojian_host_page.dart';
 import '../evidence_growth/evidence_growth_home_page.dart';
 import '../self_os/self_os_home_page.dart';
 import '../widgets/discovery_directory.dart';
+import '../widgets/journey_design.dart';
 
-/// 发现之旅：展示当天的心情状态与时间轴
+/// 以分类与搜索呈现探索入口，保留当天心情记录浮层。
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
 
@@ -719,7 +720,7 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
                     child: FadeTransition(
                       opacity: fade,
                       child: Padding(
-                      padding: const EdgeInsets.only(top: 40, left: 16, right: 16),
+                      padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 40, left: 16, right: 16),
                       child: _buildMoodCard(),
                     ),
                   ),
@@ -2524,6 +2525,7 @@ Widget _buildEmotionPieChart() {
     ),
     DiscoveryDestination(
       title: '写日记',
+      artwork: JourneyArt.book,
       subtitle: '为感受留一页空间',
       icon: Icons.edit_note_outlined,
       categories: const {'认识自己', '身心关怀'},
@@ -2533,6 +2535,7 @@ Widget _buildEmotionPieChart() {
     DiscoveryDestination(
       key: const ValueKey('discover_self_os_v3'),
       title: '成为自己 · Self OS',
+      artwork: JourneyArt.path,
       subtitle: '看见可能性，在行动中认识自己',
       icon: Icons.explore_outlined,
       categories: const {'认识自己'},
@@ -2541,6 +2544,7 @@ Widget _buildEmotionPieChart() {
     ),
     DiscoveryDestination(
       title: '六模块证据成长',
+      artwork: JourneyArt.sprout,
       subtitle: '行动、结果与复盘',
       icon: Icons.route_outlined,
       categories: const {'行动成长'},
@@ -2559,6 +2563,7 @@ Widget _buildEmotionPieChart() {
     DiscoveryDestination(
       key: const ValueKey('discover_xiangji_goal_mentor'),
       title: '向己 · 智能目标导师',
+      artwork: JourneyArt.doorway,
       subtitle: '一个目标，一步行动',
       icon: Icons.flag_outlined,
       categories: const {'行动成长'},
@@ -2641,6 +2646,7 @@ Widget _buildEmotionPieChart() {
     ),
     DiscoveryDestination(
       title: '生理赋能',
+      artwork: JourneyArt.stones,
       subtitle: '运动、冥想、睡眠、饮食与触摸',
       icon: Icons.spa_outlined,
       categories: const {'身心关怀'},
@@ -2680,22 +2686,20 @@ Widget _buildEmotionPieChart() {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xfff7f6f1),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            DiscoveryDirectory(destinations: _destinations(), onRefresh: _load),
-            _buildMoodCardOverlay(),
-            const AiAssistantFloatingBubble(
-              moduleKey: 'discover_home_ai_assistant',
-            ),
-          ],
-        ),
+      backgroundColor: journeyPaper,
+      body: Stack(
+        children: [
+          DiscoveryDirectory(destinations: _destinations(), onRefresh: _load),
+          const AiAssistantFloatingBubble(
+            moduleKey: 'discover_home_ai_assistant',
+            initialAlignment: Alignment(1, -.82),
+          ),
+          _buildMoodCardOverlay(),
+        ],
       ),
     );
   }
 }
-
 
 class QuestionnaireScalePage extends StatelessWidget {
   const QuestionnaireScalePage({super.key});

@@ -6,31 +6,21 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show mapEquals;
-import 'package:characters/characters.dart';
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
-import 'package:quote_app/widgets/quote_portrait_cutout.dart';
-import 'package:quote_app/widgets/quote_calligraphy_text.dart';
 import 'package:quote_app/services/quote_frame_theme.dart';
 import 'package:quote_app/services/quote_frame_ai_service.dart';
 import 'package:quote_app/services/quote_calligraphy_settings.dart';
 import 'package:quote_app/services/notification_service.dart';
 import 'package:quote_app/services/quote_ai_service.dart';
 import '../data/dao.dart';
+import '../widgets/quote_home_scene.dart';
+import '../widgets/quote_library_sheet.dart';
+import '../widgets/journey_design.dart';
+import '../services/quote_library_store.dart';
 import '../utils/debug_logger.dart';
 import 'package:quote_app/services/native_guard.dart';
 
-
-
-/// Local scroll behavior to hide glow/scrollbar and use clamping physics,
-/// mirroring the helpers used in other widgets.
-class _NoIndicatorScroll extends ScrollBehavior {
-  @override
-  Widget buildViewportChrome(BuildContext context, Widget child, AxisDirection axisDirection) => child;
-
-  @override
-  ScrollPhysics getScrollPhysics(BuildContext context) => const ClampingScrollPhysics();
-}
 
 
 String _buildAuthorLine(String authorName, String source) {
@@ -135,6 +125,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _activateFrame(Map<String, dynamic> payload) async {
+    unawaited(_loadFavoriteFor(payload));
     final topic = (payload['topic'] ?? '').toString();
     final quote = (payload['quote'] ?? '').toString();
     final key = _frameAi.cacheKey(topic, quote);
@@ -142,6 +133,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_visibleFrameKey != key && mounted) {
       setState(() {
         _visibleFrameKey = key;
+        final readingKey = QuoteLibraryStore.identity(payload);
+        _readingIndex = _readingHistory.indexWhere((row) => QuoteLibraryStore.identity(row) == readingKey);
+        if (_readingIndex < 0) {
+          _readingHistory.add(Map<String, dynamic>.from(payload));
+          if (_readingHistory.length > 6) _readingHistory.removeAt(0);
+          _readingIndex = _readingHistory.length - 1;
+        }
         _frameImagePath = null; // 不展示上一条名言的画面
       });
     }
@@ -359,6 +357,11 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
   bool _homeLoading = false;
   bool _homeReloadQueued = false;
   bool _fav = false;
+  final _library = QuoteLibraryStore();
+  bool _favoriteBusy = false, _nextBusy = false, _pinnedGalleryOpen = false;
+  int _favoriteGeneration = 0, _readingIndex = 0;
+  final _readingHistory = <Map<String, dynamic>>[];
+  final _pinnedCollectionTick = ValueNotifier<int>(0);
 
   bool _liked = false;
   bool _notifAsked = false;
@@ -372,6 +375,8 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
   // additional pages.  `_pinnedActive` tracks whether the currently
   // displayed large quote is pinned.
   List<Map<String, dynamic>> _pinnedQuotes = [];
+  int _pinnedTotal = 0;
+  int _pinnedJumpRevision = 0;
   bool _pinnedHasMore = false;
   bool _loadingPinned = false;
   final ScrollController _pinnedController = ScrollController();
@@ -385,8 +390,6 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
   int? _animRemovePinnedId; // id of pinned card being removed
   static const double _pinnedCardWidth = 200;
   static const double _pinnedCardGap = 0;
-  double get _pinnedShift => _pinnedCardWidth + _pinnedCardGap;
-  double _pinnedAreaExtraWidth = 0.0; // extra width for grey area, expands symmetrically when pin/unpin
 
   void _openLeftDrawer() {
     try {
@@ -397,6 +400,12 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
 
   void _handleTopBarMenu(String value) async {
     switch (value) {
+      case 'pinned_quotes':
+        await _showPinnedGallery();
+        break;
+      case 'favorite_quotes':
+        await _openLibrary(favoritesOnly: true);
+        break;
       case 'frame_generate':
         unawaited(_requestManualFrame());
         break;
@@ -411,9 +420,7 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
         await _copyLatest();
         break;
       case 'favorite':
-        setState(() {
-          _fav = !_fav;
-        });
+        await _toggleFavorite();
         break;
       case 'like':
         setState(() {
@@ -464,6 +471,7 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
     _pinnedController.removeListener(_handlePinnedScroll);
     // Dispose the pinned scroll controller to free resources
     _pinnedController.dispose();
+    _pinnedCollectionTick.dispose();
     super.dispose();
   }
 
@@ -762,11 +770,13 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
   }
 
   Future<void> _copyLatest() async {
-    final text = (_latestRow?['content'] ?? '').toString();
+    final quote = (_todayData?['quote'] ?? '').toString().trim();
+    final author = (_todayData?['author'] ?? '').toString().trim();
+    final text = [quote, author].where((value) => value.isNotEmpty).join('\n\n');
     if (text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制'), behavior: SnackBarBehavior.floating));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('名言已复制，可粘贴分享'), behavior: SnackBarBehavior.floating, margin: const EdgeInsets.fromLTRB(18, 0, 18, 145)));
   }
 
   /// Load fixed quotes from the database.  When [reset] is true, clear the
@@ -780,6 +790,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
       final dao = QuoteFixedDao();
       final offset = reset ? 0 : _pinnedQuotes.length;
       final rows = await dao.all(limit: 20, offset: offset);
+      final total = await dao.count();
       final hydratedRows = rows.map((row) {
         final avatar = (row['avatar'] ?? '').toString().trim();
         final author = (row['author_name'] ?? row['author'] ?? '').toString();
@@ -789,6 +800,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
       }).toList();
       if (!mounted) return;
       setState(() {
+        _pinnedTotal = total;
         if (reset) {
           _pinnedQuotes = List<Map<String, dynamic>>.from(hydratedRows);
           _pinnedEndToastShown = false;
@@ -798,6 +810,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         _pinnedHasMore = rows.length == 20;
         _loadingPinned = false;
       });
+      _pinnedCollectionTick.value++;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (reset && _pinnedController.hasClients) {
@@ -811,7 +824,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
           messenger?.showSnackBar(
             const SnackBar(
               content: Text('已经到底了'),
-              behavior: SnackBarBehavior.floating,
+              behavior: SnackBarBehavior.floating, margin: const EdgeInsets.fromLTRB(18, 0, 18, 145),
               duration: Duration(milliseconds: 900),
             ),
           );
@@ -840,6 +853,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
           _showPinnedJumpToStart = false;
           _showPinnedJumpToEnd = false;
         });
+        if (_pinnedGalleryOpen) _pinnedCollectionTick.value++;
       }
       return;
     }
@@ -851,330 +865,62 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         _showPinnedJumpToStart = showStart;
         _showPinnedJumpToEnd = showEnd;
       });
+      if (_pinnedGalleryOpen) _pinnedCollectionTick.value++;
     }
   }
 
   Future<void> _jumpPinnedToEdge({required bool toStart}) async {
-    if (!_pinnedController.hasClients) return;
+    final revision = ++_pinnedJumpRevision;
+    bool current() => mounted && revision == _pinnedJumpRevision && _pinnedController.hasClients;
+    if (!current()) return;
     if (!toStart) {
-      while (_pinnedHasMore && mounted) {
+      while (_pinnedHasMore && current()) {
         await _loadPinned(reset: false);
-        await Future<void>.delayed(const Duration(milliseconds: 16));
+        await WidgetsBinding.instance.endOfFrame;
       }
-      if (!_pinnedController.hasClients) return;
     }
-    final position = _pinnedController.position;
-    final double target = toStart ? 0.0 : position.maxScrollExtent;
-    await _pinnedController.animateTo(
-      target,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-    );
+    var previousTarget = -1.0;
+    while (current()) {
+      final position = _pinnedController.position;
+      final target = toStart ? 0.0 : position.maxScrollExtent;
+      if (!toStart && target <= previousTarget + .5) return;
+      previousTarget = target;
+      await position.animateTo(target, duration: const Duration(milliseconds: 280), curve: Curves.easeOutCubic);
+      if (!current()) return;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!current() || toStart) return;
+      final settled = _pinnedController.position;
+      // Appending cards can extend the modal's scroll bounds during animation.
+      // Continue only if the old endpoint was reached; a user drag cancels it.
+      if (settled.extentAfter < .5 || (settled.pixels - target).abs() > 1) return;
+    }
   }
 
   /// Build a single fixed quote card using the same default wooden-frame photo
   /// as the main home poster.
-  Widget 
-_buildFixedCard(Map<String, dynamic> row) {
-
-ImageProvider _imageFrom(String? any) {
-  final String s = (any ?? '').toString().trim();
-  if (s.isEmpty || s.toLowerCase() == 'null') {
-    return const AssetImage('assets/bg-wood-upload.jpg');
-  }
-  if (s.startsWith('data:')) {
-    final b64 = s.substring(s.indexOf(',') + 1);
-    return MemoryImage(base64.decode(b64));
-  }
-  if (s.startsWith('http')) return NetworkImage(s);
-  if (s.startsWith('file://')) {
-    try { return FileImage(File(Uri.parse(s).toFilePath())); } catch (_) { return const AssetImage('assets/bg-wood-upload.jpg'); }
-  }
-  if (s.startsWith('/')) {
-    try { return FileImage(File(s)); } catch (_) { return const AssetImage('assets/bg-wood-upload.jpg'); }
-  }
-  if (s.startsWith('assets/')) return AssetImage(s);
-  return const AssetImage('assets/bg-wood-upload.jpg');
-}
-
-    return GestureDetector(
-      onTap: () => _switchToPinned(row),
-      child: SizedBox(
-        width: 200,
-        child: AspectRatio(
-          aspectRatio: 0.87,
-          child: LayoutBuilder(
-            builder: (context, cons) {
-              final short = (cons.maxWidth < cons.maxHeight) ? cons.maxWidth : cons.maxHeight;
-              // Font sizes scale with the background image size, tuned to roughly
-              // match the ratios used in the large poster.
-              final tTitle = (short * 0.095).clamp(8.5, 14.0);
-              final tQuote = (short * 0.155).clamp(8.5, 16.0);
-              final tAuth  = (short * 0.075).clamp(7.0, 11.0);
-              final tNote  = (short * 0.030).clamp(10.5, 12.4);
-              final avatarSize = (short * 0.28 * 0.85).clamp(36.0, 56.0);
-              final innerPadH = (((short * 0.10).clamp(8.0, 14.0)) - 5.0).clamp(0.0, 9999.0);
-              final innerPadV = (short * 0.12).clamp(8.0, 16.0);
-
-              final topic = (row['theme'] ?? row['topic'] ?? '') as String;
-              final quote = (row['content'] ?? row['quote'] ?? '') as String;
-              final authorName = (row['author_name'] ?? row['author'] ?? '') as String;
-              final sourceFrom = (row['source_from'] ?? row['source'] ?? '') as String;
-              final note = (row['explanation'] ?? row['note'] ?? '') as String;
-              final avatar = (row['avatar'] ?? row['avatarUrl'] ?? '') as String;
-              final authorLine = _buildAuthorLine(authorName, sourceFrom);
-              final hasAvatar = avatar.trim().isNotEmpty && avatar.trim().toLowerCase() != 'null';
-              final bool shortTopic = topic.length < 15;
-
-              return Stack(
-                fit: StackFit.expand,
-                children: [
-                  // 与首页主画面一致的唯一默认木质画框。
-                  Positioned.fill(
-                    child: QuoteAdaptiveFrame(quoteCharacters: quote.runes.length),
-                  ),
-                  // 画布内容
-                  Positioned.fill(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        innerPadH + 15,
-                        12,
-                        innerPadH + 15,
-                        12, // vertical padding reduced by 10dp as requested
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        clipBehavior: Clip.hardEdge,
-                        child: ScrollConfiguration(
-                        behavior: _NoIndicatorScroll(),
-                        child: SingleChildScrollView(
-                          physics: const ClampingScrollPhysics(),
-                          child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(height: 10), // add top outer margin for topic/avatar
-                            // 主题 + 头像（固定在顶部）
-                            hasAvatar
-                                ? Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: Padding(
-                                          padding: EdgeInsets.only(left: 12),
-                                          child: Text(
-                                            topic,
-                                            maxLines: null,
-                                            overflow: TextOverflow.visible,
-                                            style: TextStyle(
-                                              color: Colors.black87,
-                                              fontSize: tTitle,
-                                              height: 1.25,
-                                              fontWeight: FontWeight.w400,
-                                      letterSpacing: 0.6, ),
-                                          ),
-                                        ),
-                                      ),
-                                      SizedBox(width: innerPadH * 0.6),
-                                      QuotePortraitCutout(
-                                        image: _imageFrom(avatar),
-                                        width: avatarSize,
-                                        height: avatarSize * 1.22,
-                                      ),
-                                    ],
-                                  )
-                                : Center(
-                                    child: Text(
-                                      topic,
-                                      textAlign: TextAlign.center,
-                                      softWrap: true,
-                                      maxLines: null,
-                                      overflow: TextOverflow.visible,
-                                      style: TextStyle(
-                                        color: Colors.black87,
-                                        fontSize: tTitle,
-                                        height: 1.25,
-                                        fontWeight: FontWeight.w400,
-                                      letterSpacing: 0.6, ),
-                                    ),
-                                  ),
-                            SizedBox(height: innerPadV * 0.6),
-                            // 可滚动正文+署名+注解
-                            Expanded(
-                              child: ScrollConfiguration(
-                                behavior: _NoIndicatorScroll(),
-                                child: SingleChildScrollView(
-                                  physics: const ClampingScrollPhysics(),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text.rich(
-                                        quoteBodyTextSpan(
-                                          quote,
-                                          const TextStyle(
-                                            color: Colors.black87,
-                                            fontSize: 20,
-                                            height: 1.45,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 2.0,
-                                          ),
-                                          _quoteCalligraphyStyle,
-                                          _quoteEnglishFontStyle,
-                                        ),
-                                        textScaler: TextScaler.noScaling,
-                                      ),
-                                      SizedBox(height: innerPadV * 0.5 - 5),
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: QuoteAuthorSignature(
-                                          _buildAuthorLine(authorName, sourceFrom),
-                                          textAlign: TextAlign.right,
-                                          softWrap: true,
-                                          overflow: TextOverflow.visible,
-                                          style: TextStyle(
-                                            color: Colors.black87,
-                                            fontSize: tAuth - 1,
-                                            height: 1.40,
-                                            fontWeight: FontWeight.w400,
-                                      letterSpacing: 0, ),
-                                        ),
-                                      ),
-                                      if (note.trim().isNotEmpty) ...[
-                                        SizedBox(height: innerPadV * 0.5),
-                                        Text(
-                                          note,
-                                          style: TextStyle(
-                                            color: Colors.black87,
-                                            fontSize: tNote,
-                                            height: 1.40,
-                                            fontWeight: FontWeight.w400,
-                                      letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                        SizedBox(height: 10), // add bottom outer margin for note
-                                      ]
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        ),
-                      ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  /// Layout inner contents of a fixed quote card.  Dynamically scales font
-  /// sizes relative to the card width to ensure readability on small cards.
-  Widget _buildFixedCardContent(Map<String, dynamic> row) {
-    final String theme = (row['theme'] ?? '').toString();
-    final String quote = (row['content'] ?? '').toString();
-    final String authorName = (row['author_name'] ?? '').toString();
-    final String sourceFrom = (row['source_from'] ?? '').toString();
-    final String explanation = (row['explanation'] ?? '').toString();
-    String authorLine = '';
-    if (authorName.isNotEmpty || sourceFrom.isNotEmpty) {
-      authorLine = '——';
-      if (authorName.isNotEmpty) {
-        authorLine += authorName;
-        if (sourceFrom.isNotEmpty) {
-          authorLine += '《' + sourceFrom + '》';
-        }
-      } else {
-        authorLine += (sourceFrom.isNotEmpty ? ('《' + sourceFrom + '》') : '');
-      }
-    }
-    return LayoutBuilder(
-      builder: (context, cons) {
-        final w = cons.maxWidth;
-        final topicSize = (w * 0.10).clamp(10.0, 16.0);
-        final quoteSize = (w * 0.15).clamp(12.0, 20.0);
-        final authorSize = (w * 0.08).clamp(8.0, 14.0);
-        final noteSize = (w * 0.030).clamp(10.5, 12.4);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 10),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 64),
-              child: SingleChildScrollView(
-                child: Text(
-                  theme,
-                  textAlign: (theme.characters.length < 20) ? TextAlign.center : TextAlign.left,
-                  softWrap: true,
-                  style: TextStyle(
-                color: Colors.black87,
-                fontSize: topicSize - 1,
-                fontWeight: FontWeight.w400,
-                                      letterSpacing: 0.6,
-                height: 1.2,
-              )
-                ),
-              ),
-            ),
-            SizedBox(height: w * 0.05),
-            Expanded(
-              child: Text.rich(
-                quoteBodyTextSpan(
-                  quote,
-                  const TextStyle(
-                    color: Colors.black87,
-                    fontSize: 20,
-                    height: 1.45,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.0,
-                  ),
-                  _quoteCalligraphyStyle,
-                  _quoteEnglishFontStyle,
-                ),
-                textScaler: TextScaler.noScaling,
-                maxLines: 3,
-                overflow: TextOverflow.visible,
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: QuoteAuthorSignature(
-                authorLine,
-                style: TextStyle(
-                  color: Colors.black87,
-                  fontSize: authorSize,
-                  fontWeight: FontWeight.w400,
-                                      letterSpacing: 0,
-                  height: 1.3,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.visible,
-              ),
-            ),
-            SizedBox(height: w * 0.02),
-            Text(
-              explanation,
-              style: TextStyle(
-                color: Colors.black87,
-                fontSize: noteSize,
-                fontWeight: FontWeight.w400,
-                                      letterSpacing: 0.5,
-                height: 1.40,
-              ),
-              maxLines: null,
-              overflow: TextOverflow.visible,
-            ),
-          ],
-        );
+  Widget _buildFixedCard(Map<String, dynamic> row) => Semantics(
+    button: true,
+    label: '阅读固定名言：${row['theme'] ?? ''}',
+    child: GestureDetector(
+      key: ValueKey('pinned-quote-${row['id'] ?? row['fixed_uid']}'),
+      onTap: () {
+        unawaited(_switchToPinned(row));
+        if (_pinnedGalleryOpen) Navigator.of(context).pop();
       },
-    );
-  }
+      child: PosterPureFlutter(
+        topic: (row['theme'] ?? '').toString(),
+        quote: (row['content'] ?? '').toString(),
+        author: _buildAuthorLine(
+          (row['author_name'] ?? '').toString(),
+          (row['source_from'] ?? '').toString(),
+        ),
+        note: (row['explanation'] ?? '').toString(),
+        avatar: (row['avatar'] ?? '').toString(),
+        calligraphyStyle: _quoteCalligraphyStyle,
+        englishFontStyle: _quoteEnglishFontStyle,
+      ),
+    ),
+  );
 
   /// Build the grey area widget that displays pinned quotes.  When the list is
   /// empty, returns an empty widget.  When there is one item, centers it.
@@ -1218,13 +964,13 @@ ImageProvider _imageFrom(String? any) {
       return card;
     }
 
-    final Widget listView = ListView.separated(
+    final Widget listView = ListView.builder(
       controller: _pinnedController,
       scrollDirection: Axis.horizontal,
+      itemExtent: _pinnedCardWidth + _pinnedCardGap,
       physics: const ClampingScrollPhysics(),
       padding: listPadding,
       itemCount: _pinnedQuotes.length + (_pinnedHasMore ? 0 : 1),
-      separatorBuilder: (_, __) => const SizedBox(width: _pinnedCardGap),
       itemBuilder: (context, idx) {
         if (idx < _pinnedQuotes.length) {
           return buildItemCard(_pinnedQuotes[idx]);
@@ -1263,6 +1009,7 @@ ImageProvider _imageFrom(String? any) {
               top: 84,
               child: _buildPinnedJumpButton(
                 icon: Icons.chevron_left,
+                tooltip: '跳到最新固定的名言',
                 onTap: () => _jumpPinnedToEdge(toStart: true),
               ),
             ),
@@ -1272,6 +1019,7 @@ ImageProvider _imageFrom(String? any) {
               top: 84,
               child: _buildPinnedJumpButton(
                 icon: Icons.chevron_right,
+                tooltip: '跳到最早固定的名言',
                 onTap: () => _jumpPinnedToEdge(toStart: false),
               ),
             ),
@@ -1282,9 +1030,10 @@ ImageProvider _imageFrom(String? any) {
 
   Widget _buildPinnedJumpButton({
     required IconData icon,
+    required String tooltip,
     required VoidCallback onTap,
   }) {
-    return Material(
+    return Tooltip(message: tooltip, child: Material(
       color: Colors.white.withOpacity(0.96),
       elevation: 4,
       shape: const CircleBorder(),
@@ -1296,7 +1045,7 @@ ImageProvider _imageFrom(String? any) {
           child: Icon(icon, color: Colors.black87, size: 26),
         ),
       ),
-    );
+    ));
   }
 
   /// Check whether the currently displayed quote is already pinned.  Updates
@@ -1337,16 +1086,12 @@ ImageProvider _imageFrom(String? any) {
       // allow the card to slide up before removing from list
       await Future.delayed(const Duration(milliseconds: 260));
       await _loadPinned(reset: true);
-      // after card is removed, collapse grey area back symmetrically
-      if (mounted) {
-        setState(() { _pinnedAreaExtraWidth = _pinnedQuotes.isNotEmpty ? _pinnedShift : 0.0; });
-      }
       if (mounted) {
         setState(() { _animRemovePinnedId = null; });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('已取消固定名言'),
-            behavior: SnackBarBehavior.floating,
+            behavior: SnackBarBehavior.floating, margin: const EdgeInsets.fromLTRB(18, 0, 18, 145),
           ),
         );
       }
@@ -1354,18 +1099,8 @@ ImageProvider _imageFrom(String? any) {
     }
     // Not pinned; search in quotes table
     final quoteDao = QuoteDao();
-    final row = await quoteDao.findByContentAndTheme(content, theme);
-    if (row == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('此名言不存在，固定名言失败'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      return;
-    }
+    final row = await quoteDao.findByContentAndTheme(content, theme)
+        ?? QuoteLibraryStore.normalize(_todayData ?? {});
     final int? quoteId = row['id'] is int ? row['id'] as int : null;
     await fixedDao.insert(
       content: content,
@@ -1385,10 +1120,6 @@ ImageProvider _imageFrom(String? any) {
     if (mounted) {
       setState(() { _pinnedActive = true; });
     }
-    // before showing the new leftmost card, expand grey area width symmetrically to make space
-    if (mounted) {
-      setState(() { _pinnedAreaExtraWidth = _pinnedShift; });
-    }
     await Future.delayed(const Duration(milliseconds: 260));
     await _loadPinned(reset: true);
     // mark the new leftmost card to slide down from top
@@ -1403,7 +1134,7 @@ ImageProvider _imageFrom(String? any) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('名言已固定在底部'),
-          behavior: SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.floating, margin: const EdgeInsets.fromLTRB(18, 0, 18, 145),
         ),
       );
     }
@@ -1479,227 +1210,281 @@ ImageProvider _imageFrom(String? any) {
     }
   }
 
-  Widget _buildScaffold(BuildContext context) {
-    // 永远不要把空对象渲染成整张无字相框。
-    final content = _todayData ?? const <String, dynamic>{
-      'topic': '每日名言',
-      'quote': '名言加载中…',
-      'author': '',
-      'note': '',
-    };
-    final media = MediaQuery.of(context);
-    final topPad = media.padding.top;
-    final contentPad = topPad;
-    final double bottomInset = media.padding.bottom;
-    final bool showPinnedArea = _pinnedQuotes.isNotEmpty;
-    final double pinnedViewportHeight = showPinnedArea ? (230 + bottomInset + 12) : 0;
-    final double pinnedBottomGap = bottomInset + 2;
-    final double posterBottomReserve = showPinnedArea
-        ? (pinnedViewportHeight + pinnedBottomGap - 24)
-        : 0;
-    final double posterLayoutWidth = media.size.width;
-    final double posterLayoutHeight = posterLayoutWidth * 1.5;
+  Future<void> _loadFavoriteFor(Map<String, dynamic> payload) async {
+    final generation = ++_favoriteGeneration;
+    try {
+      final favorite = await _library.isFavorite(payload);
+      if (mounted && generation == _favoriteGeneration && _fav != favorite)
+        setState(() => _fav = favorite);
+    } catch (_) {
+      /* Keep the current collection marker during a short read failure. */
+    }
+  }
 
+  Future<void> _toggleFavorite() async {
+    final payload = _todayData;
+    if (payload == null || _favoriteBusy) return;
+    _favoriteBusy = true;
+    final identity = QuoteLibraryStore.identity(payload);
+    try {
+      final selected = !(await _library.isFavorite(payload));
+      await _library.setFavorite(payload, selected);
+      if (!mounted) return;
+      if (_todayData != null &&
+          QuoteLibraryStore.identity(_todayData!) == identity) {
+        ++_favoriteGeneration;
+        setState(() => _fav = selected);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(selected ? '已收藏，可在名言书房中再读' : '已取消收藏'),
+          duration: const Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(18, 0, 18, 145),
+        ),
+      );
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('收藏未能保存，请重试')));
+    } finally {
+      _favoriteBusy = false;
+    }
+  }
+
+  Future<void> _nextQuote() async {
+    if (_nextBusy || _todayData == null) return;
+    setState(() => _nextBusy = true);
+    try {
+      Map<String, dynamic>? row;
+      try {
+        row = await _library.randomOther(
+          (_todayData?['quote'] ?? '').toString(),
+        );
+      } catch (_) {}
+      row ??= QuoteLibraryStore.normalize(await _loadNextFallbackQuote());
+      if (mounted && (row['content'] ?? '').toString().trim().isNotEmpty)
+        await _switchToPinned(row);
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('暂时未能换一条，请重试')));
+    } finally {
+      if (mounted) setState(() => _nextBusy = false);
+    }
+  }
+
+  Future<void> _openLibrary({
+    bool search = false,
+    bool favoritesOnly = false,
+  }) async {
+    final row = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: journeyPaper,
+      builder: (_) =>
+          QuoteLibrarySheet(autofocus: search, favoritesOnly: favoritesOnly),
+    );
+    if (mounted && row != null) await _switchToPinned(row);
+  }
+
+  Future<void> _showPinnedGallery() async {
+    _pinnedGalleryOpen = true;
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        backgroundColor: journeyPaper,
+        builder: (_) => SafeArea(
+          top: false,
+          child: ValueListenableBuilder<int>(
+            valueListenable: _pinnedCollectionTick,
+            builder: (context, _, __) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && _pinnedGalleryOpen) _updatePinnedJumpButtons();
+              });
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(24, 0, 24, 7),
+                    child: Text(
+                      '固定的好思想',
+                      style: TextStyle(
+                        fontFamily: 'QuoteKaiShu',
+                        fontSize: 24,
+                        color: journeyInk,
+                      ),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
+                    child: Text(
+                      '左右滑动，轻点一幅，再读一次。',
+                      style: TextStyle(fontSize: 12, color: journeyMuted),
+                    ),
+                  ),
+                  _pinnedQuotes.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(30),
+                          child: Center(
+                            child: Text(
+                              '用画面右上角的图钉，把喜欢的名言留在这里。',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: journeyMuted),
+                            ),
+                          ),
+                        )
+                      : _buildPinnedContent(),
+                  const SizedBox(height: 12),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+    } finally {
+      _pinnedGalleryOpen = false;
+    }
+  }
+
+  void _readHistoryAt(int index) {
+    if (index < 0 || index >= _readingHistory.length) return;
+    final payload = _readingHistory[index];
+    setState(() => _todayData = payload);
+    unawaited(_activateFrame(payload));
+    unawaited(_checkPinnedState());
+  }
+
+  Widget _buildScaffold(BuildContext context) {
+    final content =
+        _todayData ??
+        const <String, dynamic>{
+          'topic': '每日名言',
+          'quote': '名言加载中…',
+          'author': '',
+          'note': '',
+        };
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: Padding(
-              padding: EdgeInsets.only(top: contentPad),
-              child: Column(
-                children: [
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(bottom: posterBottomReserve),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
-                        child: ClipRect(
-                          child: FittedBox(
-                            // 完整展示 2:3 背景，不再以 cover 放大并裁掉左右场景。
-                            fit: BoxFit.contain,
-                            alignment: showPinnedArea
-                                ? Alignment.topCenter
-                                // 原图中的木框中心略高于整张照片中心；在竖屏
-                                // 留白内轻微下移照片，使木框本身落在屏幕视觉中心。
-                                : const Alignment(0, .45),
-                            child: SizedBox(
-                              width: posterLayoutWidth,
-                              height: posterLayoutHeight,
-                              child: PosterPureFlutter(
-                                topic: '${content?['topic'] ?? ''}',
-                                quote: '${content?['quote'] ?? ''}',
-                                author: '${content?['author'] ?? ''}',
-                                note: '${content?['note'] ?? ''}',
-                                avatar: '${content?['avatar'] ?? content?['avatarUrl'] ?? ''}',
-                                woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
-                                aiFramePath: _frameImagePath,
-                                animateCalligraphy: _quoteCalligraphyEnabled,
-                                calligraphyStyle: _quoteCalligraphyStyle,
-                                englishFontStyle: _quoteEnglishFontStyle,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (showPinnedArea)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: pinnedBottomGap,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
-                width: media.size.width,
-                alignment: Alignment.center,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 420),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (Widget child, Animation<double> anim) {
-                    final slide = Tween<Offset>(begin: const Offset(0, 1.0), end: Offset.zero)
-                        .chain(CurveTween(curve: Curves.easeOutCubic))
-                        .animate(anim);
-                    return ClipRect(
-                      child: SlideTransition(
-                        position: slide,
-                        child: FadeTransition(opacity: anim, child: child),
-                      ),
-                    );
-                  },
-                  child: _buildPinnedContent(),
-                ),
-              ),
-            ),
-// 顶栏区域（悬浮白底按钮）
-          Positioned(
-            top: topPad,
-            left: 0,
-            right: 0,
-            height: kToolbarHeight,
-            child: IgnorePointer(
-              ignoring: false,
-              child: Row(
-                children: [
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.all(5),
-                    child: Material(
-                      color: Colors.white,
-                      elevation: 6,
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        tooltip: '打开卡片',
-                        icon: const Icon(Icons.menu, color: Colors.black87),
-                        onPressed: _openLeftDrawer,
-                      ),
-                    ),
-                  ),
-                  const Expanded(child: SizedBox()),
-                  Padding(
-                    padding: const EdgeInsets.all(5),
-                    child: Material(
-                      color: Colors.white,
-                      elevation: 6,
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        tooltip: _pinnedActive ? '取消固定' : '固定名言',
-                        icon: Icon(
-                          _pinnedActive ? Icons.push_pin : Icons.push_pin_outlined,
-                          color: Colors.black87,
-                        ),
-                        onPressed: _togglePin,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.all(5),
-                    child: Material(
-                      color: Colors.white,
-                      elevation: 6,
-                      shape: const CircleBorder(),
-                      child: PopupMenuButton<String>(
-                        tooltip: '更多操作',
-                        icon: const Icon(Icons.more_vert, color: Colors.black87),
-                        onSelected: _handleTopBarMenu,
-                        itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                          PopupMenuItem<String>(
-                            value: 'frame_generate',
-                            child: Row(children: [
-                              Icon(_frameGenerating ? Icons.hourglass_top : Icons.auto_awesome),
-                              const SizedBox(width: 8),
-                              Text(_frameGenerating ? '正在生成配画' : 'AI 生成/重绘框内配画（可能收费）'),
-                            ]),
-                          ),
-                          PopupMenuItem<String>(
-                            value: 'frame_toggle',
-                            child: Row(children: [
-                              Icon(_frameAuto ? Icons.check_box : Icons.check_box_outline_blank),
-                              const SizedBox(width: 8),
-                              Text(_frameAuto ? '关闭 AI 自动配画' : '开启 AI 自动配画（可能收费）'),
-                            ]),
-                          ),
-                          const PopupMenuItem<String>(
-                            value: 'frame_explain',
-                            child: Row(children: [
-                              Icon(Icons.auto_stories_outlined),
-                              SizedBox(width: 8),
-                              Text('查看名言视觉化解释'),
-                            ]),
-                          ),
-                          const PopupMenuDivider(),
-                          PopupMenuItem<String>(
-                            value: 'share',
-                            child: Row(
-                              children: const [
-                                Icon(Icons.share),
-                                SizedBox(width: 8),
-                                Text('分享'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem<String>(
-                            value: 'favorite',
-                            child: Row(
-                              children: const [
-                                Icon(Icons.favorite_border),
-                                SizedBox(width: 8),
-                                Text('收藏'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem<String>(
-                            value: 'like',
-                            child: Row(
-                              children: const [
-                                Icon(Icons.thumb_up_alt_outlined),
-                                SizedBox(width: 8),
-                                Text('喜欢'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ),
-            ),
-          ),
-        ],
+      backgroundColor: const Color(0xfff7f4ed),
+      body: QuoteHomeScene(
+        poster: PosterPureFlutter(
+          topic: '${content['topic'] ?? ''}',
+          quote: '${content['quote'] ?? ''}',
+          author: '${content['author'] ?? ''}',
+          note: '${content['note'] ?? ''}',
+          avatar: '${content['avatar'] ?? content['avatarUrl'] ?? ''}',
+          woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
+          aiFramePath: _frameImagePath,
+          animateCalligraphy: _quoteCalligraphyEnabled,
+          calligraphyStyle: _quoteCalligraphyStyle,
+          englishFontStyle: _quoteEnglishFontStyle,
+        ),
+        moreMenu: _buildMoreMenu(),
+        onMenu: _openLeftDrawer,
+        onSearch: () => _openLibrary(search: true),
+        onPin: _togglePin,
+        onNext: _nextQuote,
+        onFavorite: _toggleFavorite,
+        onCategories: _openLibrary,
+        onShare: _copyLatest,
+        onPinnedQuotes: _showPinnedGallery,
+        favorite: _fav,
+        pinned: _pinnedActive,
+        nextBusy: _nextBusy,
+        pinnedCount: _pinnedTotal,
+        historyCount: _readingHistory.isEmpty ? 1 : _readingHistory.length,
+        historyIndex: _readingIndex,
+        onHistory: _readHistoryAt,
       ),
     );
   }
+
+  Widget _buildMoreMenu() => PopupMenuButton<String>(
+    tooltip: '更多操作',
+    constraints: const BoxConstraints(maxWidth: 310),
+    iconSize: 21,
+    padding: const EdgeInsets.all(8),
+    icon: const Icon(Icons.more_vert, color: Colors.black87),
+    onSelected: _handleTopBarMenu,
+    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+      const PopupMenuItem<String>(
+        value: 'pinned_quotes',
+        child: Text('固定的名言集'),
+      ),
+      const PopupMenuItem<String>(
+        value: 'favorite_quotes',
+        child: Text('我收藏的名言'),
+      ),
+      const PopupMenuDivider(),
+      PopupMenuItem<String>(
+        value: 'frame_generate',
+        child: Row(
+          children: [
+            Icon(_frameGenerating ? Icons.hourglass_top : Icons.auto_awesome),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(_frameGenerating ? '正在生成配画' : 'AI 生成/重绘框内配画（可能收费）'),
+            ),
+          ],
+        ),
+      ),
+      PopupMenuItem<String>(
+        value: 'frame_toggle',
+        child: Row(
+          children: [
+            Icon(_frameAuto ? Icons.check_box : Icons.check_box_outline_blank),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(_frameAuto ? '关闭 AI 自动配画' : '开启 AI 自动配画（可能收费）'),
+            ),
+          ],
+        ),
+      ),
+      const PopupMenuItem<String>(
+        value: 'frame_explain',
+        child: Row(
+          children: [
+            Icon(Icons.auto_stories_outlined),
+            SizedBox(width: 8),
+            Expanded(child: Text('查看名言视觉化解释')),
+          ],
+        ),
+      ),
+      const PopupMenuDivider(),
+      PopupMenuItem<String>(
+        value: 'share',
+        child: Row(
+          children: const [Icon(Icons.share), SizedBox(width: 8), Text('分享')],
+        ),
+      ),
+      PopupMenuItem<String>(
+        value: 'favorite',
+        child: Row(
+          children: [
+            Icon(_fav ? Icons.favorite : Icons.favorite_border),
+            const SizedBox(width: 8),
+            Text(_fav ? '取消收藏' : '收藏'),
+          ],
+        ),
+      ),
+      PopupMenuItem<String>(
+        value: 'like',
+        child: Row(
+          children: const [
+            Icon(Icons.thumb_up_alt_outlined),
+            SizedBox(width: 8),
+            Text('喜欢'),
+          ],
+        ),
+      ),
+    ],
+  );
 
   /// 每次进入首页（首开/重启/被杀后重启/从后台恢复）仅检查一次；未开仅触发系统默认通知权限弹窗。
   Future<void> _checkNotificationPermission() async {
