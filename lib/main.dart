@@ -1119,19 +1119,70 @@ class _RootShellState extends State<RootShell> {
         top: false,
         child: SizedBox(
           height: 60, // reduce bottom bar height by another 10 (total -20)
-          child: NavigationBar(
-            elevation: 0,
-            surfaceTintColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            selectedIndex: _idx,
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.home), label: '首页'),
-              NavigationDestination(icon: Icon(Icons.history), label: '历史'),
-              NavigationDestination(icon: Icon(Icons.travel_explore), label: '发现之旅'),
-              NavigationDestination(icon: Icon(Icons.event_note_outlined), label: '任务'),
-              NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
-            ],
-            onDestinationSelected: (i) { _handleSelectTab(i); },
+          child: NavigationBarTheme(
+            data: NavigationBarTheme.of(context).copyWith(
+              backgroundColor: Colors.white,
+              indicatorColor: Colors.transparent,
+              iconTheme: WidgetStateProperty.resolveWith(
+                (states) => IconThemeData(
+                  size: 25,
+                  color: states.contains(WidgetState.selected)
+                      ? (_idx == 4
+                            ? const Color(0xff6860bd)
+                            : const Color(0xff405e55))
+                      : const Color(0xff77757d),
+                ),
+              ),
+              labelTextStyle: WidgetStateProperty.resolveWith(
+                (states) => TextStyle(
+                  fontSize: 11,
+                  fontWeight: states.contains(WidgetState.selected)
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                  color: states.contains(WidgetState.selected)
+                      ? (_idx == 4
+                            ? const Color(0xff6860bd)
+                            : const Color(0xff405e55))
+                      : const Color(0xff85818a),
+                ),
+              ),
+            ),
+            child: NavigationBar(
+              elevation: 0,
+              surfaceTintColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              selectedIndex: _idx,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: '首页',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.history_toggle_off_rounded),
+                  selectedIcon: Icon(Icons.history_rounded),
+                  label: '历史',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.explore_outlined),
+                  selectedIcon: Icon(Icons.explore_rounded),
+                  label: '发现之旅',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.event_note_outlined),
+                  selectedIcon: Icon(Icons.event_note_rounded),
+                  label: '任务',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.settings_outlined),
+                  selectedIcon: Icon(Icons.settings_rounded),
+                  label: '设置',
+                ),
+              ],
+              onDestinationSelected: (i) {
+                _handleSelectTab(i);
+              },
+            ),
           ),
         ),
       ),

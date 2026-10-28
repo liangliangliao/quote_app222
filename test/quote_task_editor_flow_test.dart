@@ -216,6 +216,8 @@ void main() {
     await tester.pumpAndSettle();
     await waitForEditor(tester, duplicateEditor);
 
+    await tester.ensureVisible(find.text('运行日志'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('运行日志'));
     await tester.pumpAndSettle();
     expect(find.byType(LogsPage), findsOneWidget);

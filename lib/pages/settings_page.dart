@@ -50,11 +50,13 @@ import '../platform/exact_alarm_permission_coordinator.dart';
 import '../platform/bg_guard_helper.dart';
 import '../widgets/quote_calligraphy_text.dart';
 import 'logs_page.dart';
+import '../widgets/settings_dashboard.dart';
 import '../widgets/quote_figure_picker.dart';
 // removed duplicate import of native_guard (already imported above)
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.section});
+  final SettingsSection? section;
   @override
   SettingsPageState createState() => SettingsPageState();
 }
@@ -299,7 +301,13 @@ class SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver 
 
   bool _editingConfig = false;
   List<Map<String, dynamic>> _tasks = [];
-  Timer? _taskRefreshTimer;
+  SettingsAiSummary _overview = const SettingsAiSummary(loading: true);
+  int _overviewGeneration = 0;
+  bool _settingsLoading = true;
+  bool _detailLoadFailed = false;
+  bool _savingSettings = false;
+  int _voiceSettingsRevision = 0;
+  Future<void>? _loadOperation;
   bool _taskRefreshInProgress = false;
 
   // ====== EMA / SSES 设置 ======
@@ -543,26 +551,40 @@ class SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver 
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // 监听设置页刷新 bus，在切换到设置页或数据变更时刷新配置和任务列表
+    // 仅更新首页摘要；编辑中的表单保留用户输入。
     SimpleBus.settingsTick.addListener(_onBus);
-    _load();
-    _taskRefreshTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => _refreshTaskRuntimeState(),
-    );
+    _editingConfig = widget.section != null;
+    if (widget.section == null) {
+      unawaited(_loadOverview());
+    } else {
+      _loadOperation = _loadDetail();
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
+    if (state != AppLifecycleState.resumed || widget.section != null) return;
+    unawaited(_loadOverview());
     // 回到前台时先恢复可能被系统清理或因重启而丢失的注册，再读取最新执行时间。
     unawaited(_restoreAndRefreshTaskSchedules());
   }
 
   @override
   void dispose() {
-    _taskRefreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    final operation = _loadOperation;
+    if (operation == null) {
+      _disposeControllers();
+    } else {
+      unawaited(operation.whenComplete(_disposeControllers));
+    }
+
+    // 移除监听，避免在页面销毁后回调
+    SimpleBus.settingsTick.removeListener(_onBus);
+    super.dispose();
+  }
+
+  void _disposeControllers() {
     _apiKeyCtrl.dispose();
     _modelCtrl.dispose();
     _endpointCtrl.dispose();
@@ -613,14 +635,11 @@ class SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver 
     _globalRetryCountCtrl.dispose();
     _globalRetryDelayMsCtrl.dispose();
 
-    // 移除监听，避免在页面销毁后回调
-    SimpleBus.settingsTick.removeListener(_onBus);
-    super.dispose();
   }
 
-  /// 当接收到设置页刷新通知时重新加载配置和任务数据
+  /// 摘要只在实际数据变化时更新，不重建整页。
   void _onBus() {
-    _load();
+    if (widget.section == null) unawaited(_loadOverview());
   }
 
   Future<void> _restoreAndRefreshTaskSchedules() async {
@@ -650,40 +669,6 @@ class SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver 
     _tasks = await _taskDao.all();
       if (mounted) setState(() {});
     
-  }
-
-  Widget _aiPromptCenterEntry() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F3FF),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFDDD6FE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('AI 提示词统一配置中心', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 6),
-          const Text(
-            '真实积极行动系统、ActionMind、WOOP 行动引擎、第二念、向内生长 MI、足下真实自我、认知一致性、可持续卓越实验室的全局价值层/场景层/输出格式，以及目标训练、人生注解、电影角色实验室、发现之旅/看电影、首页侧栏等提示词都会集中到这里。进入后先选择模块，再选择 AI 子功能，即可查看默认模板、系统参数，并自由修改、恢复默认或导入导出。',
-            style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.45),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AiPromptSettingsPage()),
-              );
-              await _load();
-            },
-            icon: const Icon(Icons.tune),
-            label: const Text('打开提示词配置中心'),
-          ),
-        ],
-      ),
-    );
   }
 
 void showToast(String msg) {
@@ -1973,11 +1958,10 @@ Future<void> _clearSportMusicPlaylist() async {
       await _loadConceptEngineProviderConfig(_ceProvider);
     }
 
-    // Fetch the list of DeepSeek models asynchronously. This will update
-    // state when complete. It is invoked outside of setState to avoid
-    // triggering redundant rebuilds.
-    _fetchDeepseekModels();
-    _fetchGlobalAiModels();
+    // Populate locally; model discovery runs only when Refresh is tapped.
+    _deepseekModels = List<String>.from(_officialDeepseekModels);
+    if (!_deepseekModels.contains(_selectedDeepseekModel)) _deepseekModels.add(_selectedDeepseekModel);
+    _globalAiModels = _globalAiModelRaw.isEmpty ? <String>[] : <String>[_globalAiModelRaw];
 
     _tasks = await _taskDao.all();
     // 读取量表自动报告开关状态
@@ -2081,120 +2065,252 @@ Future<void> _clearSportMusicPlaylist() async {
   }
 
   Future<void> _saveConfig() async {
-    await _configDao.save(apiKey: _apiKeyCtrl.text.trim(), model: _modelCtrl.text.trim(), endpoint: _endpointCtrl.text.trim());
-    // also persist recent hours with the same save action
-    final _rh = int.tryParse(_recentHoursCtrl.text.trim()) ?? 2;
-    await _configDao.setRecentHours(_rh < 1 ? 1 : _rh);
-    final _ot = int.tryParse(_overviewThresholdCtrl.text.trim()) ?? 500;
-    await _configDao.setOverviewThreshold(_ot < 1 ? 1 : _ot);
-    final moodDelayMs = int.tryParse(_moodCardDelayMsCtrl.text.trim()) ?? ConfigDao.defaultMoodCardDelayMs;
-    final normalizedMoodDelayMs = moodDelayMs < 0 ? 0 : (moodDelayMs > 60000 ? 60000 : moodDelayMs);
-    _moodCardDelayMsCtrl.text = normalizedMoodDelayMs.toString();
-    await _configDao.setMoodCardPopupEnabled(_moodCardPopupEnabled);
-    await _configDao.setMoodCardPopupDelayMs(normalizedMoodDelayMs);
-
-    // Persist movie token
-    await _configDao.setMovieToken(_movieTokenCtrl.text.trim());
-
-    await _kvDao.setString(YoutubeMusicService.apiKeyKvKey, _youtubeApiKeyCtrl.text.trim());
-    await _kvDao.setString(OpenMusicService.jamendoClientIdKvKey, _jamendoClientIdCtrl.text.trim());
-    await _kvDao.setString('kugou_open_app_id', _kugouAppIdCtrl.text.trim());
-    await _kvDao.setString('kugou_open_app_key', _kugouAppKeyCtrl.text.trim());
-
-
-    // Persist DeepSeek API key and selected model. Even if no models were
-    // fetched, persisting the key allows TranslationService to pick it up
-    // immediately. Persisting the model ensures we store a valid value or
-    // default 'deepseek-v4-pro'.
-    await _configDao.setDeepseekKey(_deepseekKeyCtrl.text.trim());
-    await _configDao.setDeepseekModel(_normalizeDeepseekUiModel(_selectedDeepseekModel));
-    await _configDao.setOpenRouterKey(_openRouterKeyCtrl.text.trim());
-    await _globalAiSettings.setEdenAiKey(_edenAiKeyCtrl.text.trim());
-    await _globalAiSettings.setXGrokKey(_xGrokKeyCtrl.text.trim());
-    await _globalAiSettings.setGeminiKey(_geminiKeyCtrl.text.trim());
-    await _azureAiSettings.saveResources(_azureResources);
-    _azureResources = await _azureAiSettings.listResources();
-    // 保存资源表时资源名可能被去重改写（例如两个同名资源）。所选模型是
-    // “资源名/部署名”的限定写法，这里按改写后的资源名重新限定一次，
-    // 避免保存后模型指向一个已经不存在的资源名。
-    if (_globalAiProvider == 'azure' && _globalAiModelRaw.trim().isNotEmpty) {
-      final parts = AzureAiSettings.splitModel(_globalAiModelRaw.trim());
-      final resource = _findAzureResourceByName(parts.resourceName);
-      if (resource != null && parts.deployment.isNotEmpty) {
-        _globalAiModelRaw = AzureAiSettings.qualifyModel(resource.name, parts.deployment);
-        _globalAiModelCtrl.text = _formatGlobalAiModelDisplay('azure', _globalAiModelRaw);
-      }
+    // Each editor persists only the fields it owns.
+    switch (widget.section) {
+      case SettingsSection.ai:
+        await _configDao.save(
+          apiKey: _apiKeyCtrl.text.trim(),
+          model: _modelCtrl.text.trim(),
+          endpoint: _endpointCtrl.text.trim(),
+        );
+        await _configDao.setDeepseekKey(_deepseekKeyCtrl.text.trim());
+        await _configDao.setDeepseekModel(
+          _normalizeDeepseekUiModel(_selectedDeepseekModel),
+        );
+        await _configDao.setOpenRouterKey(_openRouterKeyCtrl.text.trim());
+        await _globalAiSettings.setEdenAiKey(_edenAiKeyCtrl.text.trim());
+        await _globalAiSettings.setXGrokKey(_xGrokKeyCtrl.text.trim());
+        await _globalAiSettings.setGeminiKey(_geminiKeyCtrl.text.trim());
+        await _azureAiSettings.saveResources(_azureResources);
+        _azureResources = await _azureAiSettings.listResources();
+        // 保存资源表时资源名可能被去重改写（例如两个同名资源）。所选模型是
+        // “资源名/部署名”的限定写法，这里按改写后的资源名重新限定一次，
+        // 避免保存后模型指向一个已经不存在的资源名。
+        if (_globalAiProvider == 'azure' &&
+            _globalAiModelRaw.trim().isNotEmpty) {
+          final parts = AzureAiSettings.splitModel(_globalAiModelRaw.trim());
+          final resource = _findAzureResourceByName(parts.resourceName);
+          if (resource != null && parts.deployment.isNotEmpty) {
+            _globalAiModelRaw = AzureAiSettings.qualifyModel(
+              resource.name,
+              parts.deployment,
+            );
+            _globalAiModelCtrl.text = _formatGlobalAiModelDisplay(
+              'azure',
+              _globalAiModelRaw,
+            );
+          }
+        }
+        await _globalAiSettings.save(
+          provider: _globalAiProvider,
+          model: _globalAiModelRaw.trim().isEmpty
+              ? _globalAiModelCtrl.text.trim()
+              : _globalAiModelRaw.trim(),
+        );
+        break;
+      case SettingsSection.parameters:
+        await _globalAiRequestSettings.saveRaw(
+          timeoutSeconds: _globalTimeoutCtrl.text,
+          maxOutputTokens: _globalMaxTokensCtrl.text,
+          temperature: _globalTemperatureCtrl.text,
+          topP: _globalTopPCtrl.text,
+          retryCount: _globalRetryCountCtrl.text,
+          retryDelayMs: _globalRetryDelayMsCtrl.text,
+        );
+        break;
+      case SettingsSection.media:
+        await _kvDao.setString(
+          YoutubeMusicService.apiKeyKvKey,
+          _youtubeApiKeyCtrl.text.trim(),
+        );
+        await _kvDao.setString(
+          OpenMusicService.jamendoClientIdKvKey,
+          _jamendoClientIdCtrl.text.trim(),
+        );
+        await _kvDao.setString(
+          'kugou_open_app_id',
+          _kugouAppIdCtrl.text.trim(),
+        );
+        await _kvDao.setString(
+          'kugou_open_app_key',
+          _kugouAppKeyCtrl.text.trim(),
+        );
+        break;
+      case SettingsSection.appearance:
+        final _rh = int.tryParse(_recentHoursCtrl.text.trim()) ?? 2;
+        await _configDao.setRecentHours(_rh < 1 ? 1 : _rh);
+        final _ot = int.tryParse(_overviewThresholdCtrl.text.trim()) ?? 500;
+        await _configDao.setOverviewThreshold(_ot < 1 ? 1 : _ot);
+        break;
+      case SettingsSection.experience:
+        final moodDelayMs =
+            int.tryParse(_moodCardDelayMsCtrl.text.trim()) ??
+            ConfigDao.defaultMoodCardDelayMs;
+        final normalizedMoodDelayMs = moodDelayMs < 0
+            ? 0
+            : (moodDelayMs > 60000 ? 60000 : moodDelayMs);
+        _moodCardDelayMsCtrl.text = normalizedMoodDelayMs.toString();
+        await _configDao.setMoodCardPopupEnabled(_moodCardPopupEnabled);
+        await _configDao.setMoodCardPopupDelayMs(normalizedMoodDelayMs);
+        break;
+      case SettingsSection.engine:
+        await _backupConceptEnginePromptVersion();
+        _ceProvider = _globalAiProvider;
+        _ceModelCtrl.text = _globalAiModelRaw.trim().isEmpty
+            ? _defaultCeModelForProvider(_ceProvider)
+            : _globalAiModelRaw.trim();
+        _ceEndpointCtrl.text = _defaultCeEndpointForProvider(_ceProvider);
+        if (_globalTimeoutCtrl.text.trim().isNotEmpty) {
+          _ceTimeoutCtrl.text = _globalTimeoutCtrl.text.trim();
+        }
+        await _kvDao.setString('ce_provider', _ceProvider);
+        final ceModel = _ceModelCtrl.text.trim().isEmpty
+            ? _defaultCeModelForProvider(_ceProvider)
+            : _ceModelCtrl.text.trim();
+        final ceEndpoint = _ceEndpointCtrl.text.trim().isEmpty
+            ? _defaultCeEndpointForProvider(_ceProvider)
+            : _ceEndpointCtrl.text.trim();
+        await _kvDao.setString('ce_openai_model', ceModel);
+        await _kvDao.setString('ce_openai_endpoint', ceEndpoint);
+        await _kvDao.setString('ce_deepseek_model', ceModel);
+        await _kvDao.setString('ce_deepseek_endpoint', ceEndpoint);
+        await _kvDao.setString('ce_model', ceModel);
+        await _kvDao.setString('ce_endpoint', ceEndpoint);
+        await _kvDao.setString(
+          'ce_timeout_seconds',
+          (_ceTimeoutCtrl.text.trim().isEmpty
+              ? '60'
+              : _ceTimeoutCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_scene_count',
+          (_ceSceneCountCtrl.text.trim().isEmpty
+              ? '3'
+              : _ceSceneCountCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_turn_target',
+          (_ceTurnTargetCtrl.text.trim().isEmpty
+              ? '6'
+              : _ceTurnTargetCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_parse_min_intuitive',
+          (_ceParseMinIntuitiveCtrl.text.trim().isEmpty
+              ? '10'
+              : _ceParseMinIntuitiveCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_parse_min_behaviors',
+          (_ceParseMinBehaviorsCtrl.text.trim().isEmpty
+              ? '10'
+              : _ceParseMinBehaviorsCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_parse_retry_count',
+          (_ceParseRetryCountCtrl.text.trim().isEmpty
+              ? '2'
+              : _ceParseRetryCountCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_behavior_chain_min_nodes',
+          (_ceBehaviorChainMinNodesCtrl.text.trim().isEmpty
+              ? '4'
+              : _ceBehaviorChainMinNodesCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_behavior_chain_max_nodes',
+          (_ceBehaviorChainMaxNodesCtrl.text.trim().isEmpty
+              ? '8'
+              : _ceBehaviorChainMaxNodesCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_parse_max_tokens',
+          (_ceParseMaxTokensCtrl.text.trim().isEmpty
+              ? '3200'
+              : _ceParseMaxTokensCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_scene_max_tokens',
+          (_ceSceneMaxTokensCtrl.text.trim().isEmpty
+              ? '4000'
+              : _ceSceneMaxTokensCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_turn_max_tokens',
+          (_ceTurnMaxTokensCtrl.text.trim().isEmpty
+              ? '2500'
+              : _ceTurnMaxTokensCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_replay_max_tokens',
+          (_ceReplayMaxTokensCtrl.text.trim().isEmpty
+              ? '3500'
+              : _ceReplayMaxTokensCtrl.text.trim()),
+        );
+        await _kvDao.setString(
+          'ce_behavior_chain_max_tokens',
+          (_ceBehaviorChainMaxTokensCtrl.text.trim().isEmpty
+              ? '2200'
+              : _ceBehaviorChainMaxTokensCtrl.text.trim()),
+        );
+        await _kvDao.setString('ce_transport_mode', _ceTransportMode);
+        await _kvDao.setString(
+          'ce_proxy_endpoint',
+          _ceProxyEndpointCtrl.text.trim(),
+        );
+        await _kvDao.setString('ce_proxy_token', _ceProxyTokenCtrl.text.trim());
+        await _kvDao.setString(_cePromptKey('extra'), _cePromptExtraCtrl.text);
+        await _kvDao.setString(
+          _cePromptKey('parse_template'),
+          _cePromptParseCtrl.text,
+        );
+        await _kvDao.setString(
+          _cePromptKey('scene_template'),
+          _cePromptSceneCtrl.text,
+        );
+        await _kvDao.setString(
+          _cePromptKey('turn_template'),
+          _cePromptTurnCtrl.text,
+        );
+        await _kvDao.setString(
+          _cePromptKey('replay_template'),
+          _cePromptReplayCtrl.text,
+        );
+        await _kvDao.setString(
+          _cePromptKey('behavior_chain_template'),
+          _cePromptBehaviorChainCtrl.text,
+        );
+        // 兼容旧版本通用键，保存当前生效值。
+        await _kvDao.setString('ce_prompt_extra', _cePromptExtraCtrl.text);
+        await _kvDao.setString(
+          'ce_prompt_parse_template',
+          _cePromptParseCtrl.text,
+        );
+        await _kvDao.setString(
+          'ce_prompt_scene_template',
+          _cePromptSceneCtrl.text,
+        );
+        await _kvDao.setString(
+          'ce_prompt_turn_template',
+          _cePromptTurnCtrl.text,
+        );
+        await _kvDao.setString(
+          'ce_prompt_replay_template',
+          _cePromptReplayCtrl.text,
+        );
+        await _kvDao.setString(
+          'ce_prompt_behavior_chain_template',
+          _cePromptBehaviorChainCtrl.text,
+        );
+        break;
+      default:
+        return;
     }
-    await _globalAiSettings.save(
-      provider: _globalAiProvider,
-      model: _globalAiModelRaw.trim().isEmpty ? _globalAiModelCtrl.text.trim() : _globalAiModelRaw.trim(),
-    );
-    await _globalAiRequestSettings.saveRaw(
-      timeoutSeconds: _globalTimeoutCtrl.text,
-      maxOutputTokens: _globalMaxTokensCtrl.text,
-      temperature: _globalTemperatureCtrl.text,
-      topP: _globalTopPCtrl.text,
-      retryCount: _globalRetryCountCtrl.text,
-      retryDelayMs: _globalRetryDelayMsCtrl.text,
-    );
-    await _globalAiSettings.saveGoalSettingUnderstandingPrompt(_goalSettingPromptCtrl.text.trim());
-    await _globalAiSettings.saveGoalSettingActionPrompt(_goalSettingActionPromptCtrl.text.trim());
-    await _globalAiSettings.saveGoalSettingLoopPrompt(_goalSettingLoopPromptCtrl.text.trim());
-    await _backupConceptEnginePromptVersion();
-    _ceProvider = _globalAiProvider;
-    _ceModelCtrl.text = _globalAiModelRaw.trim().isEmpty ? _defaultCeModelForProvider(_ceProvider) : _globalAiModelRaw.trim();
-    _ceEndpointCtrl.text = _defaultCeEndpointForProvider(_ceProvider);
-    if (_globalTimeoutCtrl.text.trim().isNotEmpty) {
-      _ceTimeoutCtrl.text = _globalTimeoutCtrl.text.trim();
-    }
-    await _kvDao.setString('ce_provider', _ceProvider);
-    final ceModel = _ceModelCtrl.text.trim().isEmpty ? _defaultCeModelForProvider(_ceProvider) : _ceModelCtrl.text.trim();
-    final ceEndpoint = _ceEndpointCtrl.text.trim().isEmpty ? _defaultCeEndpointForProvider(_ceProvider) : _ceEndpointCtrl.text.trim();
-    await _kvDao.setString('ce_openai_model', ceModel);
-    await _kvDao.setString('ce_openai_endpoint', ceEndpoint);
-    await _kvDao.setString('ce_deepseek_model', ceModel);
-    await _kvDao.setString('ce_deepseek_endpoint', ceEndpoint);
-    await _kvDao.setString('ce_model', ceModel);
-    await _kvDao.setString('ce_endpoint', ceEndpoint);
-    await _kvDao.setString('ce_timeout_seconds', (_ceTimeoutCtrl.text.trim().isEmpty ? '60' : _ceTimeoutCtrl.text.trim()));
-    await _kvDao.setString('ce_scene_count', (_ceSceneCountCtrl.text.trim().isEmpty ? '3' : _ceSceneCountCtrl.text.trim()));
-    await _kvDao.setString('ce_turn_target', (_ceTurnTargetCtrl.text.trim().isEmpty ? '6' : _ceTurnTargetCtrl.text.trim()));
-    await _kvDao.setString('ce_parse_min_intuitive', (_ceParseMinIntuitiveCtrl.text.trim().isEmpty ? '10' : _ceParseMinIntuitiveCtrl.text.trim()));
-    await _kvDao.setString('ce_parse_min_behaviors', (_ceParseMinBehaviorsCtrl.text.trim().isEmpty ? '10' : _ceParseMinBehaviorsCtrl.text.trim()));
-    await _kvDao.setString('ce_parse_retry_count', (_ceParseRetryCountCtrl.text.trim().isEmpty ? '2' : _ceParseRetryCountCtrl.text.trim()));
-    await _kvDao.setString('ce_behavior_chain_min_nodes', (_ceBehaviorChainMinNodesCtrl.text.trim().isEmpty ? '4' : _ceBehaviorChainMinNodesCtrl.text.trim()));
-    await _kvDao.setString('ce_behavior_chain_max_nodes', (_ceBehaviorChainMaxNodesCtrl.text.trim().isEmpty ? '8' : _ceBehaviorChainMaxNodesCtrl.text.trim()));
-    await _kvDao.setString('ce_parse_max_tokens', (_ceParseMaxTokensCtrl.text.trim().isEmpty ? '3200' : _ceParseMaxTokensCtrl.text.trim()));
-    await _kvDao.setString('ce_scene_max_tokens', (_ceSceneMaxTokensCtrl.text.trim().isEmpty ? '4000' : _ceSceneMaxTokensCtrl.text.trim()));
-    await _kvDao.setString('ce_turn_max_tokens', (_ceTurnMaxTokensCtrl.text.trim().isEmpty ? '2500' : _ceTurnMaxTokensCtrl.text.trim()));
-    await _kvDao.setString('ce_replay_max_tokens', (_ceReplayMaxTokensCtrl.text.trim().isEmpty ? '3500' : _ceReplayMaxTokensCtrl.text.trim()));
-    await _kvDao.setString('ce_behavior_chain_max_tokens', (_ceBehaviorChainMaxTokensCtrl.text.trim().isEmpty ? '2200' : _ceBehaviorChainMaxTokensCtrl.text.trim()));
-    await _kvDao.setString('ce_transport_mode', _ceTransportMode);
-    await _kvDao.setString('ce_proxy_endpoint', _ceProxyEndpointCtrl.text.trim());
-    await _kvDao.setString('ce_proxy_token', _ceProxyTokenCtrl.text.trim());
-    await _kvDao.setString(_cePromptKey('extra'), _cePromptExtraCtrl.text);
-    await _kvDao.setString(_cePromptKey('parse_template'), _cePromptParseCtrl.text);
-    await _kvDao.setString(_cePromptKey('scene_template'), _cePromptSceneCtrl.text);
-    await _kvDao.setString(_cePromptKey('turn_template'), _cePromptTurnCtrl.text);
-    await _kvDao.setString(_cePromptKey('replay_template'), _cePromptReplayCtrl.text);
-    await _kvDao.setString(_cePromptKey('behavior_chain_template'), _cePromptBehaviorChainCtrl.text);
-    // 兼容旧版本通用键，保存当前生效值。
-    await _kvDao.setString('ce_prompt_extra', _cePromptExtraCtrl.text);
-    await _kvDao.setString('ce_prompt_parse_template', _cePromptParseCtrl.text);
-    await _kvDao.setString('ce_prompt_scene_template', _cePromptSceneCtrl.text);
-    await _kvDao.setString('ce_prompt_turn_template', _cePromptTurnCtrl.text);
-    await _kvDao.setString('ce_prompt_replay_template', _cePromptReplayCtrl.text);
-    await _kvDao.setString('ce_prompt_behavior_chain_template', _cePromptBehaviorChainCtrl.text);
-    // Refresh available model lists after saving keys, so dropdowns show all
-    // provider specific models immediately.
-    _fetchDeepseekModels();
-    _fetchGlobalAiModels();
-    setState(() => _editingConfig = false);
+    SimpleBus.settingsTick.value++;
     showToast('配置已保存');
-    
   }
 
-  
 Future<String?> _saveAvatarTemp(File file) async {
   // 保留原始扩展名与尺寸，不裁剪
   final docs = await getApplicationDocumentsDirectory();
@@ -3476,1128 +3592,1890 @@ Future<String?> _saveAvatarTemp(File file) async {
     );
   }
 
+  Future<void> _loadOverview() async {
+    final generation = ++_overviewGeneration;
+    try {
+      final state = await _globalAiSettings.getState();
+      if (!mounted || generation != _overviewGeneration) return;
+      final next = SettingsAiSummary(
+        provider: _providerDisplayName(state['provider'] ?? 'openai'),
+        model: state['display_model'] ?? state['model'] ?? '',
+        configured: state['available'] == '1',
+      );
+      if (_overview.loading ||
+          _overview.provider != next.provider ||
+          _overview.model != next.model ||
+          _overview.configured != next.configured) {
+        setState(() => _overview = next);
+      }
+    } catch (_) {
+      if (mounted && generation == _overviewGeneration) {
+        setState(() => _overview = const SettingsAiSummary());
+      }
+    }
+  }
+
+  Future<void> _loadDetail() async {
+    try {
+      await _load();
+      if (mounted) setState(() => _detailLoadFailed = false);
+    } catch (_) {
+      if (mounted) setState(() => _detailLoadFailed = true);
+    } finally {
+      if (mounted) setState(() => _settingsLoading = false);
+    }
+  }
+
+  Future<void> _openSection(SettingsSection section) async {
+    final Widget page = switch (section) {
+      SettingsSection.semantic => const SemanticConsistencySettingsPage(),
+      SettingsSection.movies => const MovieRoleLabSettingsPage(),
+      SettingsSection.logs => Scaffold(
+        backgroundColor: settingsPaper,
+        appBar: AppBar(
+          title: const Text('运行日志'),
+          backgroundColor: settingsPaper,
+          surfaceTintColor: Colors.transparent,
+        ),
+        body: Builder(
+          builder: (context) => MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            child: const LogsPage(),
+          ),
+        ),
+      ),
+      _ => SettingsPage(section: section),
+    };
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => page));
+    if (mounted && widget.section == null) await _loadOverview();
+  }
+
+  Future<void> _openVoiceLab() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const VoiceLabHomePage()));
+    if (mounted) setState(() => _voiceSettingsRevision++);
+  }
+
+  Future<void> _saveDetail() async {
+    if (_settingsLoading || _savingSettings) return;
+    setState(() => _savingSettings = true);
+    var saved = false;
+    try {
+      await _saveConfig();
+      saved = true;
+    } catch (_) {
+      showToast('保存未完成，请重试');
+    } finally {
+      if (mounted) setState(() => _savingSettings = false);
+    }
+    if (saved && mounted) Navigator.of(context).pop();
+  }
+
+  Widget _formCard({String? title, required List<Widget> children}) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title != null) ...[
+            Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: settingsInk,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          ...children,
+        ],
+      ),
+    ),
+  );
+
+  Widget _settingsLink(
+    String title,
+    String subtitle,
+    IconData icon,
+    VoidCallback onTap, {
+    Key? key,
+  }) => Card(
+    child: ListTile(
+      key: key,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      leading: Container(
+        width: 38,
+        height: 38,
+        decoration: const BoxDecoration(
+          color: Color(0xffeeedf8),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: settingsAccent, size: 21),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          color: settingsInk,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          subtitle,
+          style: const TextStyle(
+            fontSize: 12,
+            height: 1.45,
+            color: Color(0xff918996),
+          ),
+        ),
+      ),
+      trailing: const Icon(
+        Icons.chevron_right_rounded,
+        color: Color(0xffaaa1b2),
+      ),
+      onTap: onTap,
+    ),
+  );
+
+  Widget _sectionLink(
+    SettingsSection section,
+    String subtitle,
+    IconData icon,
+  ) => _settingsLink(
+    section.title,
+    subtitle,
+    icon,
+    () => _openSection(section),
+    key: ValueKey('settings-link-${section.name}'),
+  );
+
+  Widget _groupLabel(String text) => Padding(
+    padding: const EdgeInsets.fromLTRB(5, 8, 5, 10),
+    child: Text(
+      text,
+      style: const TextStyle(
+        color: Color(0xff97909d),
+        fontSize: 12,
+        letterSpacing: .5,
+      ),
+    ),
+  );
+
+  List<Widget> _detailContent(SettingsSection section) => switch (section) {
+    SettingsSection.ai => [
+      _buildGlobalModelFields(),
+      Card(
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+          title: const Text(
+            '服务商密钥与接口',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
+          subtitle: const Text(
+            '配置你使用的服务商，其余可留空',
+            style: TextStyle(fontSize: 12, color: Color(0xff918996)),
+          ),
+          children: [_buildProviderFields()],
+        ),
+      ),
+    ],
+    SettingsSection.parameters => [_buildParametersFields()],
+    SettingsSection.media => [_buildMediaFields()],
+    SettingsSection.engine => [_buildEngineFields()],
+    SettingsSection.appearance => [
+      _quoteCalligraphySettingsCard(),
+      _buildDisplayFields(),
+    ],
+    SettingsSection.experience => _buildExperienceCards(),
+    SettingsSection.sport => _buildSportCards(),
+    SettingsSection.voice => [
+      Card(
+        child: _ReadAloudProviderTile(key: ValueKey(_voiceSettingsRevision)),
+      ),
+      _settingsLink(
+        '语音服务与声音库',
+        'ElevenLabs、Azure Speech、讯飞等 TTS / ASR 服务配置',
+        Icons.mic_rounded,
+        _openVoiceLab,
+      ),
+    ],
+    SettingsSection.prompts => [
+      _settingsLink(
+        '提示词配置中心',
+        '选择模块与 AI 子功能，编辑默认模板、导入导出或恢复历史备份',
+        Icons.description_outlined,
+        () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const AiPromptSettingsPage()),
+        ),
+        key: const ValueKey('settings-prompt-center'),
+      ),
+      _settingsLink(
+        '电影分析提示词',
+        '电影卡片的 AI 深度分析模板',
+        Icons.theaters_outlined,
+        () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const AiPromptSettingsPage(
+              initialModuleId: 'movie_watch',
+              initialPromptId: 'movie_analysis',
+            ),
+          ),
+        ),
+      ),
+      _sectionLink(
+        SettingsSection.engine,
+        '实践引擎的传输方式、生成参数与模板版本',
+        Icons.auto_awesome_outlined,
+      ),
+      _groupLabel('首页侧栏'),
+      _formCard(children: _buildDrawerPromptControls()),
+    ],
+    SettingsSection.modules => [
+      _settingsLink(
+        '健康饮食配置',
+        '营养膳食、食物数据源与菜谱服务',
+        Icons.restaurant_outlined,
+        () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const HealthDietSettingsPage(),
+          ),
+        ),
+      ),
+      _sectionLink(
+        SettingsSection.movies,
+        '字幕、影片数据与角色实验室',
+        Icons.theaters_outlined,
+      ),
+      _sectionLink(
+        SettingsSection.experience,
+        '心情卡片、即时自尊问答与评分尺度',
+        Icons.favorite_border_rounded,
+      ),
+      _sectionLink(
+        SettingsSection.sport,
+        '运动铃声、音乐清单与背景图片',
+        Icons.directions_run_rounded,
+      ),
+      _sectionLink(
+        SettingsSection.reminders,
+        '火种复问与解锁提醒间隔',
+        Icons.notifications_none_rounded,
+      ),
+      _sectionLink(
+        SettingsSection.engine,
+        '生成参数、代理与 Prompt 模板',
+        Icons.auto_awesome_outlined,
+      ),
+      _sectionLink(
+        SettingsSection.location,
+        '百度地图 Web / Android 服务配置',
+        Icons.map_outlined,
+      ),
+      _settingsLink(
+        '日记设置',
+        '日记的个性化与隐私设置',
+        Icons.book_outlined,
+        () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const DiarySettingsPage()),
+        ),
+      ),
+    ],
+    SettingsSection.data => [
+      ..._buildDataCards(),
+      _settingsLink(
+        '提示词备份与恢复',
+        '在提示词中心导入、导出模板与恢复历史版本',
+        Icons.restore_page_outlined,
+        () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const AiPromptSettingsPage()),
+        ),
+      ),
+      _settingsLink(
+        '名言导入与历史',
+        '前往历史页面导入 CSV、整理与查看名言',
+        Icons.format_quote_rounded,
+        () {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          SimpleBus.navIndex.value = 1;
+        },
+      ),
+    ],
+    SettingsSection.reminders => [
+      ..._buildReminderCards(),
+      const UnlockCooldownConfigWidget(),
+    ],
+    SettingsSection.location => [
+      const BaiduWebAkConfigWidget(),
+      const SizedBox(height: 12),
+      const BaiduAndroidAkConfigWidget(),
+    ],
+    _ => const [],
+  };
+
   @override
   Widget build(BuildContext context) {
-    final cfgFields = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('OpenAI 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
-        // Remove underline border for API key input
-        TextField(
-          controller: _apiKeyCtrl,
-          enabled: _editingConfig,
-          decoration: const InputDecoration(border: InputBorder.none),
+    final section = widget.section;
+    if (section == null)
+      return SettingsDashboard(summary: _overview, onOpen: _openSection);
+    final theme = Theme.of(context);
+    return Theme(
+      data: theme.copyWith(
+        scaffoldBackgroundColor: settingsPaper,
+        colorScheme: theme.colorScheme.copyWith(
+          primary: settingsAccent,
+          surface: Colors.white,
         ),
-        const SizedBox(height: 8),
-        const Text('OpenAI 模型版本', style: TextStyle(fontWeight: FontWeight.bold)),
-        // Remove underline border for model input
-        TextField(
-          controller: _modelCtrl,
-          enabled: _editingConfig,
-          decoration: const InputDecoration(border: InputBorder.none),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          color: Colors.white,
+          margin: const EdgeInsets.only(bottom: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
         ),
-        const SizedBox(height: 8),
-        const Text('OpenAI 接口地址', style: TextStyle(fontWeight: FontWeight.bold)),
-        // Remove underline border for endpoint input
-        TextField(
-          controller: _endpointCtrl,
-          enabled: _editingConfig,
-          decoration: const InputDecoration(border: InputBorder.none),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xfff7f6fb),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 13,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xffb1a9dc)),
+          ),
         ),
-        const SizedBox(height: 8),
-        const Text('首页查询时间窗（小时）', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _recentHoursCtrl,
-          enabled: _editingConfig,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(border: InputBorder.none),
+        dividerTheme: const DividerThemeData(
+          color: Color(0xffeeecf2),
+          thickness: 1,
+          space: 24,
         ),
-        const SizedBox(height: 8),
-        const Text('长周期总览显示阈值（条）', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _overviewThresholdCtrl,
-          enabled: _editingConfig,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(border: InputBorder.none),
-        ),
-
-        const SizedBox(height: 8),
-        // DeepSeek API key input
-        const Text('DeepSeek 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _deepseekKeyCtrl,
-          enabled: _editingConfig,
-          decoration: const InputDecoration(border: InputBorder.none),
-        ),
-
-        const SizedBox(height: 8),
-        // DeepSeek model dropdown. When the models list is being loaded, show a
-        // hint; otherwise provide a dropdown for selection. If editing is
-        // disabled, the dropdown is disabled.
-        const Text('DeepSeek 模型', style: TextStyle(fontWeight: FontWeight.bold)),
-        _loadingDeepseek
-            ? const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8.0),
-                child: Text('正在加载模型列表...', style: TextStyle(color: Colors.grey)),
-              )
-            : DropdownButton<String>(
-                isExpanded: true,
-                value: _selectedDeepseekModel,
-                onChanged: (_editingConfig && _deepseekModels.isNotEmpty)
-                    ? (String? v) {
-                        if (v == null) return;
-                        setState(() {
-                          _selectedDeepseekModel = v;
-                        });
-                        // Persist immediately when user selects; this ensures
-                        // TranslationService picks up the new model without
-                        // requiring a full save. Errors are ignored.
-                        _configDao.setDeepseekModel(_normalizeDeepseekUiModel(v));
-                      }
-                    : null,
-                items: (_deepseekModels.isNotEmpty
-                        ? _deepseekModels
-                        : <String>{..._officialDeepseekModels, _selectedDeepseekModel}.toList())
-                    .map<DropdownMenuItem<String>>((String m) {
-                  return DropdownMenuItem<String>(
-                    value: m,
-                    child: Text(m),
-                  );
-                }).toList(),
+      ),
+      child: PopScope(
+        canPop: !_savingSettings,
+        child: Scaffold(
+          backgroundColor: settingsPaper,
+          appBar: AppBar(
+            title: Text(
+              section.title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: settingsInk,
               ),
-
-        const SizedBox(height: 8),
-        const Text('OpenRouter 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _openRouterKeyCtrl,
-          enabled: _editingConfig,
-          obscureText: true,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: 'sk-or-... ',
+            ),
+            backgroundColor: settingsPaper,
+            surfaceTintColor: Colors.transparent,
+            actions: [
+              if (section.hasSaveAction)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: FilledButton(
+                    key: const ValueKey('settings-save'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: settingsAccent,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed:
+                        _settingsLoading || _detailLoadFailed || _savingSettings
+                        ? null
+                        : _saveDetail,
+                    child: Text(_savingSettings ? '保存中…' : '保存'),
+                  ),
+                ),
+            ],
           ),
+          body: _settingsLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: settingsAccent,
+                    strokeWidth: 2,
+                  ),
+                )
+              : _detailLoadFailed
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('设置暂时未能读取'),
+                      TextButton(
+                        onPressed: () {
+                          setState(() => _settingsLoading = true);
+                          _loadOperation = _loadDetail();
+                        },
+                        child: const Text('重新读取'),
+                      ),
+                    ],
+                  ),
+                )
+              : AbsorbPointer(
+                  absorbing: _savingSettings,
+                  child: ListView(
+                    key: PageStorageKey('settings-detail-${section.name}'),
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+                    children: [
+                      if (section.hasSaveAction)
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(5, 0, 5, 16),
+                          child: Text(
+                            '按你的习惯调整，完成后点击右上角保存。',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xff97909d),
+                            ),
+                          ),
+                        ),
+                      ..._detailContent(section),
+                    ],
+                  ),
+                ),
         ),
+      ),
+    );
+  }
 
-        const SizedBox(height: 8),
-        const Text('Eden AI 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _edenAiKeyCtrl,
-          enabled: _editingConfig,
-          obscureText: true,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: 'Eden AI API Key / Bearer Token',
+  Widget _buildProviderFields() => _formCard(
+    children: [
+      const Text('OpenAI 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
+      // Remove underline border for API key input
+      TextField(
+        controller: _apiKeyCtrl,
+        obscureText: true,
+        enabled: _editingConfig,
+        decoration: const InputDecoration(border: InputBorder.none),
+      ),
+      const SizedBox(height: 8),
+      const Text('OpenAI 模型版本', style: TextStyle(fontWeight: FontWeight.bold)),
+      // Remove underline border for model input
+      TextField(
+        controller: _modelCtrl,
+        enabled: _editingConfig,
+        decoration: const InputDecoration(border: InputBorder.none),
+      ),
+      const SizedBox(height: 8),
+      const Text('OpenAI 接口地址', style: TextStyle(fontWeight: FontWeight.bold)),
+      // Remove underline border for endpoint input
+      TextField(
+        controller: _endpointCtrl,
+        enabled: _editingConfig,
+        decoration: const InputDecoration(border: InputBorder.none),
+      ),
+      const SizedBox(height: 8),
+      const Text('DeepSeek 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
+      TextField(
+        controller: _deepseekKeyCtrl,
+        obscureText: true,
+        enabled: _editingConfig,
+        decoration: const InputDecoration(border: InputBorder.none),
+      ),
+
+      const SizedBox(height: 8),
+      // DeepSeek model dropdown. When the models list is being loaded, show a
+      // hint; otherwise provide a dropdown for selection. If editing is
+      // disabled, the dropdown is disabled.
+      Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'DeepSeek 模型',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
-        ),
-
-        const SizedBox(height: 8),
-        const Text('xGrok 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _xGrokKeyCtrl,
-          enabled: _editingConfig,
-          obscureText: true,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: 'xAI / Grok API Key',
-          ),
-        ),
-
-        const SizedBox(height: 8),
-        const Text('Gemini 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _geminiKeyCtrl,
-          enabled: _editingConfig,
-          obscureText: true,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: 'Google AI Studio Gemini API Key',
-          ),
-        ),
-
-        const SizedBox(height: 12),
-        const Divider(),
-        _buildAzureResourceSection(),
-        const Divider(),
-
-        const SizedBox(height: 8),
-        const Text('YouTube Data API Key（全球音乐搜索）', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _youtubeApiKeyCtrl,
-          enabled: _editingConfig,
-          obscureText: true,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: 'Google Cloud 中启用 YouTube Data API v3 后生成的 API Key',
-          ),
-        ),
-        const Text(
-          '用于发现之旅 > 听音乐：搜索 YouTube 音乐视频并使用官方嵌入播放器播放。建议在 Google Cloud 限制此 Key 只能调用 YouTube Data API v3。',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-
-        const SizedBox(height: 8),
-        const Text('Jamendo Client ID（开放音乐，可选）', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _jamendoClientIdCtrl,
-          enabled: _editingConfig,
-          obscureText: true,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: '可选；填写后“开放音乐”会额外搜索 Jamendo 独立音乐',
-          ),
-        ),
-        const Text(
-          '不填写也可以使用 Internet Archive 开放音乐源；开放音乐源支持 App 切后台继续播放。',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-
-        const SizedBox(height: 8),
-        const Text('酷狗开放组件 AppId（预留）', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _kugouAppIdCtrl,
-          enabled: _editingConfig,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: '拿到酷狗官方 SDK / 商务授权后填写',
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text('酷狗开放组件 AppKey（预留）', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _kugouAppKeyCtrl,
-          enabled: _editingConfig,
-          obscureText: true,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: '拿到酷狗官方 SDK / 商务授权后填写',
-          ),
-        ),
-        const Text(
-          '当前版本先完成 YouTube 官方搜索与嵌入播放；酷狗字段只做预留，不调用非官方接口。',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-
-        const SizedBox(height: 8),
-        const Text('统一 AI 模型（供模块复用）', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        const Text(
-          '首页左侧菜单中的独立模块会统一读取这里的 AI 提供方与模型版本；模块内只展示，不单独配置。OpenAI 使用本页顶部 OpenAI 密钥，DeepSeek 使用本页 DeepSeek 密钥，OpenRouter 使用本页 OpenRouter 密钥，Eden AI 使用本页 Eden AI 密钥，xGrok 使用本页 xGrok 密钥，Gemini 使用本页 Gemini 密钥，Azure / Microsoft Foundry 使用本页“Azure / Microsoft Foundry 资源”里对应资源的终结点与密钥。',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-        const SizedBox(height: 8),
-        const Text('全局 AI 提供方', style: TextStyle(fontWeight: FontWeight.bold)),
-        DropdownButton<String>(
-          isExpanded: true,
-          value: _globalAiProvider,
-          onChanged: _editingConfig
-              ? (String? v) async {
-                  if (v == null) return;
-                  final provider = _normalizeProviderKey(v);
-                  final suggested = await _globalAiSettings.getModelForProvider(provider);
-                  setState(() {
-                    _globalAiProvider = provider;
-                    _globalAiModelRaw = suggested;
-                    _globalAiModelCtrl.text = _formatGlobalAiModelDisplay(provider, suggested);
-                    _ceProvider = provider;
-                    _ceModelCtrl.text = suggested;
-                    _ceEndpointCtrl.text = _defaultCeEndpointForProvider(provider);
-                  });
-                  await _fetchGlobalAiModels();
-                }
-              : null,
-          items: const [
-            DropdownMenuItem(value: 'deepseek', child: Text('DeepSeek')),
-            DropdownMenuItem(value: 'openai', child: Text('OpenAI')),
-            DropdownMenuItem(value: 'openrouter', child: Text('OpenRouter')),
-            DropdownMenuItem(value: 'edenai', child: Text('Eden AI')),
-            DropdownMenuItem(value: 'xgrok', child: Text('xGrok')),
-            DropdownMenuItem(value: 'gemini', child: Text('Gemini')),
-            DropdownMenuItem(value: 'azure', child: Text('Azure / Microsoft Foundry')),
-          ],
-        ),
-        if (_globalAiProvider == 'azure') ...<Widget>[
-          const SizedBox(height: 6),
-          Text(
-            _azureResources.where((e) => e.enabled && e.isConfigured).isEmpty
-                ? '尚未配置可用的 Azure 资源：请先在上方“Azure / Microsoft Foundry 资源”里填写项目终结点与密钥，再刷新模型列表。'
-                : '当前调用地址：${_azureChatEndpointPreview().isEmpty ? '待选择模型' : _azureChatEndpointPreview()}',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          IconButton(
+            tooltip: '刷新 DeepSeek 模型',
+            onPressed: _loadingDeepseek ? null : _fetchDeepseekModels,
+            icon: const Icon(Icons.refresh_rounded),
           ),
         ],
+      ),
+      _loadingDeepseek
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text('正在加载模型列表...', style: TextStyle(color: Colors.grey)),
+            )
+          : DropdownButtonFormField<String>(
+              isExpanded: true,
+              value: _selectedDeepseekModel,
+              onChanged: (_editingConfig && _deepseekModels.isNotEmpty)
+                  ? (String? v) {
+                      if (v == null) return;
+                      setState(() {
+                        _selectedDeepseekModel = v;
+                      });
+                    }
+                  : null,
+              items:
+                  (_deepseekModels.isNotEmpty
+                          ? _deepseekModels
+                          : <String>{
+                              ..._officialDeepseekModels,
+                              _selectedDeepseekModel,
+                            }.toList())
+                      .map<DropdownMenuItem<String>>((String m) {
+                        return DropdownMenuItem<String>(
+                          value: m,
+                          child: Text(m),
+                        );
+                      })
+                      .toList(),
+            ),
+
+      const SizedBox(height: 8),
+      const Text(
+        'OpenRouter 密钥',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      TextField(
+        controller: _openRouterKeyCtrl,
+        enabled: _editingConfig,
+        obscureText: true,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: 'sk-or-... ',
+        ),
+      ),
+
+      const SizedBox(height: 8),
+      const Text('Eden AI 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
+      TextField(
+        controller: _edenAiKeyCtrl,
+        enabled: _editingConfig,
+        obscureText: true,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: 'Eden AI API Key / Bearer Token',
+        ),
+      ),
+
+      const SizedBox(height: 8),
+      const Text('xGrok 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
+      TextField(
+        controller: _xGrokKeyCtrl,
+        enabled: _editingConfig,
+        obscureText: true,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: 'xAI / Grok API Key',
+        ),
+      ),
+
+      const SizedBox(height: 8),
+      const Text('Gemini 密钥', style: TextStyle(fontWeight: FontWeight.bold)),
+      TextField(
+        controller: _geminiKeyCtrl,
+        enabled: _editingConfig,
+        obscureText: true,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: 'Google AI Studio Gemini API Key',
+        ),
+      ),
+
+      const SizedBox(height: 12),
+      const Divider(),
+      _buildAzureResourceSection(),
+      const Divider(),
+
+      const SizedBox(height: 8),
+    ],
+  );
+
+  Widget _buildGlobalModelFields() => _formCard(
+    children: [
+      const Text(
+        '统一 AI 模型（供模块复用）',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 6),
+      const Text(
+        '首页左侧菜单中的独立模块会统一读取这里的 AI 提供方与模型版本；模块内只展示，不单独配置。OpenAI 使用本页顶部 OpenAI 密钥，DeepSeek 使用本页 DeepSeek 密钥，OpenRouter 使用本页 OpenRouter 密钥，Eden AI 使用本页 Eden AI 密钥，xGrok 使用本页 xGrok 密钥，Gemini 使用本页 Gemini 密钥，Azure / Microsoft Foundry 使用本页“Azure / Microsoft Foundry 资源”里对应资源的终结点与密钥。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      const SizedBox(height: 8),
+      const Text('全局 AI 提供方', style: TextStyle(fontWeight: FontWeight.bold)),
+      DropdownButtonFormField<String>(
+        isExpanded: true,
+        value: _globalAiProvider,
+        onChanged: _editingConfig
+            ? (String? v) async {
+                if (v == null) return;
+                final provider = _normalizeProviderKey(v);
+                final suggested = await _globalAiSettings.getModelForProvider(
+                  provider,
+                );
+                if (!mounted) return;
+                setState(() {
+                  _globalAiProvider = provider;
+                  _globalAiModelRaw = suggested;
+                  _globalAiModelCtrl.text = _formatGlobalAiModelDisplay(
+                    provider,
+                    suggested,
+                  );
+                  _ceProvider = provider;
+                  _ceModelCtrl.text = suggested;
+                  _ceEndpointCtrl.text = _defaultCeEndpointForProvider(
+                    provider,
+                  );
+                  _globalAiModels = suggested.isEmpty ? [] : [suggested];
+                });
+              }
+            : null,
+        items: const [
+          DropdownMenuItem(value: 'deepseek', child: Text('DeepSeek')),
+          DropdownMenuItem(value: 'openai', child: Text('OpenAI')),
+          DropdownMenuItem(value: 'openrouter', child: Text('OpenRouter')),
+          DropdownMenuItem(value: 'edenai', child: Text('Eden AI')),
+          DropdownMenuItem(value: 'xgrok', child: Text('xGrok')),
+          DropdownMenuItem(value: 'gemini', child: Text('Gemini')),
+          DropdownMenuItem(
+            value: 'azure',
+            child: Text('Azure / Microsoft Foundry'),
+          ),
+        ],
+      ),
+      if (_globalAiProvider == 'azure') ...<Widget>[
+        const SizedBox(height: 6),
+        Text(
+          _azureResources.where((e) => e.enabled && e.isConfigured).isEmpty
+              ? '请先在下方“服务商密钥与接口”中完善 Azure 资源，再刷新模型列表。'
+              : '当前调用地址：${_azureChatEndpointPreview().isEmpty ? '待选择模型' : _azureChatEndpointPreview()}',
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+      ],
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          const Expanded(
+            child: Text(
+              '全局 AI 模型版本',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          IconButton(
+            onPressed: _editingConfig && !_loadingGlobalAiModels
+                ? _fetchGlobalAiModels
+                : null,
+            icon: _loadingGlobalAiModels
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            tooltip: '刷新模型列表',
+          ),
+        ],
+      ),
+      TextField(
+        controller: _globalAiModelCtrl,
+        readOnly: true,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '根据上方提供方自动显示当前模型版本',
+        ),
+      ),
+      const SizedBox(height: 8),
+      const Text('可用模型列表', style: TextStyle(fontWeight: FontWeight.bold)),
+      _loadingGlobalAiModels
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('正在加载模型列表...', style: TextStyle(color: Colors.grey)),
+            )
+          : DropdownButtonFormField<String>(
+              isExpanded: true,
+              value: _globalAiModels.contains(_globalAiModelRaw)
+                  ? _globalAiModelRaw
+                  : (_globalAiModels.isNotEmpty ? _globalAiModels.first : null),
+              onChanged: _editingConfig && _globalAiModels.isNotEmpty
+                  ? (String? v) {
+                      if (v == null) return;
+                      setState(() {
+                        _globalAiModelRaw = v;
+                        _globalAiModelCtrl.text = _formatGlobalAiModelDisplay(
+                          _globalAiProvider,
+                          v,
+                        );
+                        _ceModelCtrl.text = v;
+                        _ceEndpointCtrl.text = _defaultCeEndpointForProvider(
+                          _globalAiProvider,
+                        );
+                      });
+                    }
+                  : null,
+              items:
+                  (_globalAiModels.isNotEmpty
+                          ? _globalAiModels
+                          : (_globalAiModelRaw.trim().isEmpty
+                                ? <String>[]
+                                : <String>[_globalAiModelRaw]))
+                      .map<DropdownMenuItem<String>>(
+                        (String m) =>
+                            DropdownMenuItem<String>(value: m, child: Text(m)),
+                      )
+                      .toList(),
+            ),
+      if (_globalAiProvider == 'azure' &&
+          _azureModelDiagnostics.isNotEmpty) ...<Widget>[
+        const SizedBox(height: 6),
+        Text(
+          'Azure 模型列举提示：\n${_azureModelDiagnostics.join('\n')}',
+          style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+        ),
+        const Text(
+          '常见原因：终结点填成了别的地址、密钥不属于该资源、该资源下还没有部署模型。'
+          '终结点可以直接粘贴门户里的资源终结点、Foundry 项目终结点或部署页的“目标 URI”，系统会自动裁成资源根地址。',
+          style: TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+      ],
+      const SizedBox(height: 12),
+      const Divider(),
+      const SizedBox(height: 8),
+    ],
+  );
+
+  Widget _buildParametersFields() => _formCard(
+    children: [
+      const Text('全局 AI 请求关键参数', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 6),
+      const Text(
+        '以下参数会作为全 app 的统一请求覆盖项。留空表示沿用各模块原本默认值；填写后会优先作用到 OpenAI、DeepSeek、OpenRouter、Eden AI、xGrok、Gemini、Azure / Microsoft Foundry 及其通过统一路径触发的模型调用。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      const SizedBox(height: 8),
+      const Text('统一请求超时时间（秒）', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 4),
+      const Text(
+        '含义：一次 AI 请求最多等待多久。留空则沿用模块默认；值越大越适合长回答和推理模型。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      TextField(
+        controller: _globalTimeoutCtrl,
+        enabled: _editingConfig,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '例如 90；留空则使用模块默认',
+        ),
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        '统一最大输出 Tokens',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 4),
+      const Text(
+        '含义：限制模型单次最多输出多少内容。留空则沿用模块默认；数值越小越省 token，但回答可能被截断。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      TextField(
+        controller: _globalMaxTokensCtrl,
+        enabled: _editingConfig,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '例如 2400；留空则使用模块默认',
+        ),
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        '统一 Temperature',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 4),
+      const Text(
+        '含义：控制回答随机性。越低越稳定、越高越发散。留空则沿用模块默认。常见范围 0.0 - 1.0。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      TextField(
+        controller: _globalTemperatureCtrl,
+        enabled: _editingConfig,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '例如 0.3；留空则使用模块默认',
+        ),
+      ),
+      const SizedBox(height: 8),
+      const Text('统一 Top P', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 4),
+      const Text(
+        '含义：控制候选词采样范围。数值越低越保守。留空则沿用模块默认。常见范围 0.0 - 1.0。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      TextField(
+        controller: _globalTopPCtrl,
+        enabled: _editingConfig,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '例如 0.9；留空则使用模块默认',
+        ),
+      ),
+      const SizedBox(height: 8),
+      const Text('统一重试次数', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 4),
+      const Text(
+        '含义：请求失败后，最多额外自动重试几次。留空或填 0 表示不自动重试；Eden AI 等按次扣费平台建议保持 0，避免异常时重复扣费。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      TextField(
+        controller: _globalRetryCountCtrl,
+        enabled: _editingConfig,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '例如 1 或 2；留空/0 表示不重试',
+        ),
+      ),
+      const SizedBox(height: 8),
+      const Text('统一重试间隔（毫秒）', style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 4),
+      const Text(
+        '含义：两次自动重试之间等待多久。只有重试次数大于 0 时才会生效。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      TextField(
+        controller: _globalRetryDelayMsCtrl,
+        enabled: _editingConfig,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '例如 800；不重试时可留空',
+        ),
+      ),
+      const SizedBox(height: 8),
+    ],
+  );
+
+  Widget _buildMediaFields() => _formCard(
+    children: [
+      const Text(
+        'YouTube Data API Key（全球音乐搜索）',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      TextField(
+        controller: _youtubeApiKeyCtrl,
+        enabled: _editingConfig,
+        obscureText: true,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: 'Google Cloud 中启用 YouTube Data API v3 后生成的 API Key',
+        ),
+      ),
+      const Text(
+        '用于发现之旅 > 听音乐：搜索 YouTube 音乐视频并使用官方嵌入播放器播放。建议在 Google Cloud 限制此 Key 只能调用 YouTube Data API v3。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+
+      const SizedBox(height: 8),
+      const Text(
+        'Jamendo Client ID（开放音乐，可选）',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      TextField(
+        controller: _jamendoClientIdCtrl,
+        enabled: _editingConfig,
+        obscureText: true,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '可选；填写后“开放音乐”会额外搜索 Jamendo 独立音乐',
+        ),
+      ),
+      const Text(
+        '不填写也可以使用 Internet Archive 开放音乐源；开放音乐源支持 App 切后台继续播放。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+
+      const SizedBox(height: 8),
+      const Text(
+        '酷狗开放组件 AppId（预留）',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      TextField(
+        controller: _kugouAppIdCtrl,
+        enabled: _editingConfig,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '拿到酷狗官方 SDK / 商务授权后填写',
+        ),
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        '酷狗开放组件 AppKey（预留）',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      TextField(
+        controller: _kugouAppKeyCtrl,
+        enabled: _editingConfig,
+        obscureText: true,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '拿到酷狗官方 SDK / 商务授权后填写',
+        ),
+      ),
+      const Text(
+        '当前版本先完成 YouTube 官方搜索与嵌入播放；酷狗字段只做预留，不调用非官方接口。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+
+      const SizedBox(height: 8),
+    ],
+  );
+
+  Widget _buildEngineFields() => _formCard(
+    children: [
+      const Text(
+        '概念实践引擎（统一读取全局 AI 配置）',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 6),
+      const Text(
+        '该模块不再单独配置模型提供商、模型版本、接口地址与请求超时，而是统一读取“AI 提供方与模型”中的配置。这里只保留传输模式、代理、Prompt 模板与 AI 参数。',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      const SizedBox(height: 8),
+      const Text('当前实践引擎来源', style: TextStyle(fontWeight: FontWeight.bold)),
+      Text(
+        '${_providerDisplayName(_globalAiProvider)} · ${_globalAiModelCtrl.text.trim().isEmpty ? '未选择模型' : _globalAiModelCtrl.text.trim()}',
+        style: const TextStyle(color: Colors.grey),
+      ),
+      const SizedBox(height: 8),
+      const Text('传输模式', style: TextStyle(fontWeight: FontWeight.bold)),
+      DropdownButtonFormField<String>(
+        isExpanded: true,
+        value: _ceTransportMode,
+        onChanged: _editingConfig
+            ? (v) {
+                if (v == null) return;
+                setState(() => _ceTransportMode = v);
+              }
+            : null,
+        items: const [
+          DropdownMenuItem(
+            value: ConceptEngineService.transportDirect,
+            child: Text('客户端直连模型提供商'),
+          ),
+          DropdownMenuItem(
+            value: ConceptEngineService.transportProxy,
+            child: Text('通过后端统一 AI 网关代理'),
+          ),
+        ],
+      ),
+      if (_ceTransportMode == ConceptEngineService.transportProxy) ...[
+        const SizedBox(height: 8),
+        const Text('AI 网关地址', style: TextStyle(fontWeight: FontWeight.bold)),
+        TextField(
+          controller: _ceProxyEndpointCtrl,
+          enabled: _editingConfig,
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            hintText: '例如：https://your-domain.com/api/concept-engine/proxy',
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'AI 网关令牌（可选）',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        TextField(
+          controller: _ceProxyTokenCtrl,
+          enabled: _editingConfig,
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            hintText: '如果后端代理需要鉴权，可在这里填写 Bearer Token',
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          '代理模式下，概念实践引擎优先请求你的后端 API，由后端再统一调用 DeepSeek / OpenAI / OpenRouter / Eden AI / xGrok / Gemini。这样更适合正式上线，便于保护密钥、统一日志与服务端规则控制。',
+          style: TextStyle(fontSize: 12, color: Colors.grey),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
-            const Expanded(child: Text('全局 AI 模型版本', style: TextStyle(fontWeight: FontWeight.bold))),
-            IconButton(
-              onPressed: _editingConfig && !_loadingGlobalAiModels ? _fetchGlobalAiModels : null,
-              icon: _loadingGlobalAiModels
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.refresh),
-              tooltip: '刷新模型列表',
+            ElevatedButton.icon(
+              onPressed: _editingConfig && !_checkingCeGateway
+                  ? _testConceptEngineGateway
+                  : null,
+              icon: _checkingCeGateway
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.wifi_tethering),
+              label: Text(_checkingCeGateway ? '测试中…' : '测试 AI 网关'),
             ),
+            const SizedBox(width: 12),
+            if (_ceGatewayCheckMessage != null)
+              Expanded(
+                child: Text(
+                  _ceGatewayCheckMessage!,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _ceGatewayCheckOk == true
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                ),
+              ),
           ],
         ),
-        TextField(
-          controller: _globalAiModelCtrl,
-          readOnly: true,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: '根据上方提供方自动显示当前模型版本',
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text('可用模型列表', style: TextStyle(fontWeight: FontWeight.bold)),
-        _loadingGlobalAiModels
-            ? const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('正在加载模型列表...', style: TextStyle(color: Colors.grey)),
-              )
-            : DropdownButton<String>(
-                isExpanded: true,
-                value: _globalAiModels.contains(_globalAiModelRaw) ? _globalAiModelRaw : (_globalAiModels.isNotEmpty ? _globalAiModels.first : null),
-                onChanged: _editingConfig && _globalAiModels.isNotEmpty
-                    ? (String? v) {
-                        if (v == null) return;
-                        setState(() {
-                          _globalAiModelRaw = v;
-                          _globalAiModelCtrl.text = _formatGlobalAiModelDisplay(_globalAiProvider, v);
-                          _ceModelCtrl.text = v;
-                          _ceEndpointCtrl.text = _defaultCeEndpointForProvider(_globalAiProvider);
-                        });
-                      }
-                    : null,
-                items: (_globalAiModels.isNotEmpty ? _globalAiModels : (_globalAiModelRaw.trim().isEmpty ? <String>[] : <String>[_globalAiModelRaw]))
-                    .map<DropdownMenuItem<String>>((String m) => DropdownMenuItem<String>(value: m, child: Text(m)))
-                    .toList(),
-              ),
-        if (_globalAiProvider == 'azure' && _azureModelDiagnostics.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 6),
-          Text(
-            'Azure 模型列举提示：\n${_azureModelDiagnostics.join('\n')}',
-            style: const TextStyle(fontSize: 12, color: Colors.redAccent),
-          ),
-          const Text(
-            '常见原因：终结点填成了别的地址、密钥不属于该资源、该资源下还没有部署模型。'
-            '终结点可以直接粘贴门户里的资源终结点、Foundry 项目终结点或部署页的“目标 URI”，系统会自动裁成资源根地址。',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-        ],
-        const SizedBox(height: 12),
-        const Divider(),
-        const SizedBox(height: 8),
-        const Text('全局 AI 请求关键参数', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        const Text(
-          '以下参数会作为全 app 的统一请求覆盖项。留空表示沿用各模块原本默认值；填写后会优先作用到 OpenAI、DeepSeek、OpenRouter、Eden AI、xGrok、Gemini、Azure / Microsoft Foundry 及其通过统一路径触发的模型调用。',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-        const SizedBox(height: 8),
-        const Text('统一请求超时时间（秒）', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        const Text('含义：一次 AI 请求最多等待多久。留空则沿用模块默认；值越大越适合长回答和推理模型。', style: TextStyle(fontSize: 12, color: Colors.grey)),
-        TextField(
-          controller: _globalTimeoutCtrl,
-          enabled: _editingConfig,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(border: InputBorder.none, hintText: '例如 90；留空则使用模块默认'),
-        ),
-        const SizedBox(height: 8),
-        const Text('统一最大输出 Tokens', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        const Text('含义：限制模型单次最多输出多少内容。留空则沿用模块默认；数值越小越省 token，但回答可能被截断。', style: TextStyle(fontSize: 12, color: Colors.grey)),
-        TextField(
-          controller: _globalMaxTokensCtrl,
-          enabled: _editingConfig,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(border: InputBorder.none, hintText: '例如 2400；留空则使用模块默认'),
-        ),
-        const SizedBox(height: 8),
-        const Text('统一 Temperature', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        const Text('含义：控制回答随机性。越低越稳定、越高越发散。留空则沿用模块默认。常见范围 0.0 - 1.0。', style: TextStyle(fontSize: 12, color: Colors.grey)),
-        TextField(
-          controller: _globalTemperatureCtrl,
-          enabled: _editingConfig,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(border: InputBorder.none, hintText: '例如 0.3；留空则使用模块默认'),
-        ),
-        const SizedBox(height: 8),
-        const Text('统一 Top P', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        const Text('含义：控制候选词采样范围。数值越低越保守。留空则沿用模块默认。常见范围 0.0 - 1.0。', style: TextStyle(fontSize: 12, color: Colors.grey)),
-        TextField(
-          controller: _globalTopPCtrl,
-          enabled: _editingConfig,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(border: InputBorder.none, hintText: '例如 0.9；留空则使用模块默认'),
-        ),
-        const SizedBox(height: 8),
-        const Text('统一重试次数', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        const Text('含义：请求失败后，最多额外自动重试几次。留空或填 0 表示不自动重试；Eden AI 等按次扣费平台建议保持 0，避免异常时重复扣费。', style: TextStyle(fontSize: 12, color: Colors.grey)),
-        TextField(
-          controller: _globalRetryCountCtrl,
-          enabled: _editingConfig,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(border: InputBorder.none, hintText: '例如 1 或 2；留空/0 表示不重试'),
-        ),
-        const SizedBox(height: 8),
-        const Text('统一重试间隔（毫秒）', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        const Text('含义：两次自动重试之间等待多久。只有重试次数大于 0 时才会生效。', style: TextStyle(fontSize: 12, color: Colors.grey)),
-        TextField(
-          controller: _globalRetryDelayMsCtrl,
-          enabled: _editingConfig,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(border: InputBorder.none, hintText: '例如 800；不重试时可留空'),
-        ),
-        const SizedBox(height: 8),
-        _aiPromptCenterEntry(),
-        const SizedBox(height: 12),
-        const Divider(),
-        const SizedBox(height: 8),
-        const Text('概念实践引擎（统一读取全局 AI 配置）', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        const Text(
-          '该模块不再单独配置模型提供商、模型版本、接口地址与请求超时，而是统一读取上方“全局 AI 提供方 / 模型版本”。这里只保留传输模式、代理、Prompt 模板与 AI 参数。',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-        const SizedBox(height: 8),
-        const Text('当前实践引擎来源', style: TextStyle(fontWeight: FontWeight.bold)),
-        Text(
-          '${_providerDisplayName(_globalAiProvider)} · ${_globalAiModelCtrl.text.trim().isEmpty ? '未选择模型' : _globalAiModelCtrl.text.trim()}',
-          style: const TextStyle(color: Colors.grey),
-        ),
-        const SizedBox(height: 8),
-        const Text('传输模式', style: TextStyle(fontWeight: FontWeight.bold)),
-        DropdownButton<String>(
-          isExpanded: true,
-          value: _ceTransportMode,
-          onChanged: _editingConfig
-              ? (v) {
-                  if (v == null) return;
-                  setState(() => _ceTransportMode = v);
-                }
-              : null,
-          items: const [
-            DropdownMenuItem(value: ConceptEngineService.transportDirect, child: Text('客户端直连模型提供商')),
-            DropdownMenuItem(value: ConceptEngineService.transportProxy, child: Text('通过后端统一 AI 网关代理')),
-          ],
-        ),
-        if (_ceTransportMode == ConceptEngineService.transportProxy) ...[
-          const SizedBox(height: 8),
-          const Text('AI 网关地址', style: TextStyle(fontWeight: FontWeight.bold)),
-          TextField(
-            controller: _ceProxyEndpointCtrl,
-            enabled: _editingConfig,
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              hintText: '例如：https://your-domain.com/api/concept-engine/proxy',
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text('AI 网关令牌（可选）', style: TextStyle(fontWeight: FontWeight.bold)),
-          TextField(
-            controller: _ceProxyTokenCtrl,
-            enabled: _editingConfig,
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              hintText: '如果后端代理需要鉴权，可在这里填写 Bearer Token',
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '代理模式下，概念实践引擎优先请求你的后端 API，由后端再统一调用 DeepSeek / OpenAI / OpenRouter / Eden AI / xGrok / Gemini。这样更适合正式上线，便于保护密钥、统一日志与服务端规则控制。',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              ElevatedButton.icon(
-                onPressed: _editingConfig && !_checkingCeGateway ? _testConceptEngineGateway : null,
-                icon: _checkingCeGateway
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.wifi_tethering),
-                label: Text(_checkingCeGateway ? '测试中…' : '测试 AI 网关'),
-              ),
-              const SizedBox(width: 12),
-              if (_ceGatewayCheckMessage != null)
-                Expanded(
-                  child: Text(
-                    _ceGatewayCheckMessage!,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _ceGatewayCheckOk == true ? Colors.green : Colors.red,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 8),
-        const Text('请求超时', style: TextStyle(fontWeight: FontWeight.bold)),
-        const Text('已移除单独配置，统一使用模块内默认超时与全局 AI 路径。', style: TextStyle(color: Colors.grey)),
-        const SizedBox(height: 8),
-        const Text('场景候选数', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _ceSceneCountCtrl,
-          enabled: _editingConfig,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(border: InputBorder.none),
-        ),
-        const SizedBox(height: 8),
-        const Text('建议互动轮次', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _ceTurnTargetCtrl,
-          enabled: _editingConfig,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(border: InputBorder.none),
-        ),
-        const SizedBox(height: 8),
-        const Text('Prompt 追加约束', style: TextStyle(fontWeight: FontWeight.bold)),
-        TextField(
-          controller: _cePromptExtraCtrl,
-          enabled: _editingConfig,
-          minLines: 2,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            hintText: '可填写模块特定的补充约束，例如输出风格、行业场景、评分偏好等。',
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '当前正在编辑 ${_providerDisplayName(_ceProvider)} 的 Prompt 配置；它会跟随上方全局 AI 提供方同步切换。保存后，返回对应页面点击“重新解析 / 重新生成”才会按新配置再次调用 AI。',
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFFBEB),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Text(
-            '新手建议：先点“填入默认”，只改 1-2 条你最关心的规则；务必保留“请只输出 json”和 schema 结构。\n\n常用步骤：1）先保存设置；2）回到功能页点击重新解析/重新生成；3）若结果不理想，优先改数量要求、输出风格和约束；4）如果返回格式错乱，直接恢复默认模板。',
-            style: TextStyle(fontSize: 12, color: Color(0xFF7C5A03), height: 1.55),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            '模板状态：当前提供商 ${_providerDisplayName(_ceProvider)}；当前传输模式 ${_ceTransportMode == ConceptEngineService.transportProxy ? '后端网关代理' : '客户端直连'}；当前配置长度 - 解析 ${_cePromptParseCtrl.text.trim().length} / 场景 ${_cePromptSceneCtrl.text.trim().length} / 互动 ${_cePromptTurnCtrl.text.trim().length} / 复盘 ${_cePromptReplayCtrl.text.trim().length} / 行为行动链 ${_cePromptBehaviorChainCtrl.text.trim().length}。'
-            '参数状态：解析最少直观语言 ${_ceParseMinIntuitiveCtrl.text.trim().isEmpty ? '10' : _ceParseMinIntuitiveCtrl.text.trim()} 条、行为表现 ${_ceParseMinBehaviorsCtrl.text.trim().isEmpty ? '10' : _ceParseMinBehaviorsCtrl.text.trim()} 条；行动链节点 ${_ceBehaviorChainMinNodesCtrl.text.trim().isEmpty ? '4' : _ceBehaviorChainMinNodesCtrl.text.trim()}-${_ceBehaviorChainMaxNodesCtrl.text.trim().isEmpty ? '8' : _ceBehaviorChainMaxNodesCtrl.text.trim()}。'
-            '留空表示使用内置默认模板；“回滚上一版”会恢复上一次保存前的 ${_providerDisplayName(_ceProvider)} 模板内容；也可进入单个模板的版本面板查看默认 / 当前 / 上一版。',
-            style: const TextStyle(fontSize: 12, color: Color(0xFF4B5563), height: 1.5),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: EdgeInsets.zero,
-            title: const Text('AI 参数配置（修改后下一次调用生效）', style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text(
-              '这些参数不再写死在代码中。建议先用默认值，只在你明确知道要增加数量、节点数或输出长度时再调整。',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            children: [
-              const SizedBox(height: 8),
-              const Text('解析结果参数', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              const Text('最少直观语言条数', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceParseMinIntuitiveCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 10')),
-              const SizedBox(height: 4),
-              const Text('最少行为表现条数', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceParseMinBehaviorsCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 10')),
-              const SizedBox(height: 4),
-              const Text('解析重试次数', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceParseRetryCountCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 2')),
-              const SizedBox(height: 8),
-              const Text('行为行动链参数', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              const Text('行动链最少节点数', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceBehaviorChainMinNodesCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 4')),
-              const SizedBox(height: 4),
-              const Text('行动链最多节点数', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceBehaviorChainMaxNodesCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 8')),
-              const SizedBox(height: 8),
-              const Text('模型输出长度（max tokens）', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              const Text('概念解析 max tokens', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceParseMaxTokensCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 3200')),
-              const SizedBox(height: 4),
-              const Text('场景生成 max tokens', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceSceneMaxTokensCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 4000')),
-              const SizedBox(height: 4),
-              const Text('互动推进 max tokens', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceTurnMaxTokensCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 2500')),
-              const SizedBox(height: 4),
-              const Text('复盘 max tokens', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceReplayMaxTokensCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 3500')),
-              const SizedBox(height: 4),
-              const Text('行为行动链 max tokens', style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _ceBehaviorChainMaxTokensCtrl, enabled: _editingConfig, keyboardType: TextInputType.number, decoration: const InputDecoration(border: InputBorder.none, hintText: '默认 2200')),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: EdgeInsets.zero,
-            title: const Text('Prompt 模板配置（留空使用默认模板）', style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(
-              '当前编辑的是 ${_providerDisplayName(_ceProvider)} 独立 Prompt 模板。可使用 {{sceneCount}}、{{turnTarget}}、{{parseMinIntuitive}}、{{parseMinBehaviors}}、{{behaviorChainMinNodes}}、{{behaviorChainMaxNodes}}、{{promptExtra}}、{{promptExtraLine}}、{{provider}}、{{providerLabel}} 占位符。',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            children: [
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Expanded(child: Text('概念解析 Prompt', style: TextStyle(fontWeight: FontWeight.bold))),
-                  TextButton(onPressed: () => _showPromptVersionDialog('parse_template', '概念解析 Prompt'), child: const Text('版本面板')),
-                  TextButton(onPressed: _editingConfig ? () => setState(() => _cePromptParseCtrl.text = _ceDefaultTemplate('parse_template')) : null, child: const Text('填入默认')),
-                ],
-              ),
-              TextField(
-                controller: _cePromptParseCtrl,
-                enabled: _editingConfig,
-                minLines: 4,
-                maxLines: 8,
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  hintText: '留空使用默认模板。建议保留“请只输出 json”和 schema 说明。',
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Expanded(child: Text('场景生成 Prompt', style: TextStyle(fontWeight: FontWeight.bold))),
-                  TextButton(onPressed: () => _showPromptVersionDialog('scene_template', '场景生成 Prompt'), child: const Text('版本面板')),
-                  TextButton(onPressed: _editingConfig ? () => setState(() => _cePromptSceneCtrl.text = _ceDefaultTemplate('scene_template')) : null, child: const Text('填入默认')),
-                ],
-              ),
-              TextField(
-                controller: _cePromptSceneCtrl,
-                enabled: _editingConfig,
-                minLines: 4,
-                maxLines: 8,
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  hintText: '留空使用默认模板。可用 {{sceneCount}}。',
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Expanded(child: Text('互动推进 Prompt', style: TextStyle(fontWeight: FontWeight.bold))),
-                  TextButton(onPressed: () => _showPromptVersionDialog('turn_template', '互动推进 Prompt'), child: const Text('版本面板')),
-                  TextButton(onPressed: _editingConfig ? () => setState(() => _cePromptTurnCtrl.text = _ceDefaultTemplate('turn_template')) : null, child: const Text('填入默认')),
-                ],
-              ),
-              TextField(
-                controller: _cePromptTurnCtrl,
-                enabled: _editingConfig,
-                minLines: 4,
-                maxLines: 10,
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  hintText: '留空使用默认模板。可用 {{turnTarget}}。',
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Expanded(child: Text('复盘 Prompt', style: TextStyle(fontWeight: FontWeight.bold))),
-                  TextButton(onPressed: () => _showPromptVersionDialog('replay_template', '复盘 Prompt'), child: const Text('版本面板')),
-                  TextButton(onPressed: _editingConfig ? () => setState(() => _cePromptReplayCtrl.text = _ceDefaultTemplate('replay_template')) : null, child: const Text('填入默认')),
-                ],
-              ),
-              TextField(
-                controller: _cePromptReplayCtrl,
-                enabled: _editingConfig,
-                minLines: 4,
-                maxLines: 10,
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  hintText: '留空使用默认模板。',
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Expanded(child: Text('行为行动链 Prompt', style: TextStyle(fontWeight: FontWeight.bold))),
-                  TextButton(onPressed: () => _showPromptVersionDialog('behavior_chain_template', '行为行动链 Prompt'), child: const Text('版本面板')),
-                  TextButton(onPressed: _editingConfig ? () => setState(() => _cePromptBehaviorChainCtrl.text = _ceDefaultTemplate('behavior_chain_template')) : null, child: const Text('填入默认')),
-                ],
-              ),
-              TextField(
-                controller: _cePromptBehaviorChainCtrl,
-                enabled: _editingConfig,
-                minLines: 4,
-                maxLines: 10,
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  hintText: '留空使用默认模板。可用 {{behaviorChainMinNodes}} / {{behaviorChainMaxNodes}}。',
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton.icon(
-                    onPressed: _editingConfig ? _rollbackConceptEnginePromptVersion : null,
-                    icon: const Icon(Icons.history_toggle_off),
-                    label: Text('回滚上一版（${_providerDisplayName(_ceProvider)}）'),
-                  ),
-                  TextButton.icon(
-                    onPressed: _editingConfig
-                        ? () {
-                            setState(() {
-                              _cePromptParseCtrl.clear();
-                              _cePromptSceneCtrl.clear();
-                              _cePromptTurnCtrl.clear();
-                              _cePromptReplayCtrl.clear();
-                              _cePromptBehaviorChainCtrl.clear();
-                            });
-                          }
-                        : null,
-                    icon: const Icon(Icons.restart_alt),
-                    label: const Text('清空并恢复默认'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
       ],
-    );
+      const SizedBox(height: 8),
+      const Text('请求超时', style: TextStyle(fontWeight: FontWeight.bold)),
+      const Text(
+        '已移除单独配置，统一使用模块内默认超时与全局 AI 路径。',
+        style: TextStyle(color: Colors.grey),
+      ),
+      const SizedBox(height: 8),
+      const Text('场景候选数', style: TextStyle(fontWeight: FontWeight.bold)),
+      TextField(
+        controller: _ceSceneCountCtrl,
+        enabled: _editingConfig,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(border: InputBorder.none),
+      ),
+      const SizedBox(height: 8),
+      const Text('建议互动轮次', style: TextStyle(fontWeight: FontWeight.bold)),
+      TextField(
+        controller: _ceTurnTargetCtrl,
+        enabled: _editingConfig,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(border: InputBorder.none),
+      ),
+      const SizedBox(height: 8),
+      const Text('Prompt 追加约束', style: TextStyle(fontWeight: FontWeight.bold)),
+      TextField(
+        controller: _cePromptExtraCtrl,
+        enabled: _editingConfig,
+        minLines: 2,
+        maxLines: 4,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: '可填写模块特定的补充约束，例如输出风格、行业场景、评分偏好等。',
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        '当前正在编辑 ${_providerDisplayName(_ceProvider)} 的 Prompt 配置；它会跟随上方全局 AI 提供方同步切换。保存后，返回对应页面点击“重新解析 / 重新生成”才会按新配置再次调用 AI。',
+        style: const TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      const SizedBox(height: 8),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text(
+          '新手建议：先点“填入默认”，只改 1-2 条你最关心的规则；务必保留“请只输出 json”和 schema 结构。\n\n常用步骤：1）先保存设置；2）回到功能页点击重新解析/重新生成；3）若结果不理想，优先改数量要求、输出风格和约束；4）如果返回格式错乱，直接恢复默认模板。',
+          style: TextStyle(
+            fontSize: 12,
+            color: Color(0xFF7C5A03),
+            height: 1.55,
+          ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          '模板状态：当前提供商 ${_providerDisplayName(_ceProvider)}；当前传输模式 ${_ceTransportMode == ConceptEngineService.transportProxy ? '后端网关代理' : '客户端直连'}；当前配置长度 - 解析 ${_cePromptParseCtrl.text.trim().length} / 场景 ${_cePromptSceneCtrl.text.trim().length} / 互动 ${_cePromptTurnCtrl.text.trim().length} / 复盘 ${_cePromptReplayCtrl.text.trim().length} / 行为行动链 ${_cePromptBehaviorChainCtrl.text.trim().length}。'
+          '参数状态：解析最少直观语言 ${_ceParseMinIntuitiveCtrl.text.trim().isEmpty ? '10' : _ceParseMinIntuitiveCtrl.text.trim()} 条、行为表现 ${_ceParseMinBehaviorsCtrl.text.trim().isEmpty ? '10' : _ceParseMinBehaviorsCtrl.text.trim()} 条；行动链节点 ${_ceBehaviorChainMinNodesCtrl.text.trim().isEmpty ? '4' : _ceBehaviorChainMinNodesCtrl.text.trim()}-${_ceBehaviorChainMaxNodesCtrl.text.trim().isEmpty ? '8' : _ceBehaviorChainMaxNodesCtrl.text.trim()}。'
+          '留空表示使用内置默认模板；“回滚上一版”会恢复上一次保存前的 ${_providerDisplayName(_ceProvider)} 模板内容；也可进入单个模板的版本面板查看默认 / 当前 / 上一版。',
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xFF4B5563),
+            height: 1.5,
+          ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: EdgeInsets.zero,
+          title: const Text(
+            'AI 参数配置（修改后下一次调用生效）',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          subtitle: const Text(
+            '这些参数不再写死在代码中。建议先用默认值，只在你明确知道要增加数量、节点数或输出长度时再调整。',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          children: [
+            const SizedBox(height: 8),
+            const Text('解析结果参数', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            const Text(
+              '最少直观语言条数',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _ceParseMinIntuitiveCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 10',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '最少行为表现条数',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _ceParseMinBehaviorsCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 10',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text('解析重试次数', style: TextStyle(fontWeight: FontWeight.bold)),
+            TextField(
+              controller: _ceParseRetryCountCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 2',
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '行为行动链参数',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '行动链最少节点数',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _ceBehaviorChainMinNodesCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 4',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '行动链最多节点数',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _ceBehaviorChainMaxNodesCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 8',
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '模型输出长度（max tokens）',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '概念解析 max tokens',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _ceParseMaxTokensCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 3200',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '场景生成 max tokens',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _ceSceneMaxTokensCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 4000',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '互动推进 max tokens',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _ceTurnMaxTokensCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 2500',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '复盘 max tokens',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _ceReplayMaxTokensCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 3500',
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '行为行动链 max tokens',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _ceBehaviorChainMaxTokensCtrl,
+              enabled: _editingConfig,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '默认 2200',
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 8),
+      Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: EdgeInsets.zero,
+          title: const Text(
+            'Prompt 模板配置（留空使用默认模板）',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(
+            '当前编辑的是 ${_providerDisplayName(_ceProvider)} 独立 Prompt 模板。可使用 {{sceneCount}}、{{turnTarget}}、{{parseMinIntuitive}}、{{parseMinBehaviors}}、{{behaviorChainMinNodes}}、{{behaviorChainMaxNodes}}、{{promptExtra}}、{{promptExtraLine}}、{{provider}}、{{providerLabel}} 占位符。',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          children: [
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '概念解析 Prompt',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      _showPromptVersionDialog('parse_template', '概念解析 Prompt'),
+                  child: const Text('版本面板'),
+                ),
+                TextButton(
+                  onPressed: _editingConfig
+                      ? () => setState(
+                          () => _cePromptParseCtrl.text = _ceDefaultTemplate(
+                            'parse_template',
+                          ),
+                        )
+                      : null,
+                  child: const Text('填入默认'),
+                ),
+              ],
+            ),
+            TextField(
+              controller: _cePromptParseCtrl,
+              enabled: _editingConfig,
+              minLines: 4,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '留空使用默认模板。建议保留“请只输出 json”和 schema 说明。',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '场景生成 Prompt',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      _showPromptVersionDialog('scene_template', '场景生成 Prompt'),
+                  child: const Text('版本面板'),
+                ),
+                TextButton(
+                  onPressed: _editingConfig
+                      ? () => setState(
+                          () => _cePromptSceneCtrl.text = _ceDefaultTemplate(
+                            'scene_template',
+                          ),
+                        )
+                      : null,
+                  child: const Text('填入默认'),
+                ),
+              ],
+            ),
+            TextField(
+              controller: _cePromptSceneCtrl,
+              enabled: _editingConfig,
+              minLines: 4,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '留空使用默认模板。可用 {{sceneCount}}。',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '互动推进 Prompt',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      _showPromptVersionDialog('turn_template', '互动推进 Prompt'),
+                  child: const Text('版本面板'),
+                ),
+                TextButton(
+                  onPressed: _editingConfig
+                      ? () => setState(
+                          () => _cePromptTurnCtrl.text = _ceDefaultTemplate(
+                            'turn_template',
+                          ),
+                        )
+                      : null,
+                  child: const Text('填入默认'),
+                ),
+              ],
+            ),
+            TextField(
+              controller: _cePromptTurnCtrl,
+              enabled: _editingConfig,
+              minLines: 4,
+              maxLines: 10,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '留空使用默认模板。可用 {{turnTarget}}。',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '复盘 Prompt',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      _showPromptVersionDialog('replay_template', '复盘 Prompt'),
+                  child: const Text('版本面板'),
+                ),
+                TextButton(
+                  onPressed: _editingConfig
+                      ? () => setState(
+                          () => _cePromptReplayCtrl.text = _ceDefaultTemplate(
+                            'replay_template',
+                          ),
+                        )
+                      : null,
+                  child: const Text('填入默认'),
+                ),
+              ],
+            ),
+            TextField(
+              controller: _cePromptReplayCtrl,
+              enabled: _editingConfig,
+              minLines: 4,
+              maxLines: 10,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '留空使用默认模板。',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '行为行动链 Prompt',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _showPromptVersionDialog(
+                    'behavior_chain_template',
+                    '行为行动链 Prompt',
+                  ),
+                  child: const Text('版本面板'),
+                ),
+                TextButton(
+                  onPressed: _editingConfig
+                      ? () => setState(
+                          () => _cePromptBehaviorChainCtrl.text =
+                              _ceDefaultTemplate('behavior_chain_template'),
+                        )
+                      : null,
+                  child: const Text('填入默认'),
+                ),
+              ],
+            ),
+            TextField(
+              controller: _cePromptBehaviorChainCtrl,
+              enabled: _editingConfig,
+              minLines: 4,
+              maxLines: 10,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText:
+                    '留空使用默认模板。可用 {{behaviorChainMinNodes}} / {{behaviorChainMaxNodes}}。',
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: _editingConfig
+                      ? _rollbackConceptEnginePromptVersion
+                      : null,
+                  icon: const Icon(Icons.history_toggle_off),
+                  label: Text('回滚上一版（${_providerDisplayName(_ceProvider)}）'),
+                ),
+                TextButton.icon(
+                  onPressed: _editingConfig
+                      ? () {
+                          setState(() {
+                            _cePromptParseCtrl.clear();
+                            _cePromptSceneCtrl.clear();
+                            _cePromptTurnCtrl.clear();
+                            _cePromptReplayCtrl.clear();
+                            _cePromptBehaviorChainCtrl.clear();
+                          });
+                        }
+                      : null,
+                  icon: const Icon(Icons.restart_alt),
+                  label: const Text('清空并恢复默认'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
 
-    return Scaffold(backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const SizedBox.shrink(),
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        // Remove the default bottom divider by specifying a zero-height bottom
-        bottom: const PreferredSize(preferredSize: Size.fromHeight(0), child: SizedBox()),
-        leading: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Material(
-            color: Colors.white,
-            elevation: 6,
-            shape: const CircleBorder(),
-            child: IconButton(
-              icon: Icon(_editingConfig ? Icons.save : Icons.edit, color: Colors.black87),
-              onPressed: () async {
-                if (_editingConfig) {
-                  // 如果处于编辑状态，保存配置并退出编辑模式（保存函数内部已处理 _editingConfig=false）
-                  await _saveConfig();
-                } else {
-                  // 当前非编辑状态，进入编辑模式
-                  setState(() => _editingConfig = true);
+  Widget _buildDisplayFields() => _formCard(
+    children: [
+      const Text('首页查询时间窗（小时）', style: TextStyle(fontWeight: FontWeight.bold)),
+      TextField(
+        controller: _recentHoursCtrl,
+        enabled: _editingConfig,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(border: InputBorder.none),
+      ),
+      const SizedBox(height: 8),
+      const Text('长周期总览显示阈值（条）', style: TextStyle(fontWeight: FontWeight.bold)),
+      TextField(
+        controller: _overviewThresholdCtrl,
+        enabled: _editingConfig,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(border: InputBorder.none),
+      ),
+
+      const SizedBox(height: 8),
+
+      // DeepSeek API key input
+    ],
+  );
+
+  List<Widget> _buildDataCards() => [
+    // 量表自动报告开关与模板导入配置卡片
+    Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 自动报告开关
+          SwitchListTile(
+            title: const Text('量表自动报告开关'),
+            subtitle: const Text('开启后，提交问卷时将调用大模型生成报告（暂未实现）'),
+            value: _autoReportEnabled,
+            onChanged: _loadingAutoReport
+                ? null
+                : (bool value) async {
+                    // 即刻更新 UI
+                    setState(() {
+                      _autoReportEnabled = value;
+                    });
+                    await _configDao.setAutoReportEnabled(value);
+                    showToast(value ? '已开启量表自动报告' : '已关闭量表自动报告');
+                  },
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '上传量表模板文件',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selectedFileName ?? '请选择 .xlsx 文件',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => _pickExcelFile(),
+                      child: const Text('选择文件'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: () => _importExcel(),
+                  child: const Text('导入'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+    const SizedBox(height: 16),
+  ];
+
+  List<Widget> _buildReminderCards() => [
+    // 火种：复问通知开关
+    Card(
+      child: SwitchListTile(
+        key: const ValueKey<String>('settings_kindling_reask_notify'),
+        title: const Text('火种：「说不准」7 天后提醒一次'),
+        subtitle: const Text('默认关闭。关闭时不发通知，下次打开火种仍会问一次'),
+        value: _kindlingReaskNotifyEnabled,
+        onChanged: (bool value) async {
+          setState(() {
+            _kindlingReaskNotifyEnabled = value;
+          });
+          await KindlingHostReminder.setEnabled(value);
+          if (value) {
+            await NotificationService.request();
+          }
+        },
+      ),
+    ),
+    const SizedBox(height: 16),
+  ];
+
+  List<Widget> _buildExperienceCards() => [
+    // 发现之旅“此时此刻心情卡片”配置卡片
+    Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            title: const Text('发现之旅：自动弹出此时此刻心情卡片'),
+            subtitle: const Text('开启后，点击底部“发现之旅”会按下方延迟自动弹出心情记录卡片'),
+            value: _moodCardPopupEnabled,
+            onChanged: _editingConfig
+                ? (bool value) async {
+                    setState(() {
+                      _moodCardPopupEnabled = value;
+                    });
+                    await _configDao.setMoodCardPopupEnabled(value);
+                    showToast(value ? '已开启心情卡片自动弹出' : '已关闭心情卡片自动弹出');
+                  }
+                : null,
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: TextField(
+              controller: _moodCardDelayMsCtrl,
+              enabled: _editingConfig && _moodCardPopupEnabled,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: '心情卡片弹出延迟时间（毫秒）',
+                helperText: '0 表示立即弹出；建议 2000～8000；最大 60000',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+    const SizedBox(height: 16),
+
+    // EMA / SSES 配置卡片
+    Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // EMA 开关
+          SwitchListTile(
+            title: const Text('启用即时自尊问答（EMA/SSES）'),
+            subtitle: const Text('开启后记录情绪时会额外弹出自尊题目'),
+            value: _emaEnabled,
+            onChanged: (bool value) async {
+              // Persist the new setting first; if it fails, keep the old state
+              try {
+                await _configDao.setEmaEnabled(value);
+                // only update local state after persistence succeeds
+                if (!mounted) return;
+                setState(() {
+                  _emaEnabled = value;
+                });
+                showToast(value ? '已开启自尊问答' : '已关闭自尊问答');
+              } catch (_) {
+                // ignore failures silently
+              }
+            },
+          ),
+          const Divider(height: 1),
+          // 自尊评分尺度选择
+          ListTile(
+            title: const Text('自尊评分尺度'),
+            subtitle: const Text('选择 100 分制或 30 分制'),
+            trailing: DropdownButton<int>(
+              value: _esteemScale,
+              items: const [
+                DropdownMenuItem<int>(value: 100, child: Text('100 分制')),
+                DropdownMenuItem<int>(value: 30, child: Text('30 分制')),
+              ],
+              onChanged: (int? val) async {
+                if (val == null) return;
+                try {
+                  // Persist scale first
+                  await _configDao.setSelfEsteemScale(val);
+                  if (!mounted) return;
+                  setState(() {
+                    _esteemScale = val;
+                  });
+                  showToast('已设置自尊评分尺度为 $val');
+                } catch (_) {
+                  // ignore errors
                 }
               },
             ),
           ),
+        ],
+      ),
+    ),
+    const SizedBox(height: 16),
+  ];
+
+  List<Widget> _buildSportCards() => [
+    // 运动设置卡片（背景图 + 开始铃声）
+    Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('运动设置', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('运动进行时背景图片'),
+              subtitle: Text(
+                _sportMusicList.isEmpty
+                    ? '请先设置运动进行时音乐'
+                    : '已为 ${_sportMusicBgBindings.values.where((e) => e.isNotEmpty).length} 首音乐绑定背景图；未设置时运行页恢复默认背景色',
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: _editingConfig
+                        ? _manageSportMusicBgBindings
+                        : null,
+                    child: const Text('设置'),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('运动开始铃声'),
+              subtitle: Text(
+                _sportSoundPath == null || _sportSoundPath!.isEmpty
+                    ? '系统通知铃声（默认）'
+                    : p.basename(_sportSoundPath!),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: _editingConfig ? _pickSportStartSound : null,
+                    child: const Text('选择'),
+                  ),
+                  if (_sportSoundPath != null && _sportSoundPath!.isNotEmpty)
+                    TextButton(
+                      onPressed: _editingConfig ? _clearSportStartSound : null,
+                      child: const Text('清除'),
+                    ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('运动进行时音乐播放清单'),
+              subtitle: Text(
+                _sportMusicList.isEmpty
+                    ? '未设置'
+                    : '${_sportMusicList.length} 首：' +
+                          _sportMusicList
+                              .take(3)
+                              .map((e) => p.basename(e))
+                              .join('、') +
+                          (_sportMusicList.length > 3 ? '…' : ''),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: _editingConfig ? _pickSportMusicPlaylist : null,
+                    child: const Text('选择'),
+                  ),
+                  if (_sportMusicList.isNotEmpty)
+                    TextButton(
+                      onPressed: _editingConfig
+                          ? _manageSportMusicPlaylist
+                          : null,
+                      child: const Text('管理'),
+                    ),
+                  if (_sportMusicList.isNotEmpty)
+                    TextButton(
+                      onPressed: _editingConfig
+                          ? _clearSportMusicPlaylist
+                          : null,
+                      child: const Text('清除'),
+                    ),
+                ],
+              ),
+            ),
+            Row(
+              children: [
+                const SizedBox(width: 16),
+                const Text('播放模式', style: TextStyle(color: Colors.black87)),
+                const SizedBox(width: 16),
+                DropdownButton<String>(
+                  value: (_sportMusicMode == 'random') ? 'random' : 'order',
+                  onChanged: _editingConfig
+                      ? (v) {
+                          if (v != null) _setSportMusicMode(v);
+                        }
+                      : null,
+                  items: const [
+                    DropdownMenuItem(value: 'order', child: Text('顺序循环')),
+                    DropdownMenuItem(value: 'random', child: Text('随机循环')),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '说明：未设置铃声时，运动倒计时结束会播放系统通知铃声；播放清单只在运动正式开始后循环播放。每首运行时音乐可绑定 0~N 张背景图，多张背景图会在运行页按固定间隔自动轮播；未绑定背景图时恢复默认背景色。删除某个运行时音乐时，其绑定的背景图会一并移除。',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
         ),
       ),
-      body: Padding(
-        // Remove top and bottom padding; keep horizontal padding only
-        padding: const EdgeInsets.only(left: 12.0, right: 12.0),
-        child: ListView(children: [
-          ListTile(
-            leading: const Icon(Icons.receipt_long_outlined),
-            title: const Text('运行日志'),
-            subtitle: const Text('查看、筛选和复制任务及 AI 日志'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (context) => Scaffold(
-                appBar: AppBar(title: const Text('运行日志')),
-                body: MediaQuery.removePadding(
-                  context: context, removeTop: true, child: const LogsPage(),
-                ),
-              ),
-            )),
-          ),
-          ListTile(title: const Text('日记设置'), trailing: const Icon(Icons.chevron_right), onTap: (){ Navigator.push(context, MaterialPageRoute(builder: (_)=>const DiarySettingsPage())); },),
-          _quoteCalligraphySettingsCard(),
-          ListTile(
-            title: const Text('语义一致性精判配置'),
-            subtitle: const Text('Embedding、LLM Judge、严格事实抽取、标题忠实性、Reranker 精排配置'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => const SemanticConsistencySettingsPage()));
-              await _load();
-            },
-          ),
-          ListTile(
-            title: const Text('健康饮食配置'),
-            subtitle: const Text('发现之旅 / 生理赋能 / 饮食：营养膳食、食物数据源、菜谱 API 与医学风险提示'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => const HealthDietSettingsPage()));
-              await _load();
-            },
-          ),
-          ListTile(
-            title: const Text('电影角色实验室配置'),
-            subtitle: const Text('OpenSubtitles / TMDb 密钥、字幕语言与后续模块配置入口'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => const MovieRoleLabSettingsPage()));
-              await _load();
-            },
-          ),
-          const _ReadAloudProviderTile(),
-          ListTile(
-            title: const Text('语音与美好的祝福配置'),
-            subtitle: const Text('ElevenLabs、Microsoft Azure Speech、讯飞等 API 数据与声音配置，可共享给朗读功能'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => const VoiceLabHomePage()));
-              await _load();
-            },
-          ),
-          ListTile(
-            title: const Text('电影分析提示词配置'),
-            subtitle: const Text('配置“发现之旅/看电影”每部电影卡片上的 AI 深度分析默认提示词'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
+    ),
+    const SizedBox(height: 16),
+  ];
+
+  List<Widget> _buildDrawerPromptControls() => [
+    SwitchListTile(
+      title: const Text('首页侧栏 AI 主题开关'),
+      subtitle: const Text(
+        '默认关闭；关闭时展开左侧菜单只使用本地随机主题，不会调用 AI。开启后才会调用 AI 生成侧栏标题与简介。',
+      ),
+      value: _drawerHeaderAiEnabled,
+      onChanged: (bool value) async {
+        setState(() => _drawerHeaderAiEnabled = value);
+        await _globalAiSettings.setDrawerHeaderAiEnabled(value);
+        showToast(value ? '已开启首页侧栏 AI 主题' : '已关闭首页侧栏 AI 主题');
+      },
+    ),
+    ListTile(
+      title: const Text('首页侧栏 AI 标题提示词配置'),
+      subtitle: const Text('配置开启“首页侧栏 AI 主题”后，每次展开左侧菜单时生成标题与简介的轻量提示词'),
+      trailing: const Icon(Icons.chevron_right),
+      enabled: _drawerHeaderAiEnabled,
+      onTap: _drawerHeaderAiEnabled
+          ? () async {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => const AiPromptSettingsPage(
-                    initialModuleId: 'movie_watch',
-                    initialPromptId: 'movie_analysis',
+                    initialModuleId: 'app_shell',
+                    initialPromptId: 'drawer_header',
                   ),
                 ),
               );
-              await _load();
-            },
-          ),
-          SwitchListTile(
-            title: const Text('首页侧栏 AI 主题开关'),
-            subtitle: const Text('默认关闭；关闭时展开左侧菜单只使用本地随机主题，不会调用 AI。开启后才会调用 AI 生成侧栏标题与简介。'),
-            value: _drawerHeaderAiEnabled,
-            onChanged: (bool value) async {
-              setState(() => _drawerHeaderAiEnabled = value);
-              await _globalAiSettings.setDrawerHeaderAiEnabled(value);
-              showToast(value ? '已开启首页侧栏 AI 主题' : '已关闭首页侧栏 AI 主题');
-            },
-          ),
-          ListTile(
-            title: const Text('首页侧栏 AI 标题提示词配置'),
-            subtitle: const Text('配置开启“首页侧栏 AI 主题”后，每次展开左侧菜单时生成标题与简介的轻量提示词'),
-            trailing: const Icon(Icons.chevron_right),
-            enabled: _drawerHeaderAiEnabled,
-            onTap: _drawerHeaderAiEnabled
-                ? () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AiPromptSettingsPage(
-                          initialModuleId: 'app_shell',
-                          initialPromptId: 'drawer_header',
-                        ),
-                      ),
-                    );
-                    await _load();
-                  }
-                : null,
-          ),
-          Divider(),
-            
-            // 配置字段
-            cfgFields,
-            const SizedBox(height: 16),
-            // 量表自动报告开关与模板导入配置卡片
-            Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 自动报告开关
-                  SwitchListTile(
-                    title: const Text('量表自动报告开关'),
-                    subtitle: const Text('开启后，提交问卷时将调用大模型生成报告（暂未实现）'),
-                    value: _autoReportEnabled,
-                    onChanged: _loadingAutoReport
-                        ? null
-                        : (bool value) async {
-                            // 即刻更新 UI
-                            setState(() {
-                              _autoReportEnabled = value;
-                            });
-                            await _configDao.setAutoReportEnabled(value);
-                            showToast(value ? '已开启量表自动报告' : '已关闭量表自动报告');
-                          },
-                  ),
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('上传量表模板文件', style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _selectedFileName ?? '请选择 .xlsx 文件',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => _pickExcelFile(),
-                              child: const Text('选择文件'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton(
-                          onPressed: () => _importExcel(),
-                          child: const Text('导入'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            // 火种：复问通知开关
-            Card(
-              child: SwitchListTile(
-                key: const ValueKey<String>('settings_kindling_reask_notify'),
-                title: const Text('火种：「说不准」7 天后提醒一次'),
-                subtitle: const Text('默认关闭。关闭时不发通知，下次打开火种仍会问一次'),
-                value: _kindlingReaskNotifyEnabled,
-                onChanged: (bool value) async {
-                  setState(() {
-                    _kindlingReaskNotifyEnabled = value;
-                  });
-                  await KindlingHostReminder.setEnabled(value);
-                  if (value) {
-                    await NotificationService.request();
-                  }
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-            // 发现之旅“此时此刻心情卡片”配置卡片
-            Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SwitchListTile(
-                    title: const Text('发现之旅：自动弹出此时此刻心情卡片'),
-                    subtitle: const Text('开启后，点击底部“发现之旅”会按下方延迟自动弹出心情记录卡片'),
-                    value: _moodCardPopupEnabled,
-                    onChanged: _editingConfig
-                        ? (bool value) async {
-                            setState(() {
-                              _moodCardPopupEnabled = value;
-                            });
-                            await _configDao.setMoodCardPopupEnabled(value);
-                            showToast(value ? '已开启心情卡片自动弹出' : '已关闭心情卡片自动弹出');
-                          }
-                        : null,
-                  ),
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                    child: TextField(
-                      controller: _moodCardDelayMsCtrl,
-                      enabled: _editingConfig && _moodCardPopupEnabled,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: '心情卡片弹出延迟时间（毫秒）',
-                        helperText: '0 表示立即弹出；建议 2000～8000；最大 60000',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // EMA / SSES 配置卡片
-            Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // EMA 开关
-                  SwitchListTile(
-                    title: const Text('启用即时自尊问答（EMA/SSES）'),
-                    subtitle: const Text('开启后记录情绪时会额外弹出自尊题目'),
-                    value: _emaEnabled,
-                    onChanged: (bool value) async {
-                      // Persist the new setting first; if it fails, keep the old state
-                      try {
-                        await _configDao.setEmaEnabled(value);
-                        // only update local state after persistence succeeds
-                        if (!mounted) return;
-                        setState(() {
-                          _emaEnabled = value;
-                        });
-                        showToast(value ? '已开启自尊问答' : '已关闭自尊问答');
-                      } catch (_) {
-                        // ignore failures silently
-                      }
-                    },
-                  ),
-                  const Divider(height: 1),
-                  // 自尊评分尺度选择
-                  ListTile(
-                    title: const Text('自尊评分尺度'),
-                    subtitle: const Text('选择 100 分制或 30 分制'),
-                    trailing: DropdownButton<int>(
-                      value: _esteemScale,
-                      items: const [
-                        DropdownMenuItem<int>(value: 100, child: Text('100 分制')),
-                        DropdownMenuItem<int>(value: 30, child: Text('30 分制')),
-                      ],
-                      onChanged: (int? val) async {
-                        if (val == null) return;
-                        try {
-                          // Persist scale first
-                          await _configDao.setSelfEsteemScale(val);
-                          if (!mounted) return;
-                          setState(() {
-                            _esteemScale = val;
-                          });
-                          showToast('已设置自尊评分尺度为 $val');
-                        } catch (_) {
-                          // ignore errors
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 运动设置卡片（背景图 + 开始铃声）
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('运动设置', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('运动进行时背景图片'),
-                      subtitle: Text(
-                        _sportMusicList.isEmpty
-                            ? '请先设置运动进行时音乐'
-                            : '已为 ${_sportMusicBgBindings.values.where((e) => e.isNotEmpty).length} 首音乐绑定背景图；未设置时运行页恢复默认背景色',
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TextButton(onPressed: _editingConfig ? _manageSportMusicBgBindings : null, child: const Text('设置')),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('运动开始铃声'),
-                      subtitle: Text(_sportSoundPath == null || _sportSoundPath!.isEmpty ? '系统通知铃声（默认）' : p.basename(_sportSoundPath!)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TextButton(onPressed: _editingConfig ? _pickSportStartSound : null, child: const Text('选择')),
-                          if (_sportSoundPath != null && _sportSoundPath!.isNotEmpty)
-                            TextButton(onPressed: _editingConfig ? _clearSportStartSound : null, child: const Text('清除')),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('运动进行时音乐播放清单'),
-                      subtitle: Text(
-                        _sportMusicList.isEmpty
-                            ? '未设置'
-                            : '${_sportMusicList.length} 首：' + _sportMusicList.take(3).map((e) => p.basename(e)).join('、') + (_sportMusicList.length > 3 ? '…' : ''),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TextButton(onPressed: _editingConfig ? _pickSportMusicPlaylist : null, child: const Text('选择')),
-                          if (_sportMusicList.isNotEmpty)
-                            TextButton(onPressed: _editingConfig ? _manageSportMusicPlaylist : null, child: const Text('管理')),
-                          if (_sportMusicList.isNotEmpty)
-                            TextButton(onPressed: _editingConfig ? _clearSportMusicPlaylist : null, child: const Text('清除')),
-                        ],
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        const SizedBox(width: 16),
-                        const Text('播放模式', style: TextStyle(color: Colors.black87)),
-                        const SizedBox(width: 16),
-                        DropdownButton<String>(
-                          value: (_sportMusicMode == 'random') ? 'random' : 'order',
-                          onChanged: _editingConfig
-                              ? (v) {
-                                  if (v != null) _setSportMusicMode(v);
-                                }
-                              : null,
-                          items: const [
-                            DropdownMenuItem(value: 'order', child: Text('顺序循环')),
-                            DropdownMenuItem(value: 'random', child: Text('随机循环')),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text('说明：未设置铃声时，运动倒计时结束会播放系统通知铃声；播放清单只在运动正式开始后循环播放。每首运行时音乐可绑定 0~N 张背景图，多张背景图会在运行页按固定间隔自动轮播；未绑定背景图时恢复默认背景色。删除某个运行时音乐时，其绑定的背景图会一并移除。', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 解锁提醒冷却时间设置卡片
-            const UnlockCooldownConfigWidget(),
-            const SizedBox(height: 16),
-
-            // 百度 AK 设置卡片（Web / Android）
-            const BaiduWebAkConfigWidget(),
-            const SizedBox(height: 12),
-            const BaiduAndroidAkConfigWidget(),
-            const SizedBox(height: 16),
-
-          ],
-        ),
-      ),
-
-    );
-  }
+            }
+          : null,
+    ),
+  ];
 }
 
 class _ReadAloudProviderTile extends StatefulWidget {
-  const _ReadAloudProviderTile();
+  const _ReadAloudProviderTile({super.key});
 
   @override
   State<_ReadAloudProviderTile> createState() => _ReadAloudProviderTileState();
@@ -4637,39 +5515,73 @@ class _ReadAloudProviderTileState extends State<_ReadAloudProviderTile> {
     if (!mounted) return;
     final state = _availability;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(state?.available == true ? '朗读服务商已切换为 ${state!.providerLabel}' : state?.reason ?? '朗读服务商已切换')),
+      SnackBar(
+        content: Text(
+          state?.available == true
+              ? '朗读服务商已切换为 ${state!.providerLabel}'
+              : state?.reason ?? '朗读服务商已切换',
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(
-        _availability?.available == true ? Icons.record_voice_over_outlined : Icons.voice_over_off_outlined,
-        color: _availability?.available == true ? Theme.of(context).colorScheme.primary : null,
-      ),
-      title: const Text('朗读功能服务商'),
-      subtitle: Text(
-        _loading
-            ? '正在检查配置…'
-            : '${_availability?.reason ?? ''}\nAzure、讯飞、ElevenLabs 复用“语音与美好的祝福配置”；xAI 复用全局 xAI API Key。',
-      ),
-      isThreeLine: true,
-      trailing: SizedBox(
-        width: 152,
-        child: DropdownButtonFormField<String>(
-          value: _provider,
-          isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: '提供商',
-            border: OutlineInputBorder(),
-            isDense: true,
+    return Padding(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.record_voice_over_outlined,
+                color: settingsAccent,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  '名言朗读服务商',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
           ),
-          items: ReadAloudSettings.providers.entries
-              .map((entry) => DropdownMenuItem<String>(value: entry.key, child: Text(entry.value, overflow: TextOverflow.ellipsis)))
-              .toList(),
-          onChanged: _loading ? null : _selectProvider,
-        ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            value: _provider,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: '提供商'),
+            items: ReadAloudSettings.providers.entries
+                .map(
+                  (entry) => DropdownMenuItem<String>(
+                    value: entry.key,
+                    child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: _loading ? null : _selectProvider,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _loading ? '正在检查配置…' : _availability?.reason ?? '',
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.5,
+              color: Color(0xff817987),
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'Azure、讯飞与 ElevenLabs 的密钥在下方语音服务中管理；xAI 使用全局 API Key。切换后立即生效。',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.5,
+              color: Color(0xffa39aa9),
+            ),
+          ),
+        ],
       ),
     );
   }
