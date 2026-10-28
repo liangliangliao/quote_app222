@@ -6,6 +6,7 @@ import '../services/notification_service.dart';
 import 'enemy_ai_talker.dart';
 import 'enemy_host_reminder.dart';
 import 'enemy_sources.dart';
+import 'enemy_voice_out.dart';
 
 /// 后台巡查：App 不在前台时，敌人也每隔一段时间自己出门巡一次。
 ///
@@ -40,6 +41,7 @@ class EnemyHostPatrol {
 
   /// 登记周期任务（幂等）。成功返回空串，失败返回原因；两种结果都会记下来供自检页显示。
   static Future<String> ensureScheduled() async {
+    if (!await (await _dao()).boolSetting(EnemySettings.enabled, fallback: true)) return '模块已停用';
     String error = '';
     try {
       await Workmanager().registerPeriodicTask(
@@ -68,6 +70,7 @@ class EnemyHostPatrol {
 
   /// 10 秒后在真正的后台跑一次（带演练标记），用来验证「登记 → 系统调起 → 分发 → 运行」整条通路。
   static Future<String> scheduleOnce() async {
+    if (!await (await _dao()).boolSetting(EnemySettings.enabled, fallback: true)) return '模块已停用';
     try {
       await Workmanager().registerOneOffTask(
         onceName,
@@ -95,6 +98,7 @@ class EnemyHostPatrol {
         sources: defaultEnemySources(),
       );
       dao = presence.dao;
+      if (!await presence.engine.isEnabled()) return true;
       await dao.setSetting(EnemySettings.bgLastRunMs, '${DateTime.now().millisecondsSinceEpoch}');
 
       if (drill) {
@@ -104,6 +108,9 @@ class EnemyHostPatrol {
           body: '后台通路是通的：这条通知是在后台任务里发出的。',
           payload: EnemyHostReminder.notificationPayload,
         );
+        if (await presence.engine.isEnabled() && await dao.boolSetting(EnemySettings.voiceOut)) {
+          await EnemyHostVoiceOut().speakWhileEnabled(dao, '后台通路是通的：这条通知是在后台任务里发出的。');
+        }
       }
 
       if (!await dao.boolSetting(EnemySettings.interject, fallback: true)) {
@@ -122,12 +129,17 @@ class EnemyHostPatrol {
             final EnemyMessage? msg = await presence.step();
             if (msg == null) break;
             spoke++;
+            if (!await presence.engine.isEnabled()) break;
             await NotificationService.show(
               id: notificationId + i,
               title: '美丽的敌人',
               body: msg.text,
               payload: EnemyHostReminder.notificationPayload,
             );
+            if (await presence.engine.isEnabled() && await dao.boolSetting(EnemySettings.voiceOut)) {
+              final voice = EnemyHostVoiceOut();
+              await voice.speakWhileEnabled(dao, msg.text);
+            }
           }
           final EnemyStatus s = await presence.status();
           note = spoke > 0

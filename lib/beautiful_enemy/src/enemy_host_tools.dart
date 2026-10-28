@@ -26,3 +26,8 @@ class NoopEnemyHostTools implements EnemyHostTools {
   @override
   Future<String> runBackgroundPatrolOnce() async => notWired;
 }
+
+/// 宿主负责停用或恢复后台任务。
+abstract class EnemyHostPower {
+  Future<void> setModuleEnabled(bool enabled);
+}

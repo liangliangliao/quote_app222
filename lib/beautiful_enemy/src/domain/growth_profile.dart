@@ -55,12 +55,13 @@ class EnemyGrowthProfile {
           strengths: (j['strengths'] ?? '').toString(),
           values: (j['values'] ?? '').toString());
 
-  /// 仅发送用户确认的条目；不发送文件全文，不将自述加进 evidence_ids。
+  /// 发送用户上传的全文及条目，不将自述加入行为证据。
   Map<String, dynamic> toContext() => !enabled
       ? <String, dynamic>{}
       : {
-          'source': 'user_confirmed_self_report',
+          'source': 'user_uploaded_self_report',
           'source_name': sourceName,
+          'original_text': originalText,
           'updated_ms': updatedMs,
           'values': values,
           'strengths': strengths,

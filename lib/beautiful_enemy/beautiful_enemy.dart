@@ -28,7 +28,7 @@ export 'src/domain/enemy_presence.dart'
         SourceStatus;
 export 'src/enemy_oracle.dart' show EnemyOracle, EnemyDraft, LocalFactOracle;
 export 'src/enemy_talker.dart' show EnemyTalker, EnemyVoiceOut, NoopEnemyVoiceOut;
-export 'src/enemy_host_tools.dart' show EnemyHostTools, NoopEnemyHostTools;
+export 'src/enemy_host_tools.dart' show EnemyHostTools, NoopEnemyHostTools, EnemyHostPower;
 export 'src/enemy_reminder.dart' show EnemyReminder, NoopEnemyReminder;
 export 'src/ui/enemy_discover_entry.dart' show EnemyDiscoverEntry;
 

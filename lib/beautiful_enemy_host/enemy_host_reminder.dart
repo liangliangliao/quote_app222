@@ -3,6 +3,7 @@ import 'package:workmanager/workmanager.dart';
 import '../beautiful_enemy/beautiful_enemy.dart';
 import '../data/db.dart';
 import '../services/notification_service.dart';
+import 'enemy_voice_out.dart';
 
 /// 每日报到通知（默认关，开关在模块的设置页里）。
 ///
@@ -25,10 +26,14 @@ class EnemyHostReminder implements EnemyReminder {
   Future<void> onDailyNotifyChanged({required bool enabled, required int hour}) async {
     await _cancel();
     if (!enabled) return;
+    final engine = await EnemyEntry.buildEngine(db: await AppDatabase.instance());
+    if (!await engine.isEnabled()) return;
     await _schedule(hour);
   }
 
   static Future<void> _schedule(int hour) async {
+    final engine = await EnemyEntry.buildEngine(db: await AppDatabase.instance());
+    if (!await engine.isEnabled()) return;
     final DateTime now = DateTime.now();
     DateTime next = DateTime(now.year, now.month, now.day, hour);
     if (!next.isAfter(now.add(const Duration(minutes: 1)))) {
@@ -63,6 +68,7 @@ class EnemyHostReminder implements EnemyReminder {
     String body = '今天的账该算了。';
     try {
       final EnemyEngine engine = await EnemyEntry.buildEngine(db: await AppDatabase.instance());
+      if (!await engine.isEnabled()) return;
       final bool enabled = await engine.dao.boolSetting(EnemySettings.dailyNotify);
       if (!enabled) return;
       if (await engine.isMuted()) {
@@ -71,15 +77,24 @@ class EnemyHostReminder implements EnemyReminder {
       }
       body = await engine.briefLine();
     } catch (_) {
-      // 读不出来就用默认文案，通知不该因此丢掉。
+      // 无法确认总开关时不发通知。
+      return;
     }
 
+    final beforeNotify = await EnemyEntry.buildEngine(db: await AppDatabase.instance());
+    if (!await beforeNotify.isEnabled()) return;
     await NotificationService.show(
       id: _notificationId,
       title: '美丽的敌人',
       body: body,
       payload: notificationPayload,
     );
-    await _schedule(hour);
+    final engine = await EnemyEntry.buildEngine(db: await AppDatabase.instance());
+    if (!await engine.isEnabled()) return;
+    if (await engine.dao.boolSetting(EnemySettings.voiceOut)) {
+      final voice = EnemyHostVoiceOut();
+      await voice.speakWhileEnabled(engine.dao, body);
+    }
+    if (await engine.isEnabled()) await _schedule(hour);
   }
 }

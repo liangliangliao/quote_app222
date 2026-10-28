@@ -18,18 +18,16 @@ class EnemyGrowthStore {
   Future<void> save(EnemyGrowthProfile profile) async {
     if (profile.originalText.length > EnemyGrowthProfile.maxTextChars ||
         profile.weaknesses.isEmpty ||
-        profile.weaknesses.length > EnemyGrowthProfile.maxWeaknesses ||
         profile.weaknesses.any((w) =>
             w.id.isEmpty ||
             w.description.trim().isEmpty ||
             w.description.length > 500 ||
-            w.goal.trim().isEmpty ||
             w.goal.length > 300) ||
         profile.weaknesses.map((w) => w.id).toSet().length !=
             profile.weaknesses.length ||
         profile.strengths.length > 500 ||
         profile.values.length > 500) {
-      throw const FormatException('请保留 1–20 项弱点，每项不超过 500 字，目标不超过 300 字。');
+      throw const FormatException('请提供有效的弱点内容，每项不超过 500 字。');
     }
     await db.insert('be_setting',
         {'key': profileKey, 'value': jsonEncode(profile.toJson())},
