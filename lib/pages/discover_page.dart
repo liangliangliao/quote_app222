@@ -19,7 +19,6 @@ import 'physical_enhancement_page.dart';
 import '../data/dao.dart';
 import '../data/sses_dao.dart';
 import '../data/sses_items.dart';
-import 'mood_history_detail_page.dart';
 import '../utils/simple_bus.dart';
 import '../services/vision_trigger_service.dart';
 import '../utils/debug_logger.dart';
@@ -42,21 +41,17 @@ import '../data/db.dart';
 import '../voice_alarm/voice_alarm_page.dart';
 import '../zhixing_tree/zhixing_tree_home_page.dart';
 import '../xiangji_future_strategist/xiangji_home_page.dart';
-import '../xiangji_goal_mentor/xiangji_discover_entries.dart';
 import '../xiangji_goal_mentor/xiangji_goal_mentor_page.dart';
 import '../mental_health_checkup/mental_health_checkup_page.dart';
-import '../belief_lab/belief_mentor_discover_entry.dart';
 import '../belief_lab/belief_mentor_home_page.dart';
-import '../kindling/kindling.dart';
+import '../belief_lab/belief_mentor_discover_entry.dart';
 import '../will_mirror/will_mirror.dart';
 import '../kindling_host/kindling_host_page.dart';
-import '../beautiful_enemy/beautiful_enemy.dart' show EnemyDiscoverEntry;
 import '../beautiful_enemy_host/enemy_host_page.dart';
-import '../zhaojian/zhaojian.dart' show ZhaojianDiscoverEntry;
 import '../zhaojian_host/zhaojian_host_page.dart';
-import '../evidence_growth/evidence_growth_discover_entry.dart';
 import '../evidence_growth/evidence_growth_home_page.dart';
-import '../self_os/self_os_discover_entry.dart';
+import '../self_os/self_os_home_page.dart';
+import '../widgets/discovery_directory.dart';
 
 /// 发现之旅：展示当天的心情状态与时间轴
 class DiscoverPage extends StatefulWidget {
@@ -92,12 +87,6 @@ class _EmotionLegendEntry {
 }
 
 class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderStateMixin {
-  bool _geoEnabled = false;
-
-  Map<String, dynamic>? _latestToday;
-  List<Map<String, dynamic>> _todayList = [];
-  bool _loading = false;
-
   final _configDao = ConfigDao();
   int _overviewThreshold = 500;
 
@@ -152,9 +141,6 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    // 读取地点规则开关状态
-    () async { final cfg = ConfigDao(); final e = await cfg.isGeoRulesEnabled(); setState((){ _geoEnabled = e; }); }();
-
     _moodCardController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 420),
@@ -271,14 +257,9 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-    });
     try {
       final dao = EmotionDao();
-      _overviewThreshold = await _configDao.getOverviewThreshold();
-      final latest = await dao.latestToday();
-      final list = await dao.listTodayOrdered();
+      final threshold = await _configDao.getOverviewThreshold();
 
       // 默认用“今天 + 单次记录粒度”作为自尊分析的初始数据
       final now = DateTime.now();
@@ -286,21 +267,18 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
       final esteemRows = await dao.listByRange(start, now);
 
       if (!mounted) return;
+      if (threshold == _overviewThreshold &&
+          jsonEncode(_esteemList) == jsonEncode(esteemRows) &&
+          jsonEncode(_emotionList) == jsonEncode(esteemRows) &&
+          jsonEncode(_valenceList) == jsonEncode(esteemRows)) return;
       setState(() {
-        _latestToday = latest;
-        _todayList = list;
+        _overviewThreshold = threshold;
         _esteemList = esteemRows;
-          _emotionList = esteemRows;
-          _valenceList = esteemRows;
+        _emotionList = esteemRows;
+        _valenceList = esteemRows;
       });
     } catch (_) {
       if (!mounted) return;
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
     }
   }
 
@@ -2531,660 +2509,193 @@ Widget _buildEmotionPieChart() {
     );
   }
 
-  Widget _buildDiscoverEntry({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7F7),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: onTap,
-          ),
-        ],
-      ),
-    );
+  void _openDiscoveryPage(Widget page) {
+    Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => page));
   }
+
+  List<DiscoveryDestination> _destinations() => [
+    DiscoveryDestination(
+      title: '当下心情与情绪分析',
+      subtitle: '看见此刻的自己',
+      icon: Icons.insights_outlined,
+      categories: const {'认识自己', '身心关怀'},
+      recommended: true,
+      onTap: () => _openDiscoveryPage(const MoodInsightsPage()),
+    ),
+    DiscoveryDestination(
+      title: '写日记',
+      subtitle: '为感受留一页空间',
+      icon: Icons.edit_note_outlined,
+      categories: const {'认识自己', '身心关怀'},
+      recommended: true,
+      onTap: _openDiaryFromDiscover,
+    ),
+    DiscoveryDestination(
+      key: const ValueKey('discover_self_os_v3'),
+      title: '成为自己 · Self OS',
+      subtitle: '看见可能性，在行动中认识自己',
+      icon: Icons.explore_outlined,
+      categories: const {'认识自己'},
+      recommended: true,
+      onTap: () => _openDiscoveryPage(const SelfOsHomePage()),
+    ),
+    DiscoveryDestination(
+      title: '六模块证据成长',
+      subtitle: '行动、结果与复盘',
+      icon: Icons.route_outlined,
+      categories: const {'行动成长'},
+      recommended: true,
+      onTap: () => _openDiscoveryPage(const EvidenceGrowthHomePage()),
+    ),
+    DiscoveryDestination(
+      key: const ValueKey('belief_mentor_discover_entry'),
+      title: 'Belief Mentor',
+      subtitle: '识别信念，用现实证据更新',
+      icon: Icons.psychology_alt_outlined,
+      categories: const {'认识自己', '行动成长'},
+      cardBuilder: (onTap) => BeliefMentorDiscoverEntry(onTap: onTap),
+      onTap: () => _openDiscoveryPage(const BeliefMentorHomePage()),
+    ),
+    DiscoveryDestination(
+      key: const ValueKey('discover_xiangji_goal_mentor'),
+      title: '向己 · 智能目标导师',
+      subtitle: '一个目标，一步行动',
+      icon: Icons.flag_outlined,
+      categories: const {'行动成长'},
+      recommended: true,
+      onTap: () => _openDiscoveryPage(const XiangjiGoalMentorPage()),
+    ),
+    DiscoveryDestination(
+      key: const ValueKey('discover_xiangji_future_strategist'),
+      title: '向己 · 未来军师',
+      subtitle: '从现实问题到可行策略',
+      icon: Icons.hub_outlined,
+      categories: const {'行动成长'},
+      onTap: () => _openDiscoveryPage(const XiangjiFutureStrategistHomePage()),
+    ),
+    DiscoveryDestination(
+      key: const ValueKey('discover_kindling_v1'),
+      title: '火种',
+      subtitle: '回忆、选择与释放',
+      icon: Icons.local_fire_department_outlined,
+      categories: const {'认识自己'},
+      onTap: _openKindlingFromDiscover,
+    ),
+    DiscoveryDestination(
+      title: '意志之镜',
+      subtitle: '从一件现实课题，逐渐认识自己',
+      icon: Icons.waves_outlined,
+      categories: const {'认识自己', '行动成长'},
+      onTap: () => _openDiscoveryPage(const WillMirrorModulePage()),
+    ),
+    DiscoveryDestination(
+      key: const ValueKey('discover_beautiful_enemy_v1'),
+      title: '美丽的敌人',
+      subtitle: '关爱、事实、挑战、行动与复盘',
+      icon: Icons.gavel_outlined,
+      categories: const {'认识自己'},
+      onTap: _openEnemyFromDiscover,
+    ),
+    DiscoveryDestination(
+      key: const ValueKey('discover_zhaojian_v1'),
+      title: '照见',
+      subtitle: '选择、行为记录与假设',
+      icon: Icons.auto_awesome_outlined,
+      categories: const {'认识自己'},
+      onTap: _openZhaojianFromDiscover,
+    ),
+    DiscoveryDestination(
+      title: '知行树 · 智能行动成长',
+      subtitle: '连接思想、行动与复盘',
+      icon: Icons.park_outlined,
+      categories: const {'行动成长'},
+      onTap: () => _openDiscoveryPage(const ZhixingTreeHomePage()),
+    ),
+    DiscoveryDestination(
+      title: '改变 · 心理自助',
+      subtitle: '在理解中寻找改变的路径',
+      icon: Icons.psychology_outlined,
+      categories: const {'行动成长', '身心关怀'},
+      onTap: () => _openDiscoveryPage(const ChangeSelfHelpPage()),
+    ),
+    DiscoveryDestination(
+      title: '心理健康体检 · 幸福课23讲',
+      subtitle: '评估、课程行动与复验',
+      icon: Icons.health_and_safety_outlined,
+      categories: const {'身心关怀'},
+      onTap: () => _openDiscoveryPage(const MentalHealthCheckupPage()),
+    ),
+    DiscoveryDestination(
+      title: '心理量表测评中心',
+      subtitle: '用量表了解自己的状态',
+      icon: Icons.assignment_outlined,
+      categories: const {'认识自己', '身心关怀'},
+      onTap: () => _openDiscoveryPage(const ScaleCenterPage()),
+    ),
+    DiscoveryDestination(
+      title: '愿景与目标',
+      subtitle: '为重要的方向留出时间',
+      icon: Icons.flag_outlined,
+      categories: const {'行动成长'},
+      onTap: () => _openDiscoveryPage(const VisionGoalPage()),
+    ),
+    DiscoveryDestination(
+      title: '生理赋能',
+      subtitle: '运动、冥想、睡眠、饮食与触摸',
+      icon: Icons.spa_outlined,
+      categories: const {'身心关怀'},
+      recommended: true,
+      onTap: () => _openDiscoveryPage(const PhysicalEnhancementPage()),
+    ),
+    DiscoveryDestination(
+      title: '语音闹钟',
+      subtitle: '用声音温柔提醒',
+      icon: Icons.alarm_on_outlined,
+      categories: const {'身心关怀'},
+      onTap: () => _openDiscoveryPage(const VoiceAlarmPage()),
+    ),
+    DiscoveryDestination(
+      title: '听音乐',
+      subtitle: '让旋律陪伴此刻',
+      icon: Icons.music_note_outlined,
+      categories: const {'灵感天地'},
+      onTap: () => _openDiscoveryPage(const GlobalMusicPage()),
+    ),
+    DiscoveryDestination(
+      title: '看电影',
+      subtitle: '在故事中看见更多世界',
+      icon: Icons.movie_outlined,
+      categories: const {'灵感天地'},
+      onTap: () => _openDiscoveryPage(const MovieRankingPage()),
+    ),
+    DiscoveryDestination(
+      title: '看宇宙',
+      subtitle: '向更广阔的地方探索',
+      icon: Icons.public_outlined,
+      categories: const {'灵感天地'},
+      onTap: () => _openDiscoveryPage(const SpaceExplorerPage()),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: null,
+      backgroundColor: const Color(0xfff7f6f1),
       body: SafeArea(
         child: Stack(
           children: [
-            RefreshIndicator(
-              onRefresh: _load,
-              child: _loading && _todayList.isEmpty && _latestToday == null
-              ? const Center(child: CircularProgressIndicator())
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  children: [
-                    _buildDiscoverEntry(
-                      icon: Icons.insights_outlined,
-                      title: '当下心情与情绪分析',
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const MoodInsightsPage()),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _buildDiscoverEntry(
-                      icon: Icons.edit_note_outlined,
-                      title: '写日记',
-                      onTap: _openDiaryFromDiscover,
-                    ),
-                    const SizedBox(height: 12),
-                    const SelfOsDiscoverEntry(),
-                    const SizedBox(height: 12),
-                    EvidenceGrowthDiscoverEntry(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          CupertinoPageRoute<void>(
-                            builder: (_) => const EvidenceGrowthHomePage(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    BeliefMentorDiscoverEntry(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          CupertinoPageRoute<void>(
-                            builder: (_) => const BeliefMentorHomePage(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    XiangjiDiscoverEntries(
-                      onGoalMentorTap: () {
-                        Navigator.of(context).push(
-                          CupertinoPageRoute<void>(
-                            builder: (_) => const XiangjiGoalMentorPage(),
-                          ),
-                        );
-                      },
-                      onFutureStrategistTap: () {
-                        Navigator.of(context).push(
-                          CupertinoPageRoute<void>(
-                            builder: (_) =>
-                                const XiangjiFutureStrategistHomePage(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    KindlingDiscoverEntry(
-                      onTap: _openKindlingFromDiscover,
-                    ),
-                    const SizedBox(height: 12),
-                    WillMirrorDiscoverEntry(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => const WillMirrorModulePage()),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    EnemyDiscoverEntry(
-                      onTap: _openEnemyFromDiscover,
-                    ),
-                    const SizedBox(height: 12),
-                    ZhaojianDiscoverEntry(
-                      onTap: _openZhaojianFromDiscover,
-                    ),
-                    const SizedBox(height: 12),
-                    Material(
-                      color: const Color(0xFFF1F6EE),
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(
-                              builder: (context) =>
-                                  const ZhixingTreeHomePage(),
-                            ),
-                          );
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 13,
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 18,
-                                backgroundColor: Color(0xFFDCEBD6),
-                                child: Icon(
-                                  Icons.park_outlined,
-                                  size: 21,
-                                  color: Color(0xFF2F7550),
-                                ),
-                              ),
-                              SizedBox(width: 11),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '知行树 · 智能行动成长',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      '王阳明主线 · 17套思想/22部作品 · 行动、复盘与融合',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFF557064),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Icon(Icons.chevron_right),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // 改变 · 心理自助入口
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F7F7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.psychology_outlined, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                '改变 · 心理自助',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (context) => const ChangeSelfHelpPage(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(18),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(
-                              builder: (context) =>
-                                  const MentalHealthCheckupPage(),
-                            ),
-                          );
-                        },
-                        child: Ink(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: <Color>[
-                                Color(0xFFE9ECFF),
-                                Color(0xFFF5EDFF),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: const Color(0xFFC8CEFF),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Row(
-                                children: <Widget>[
-                                  Container(
-                                    width: 46,
-                                    height: 46,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF5664D2),
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: const Icon(
-                                      Icons.health_and_safety_outlined,
-                                      color: Colors.white,
-                                      size: 27,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  const Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: <Widget>[
-                                        Text(
-                                          '心理健康体检 · 幸福课23讲',
-                                          style: TextStyle(
-                                            fontSize: 17,
-                                            fontWeight: FontWeight.w800,
-                                            color: Color(0xFF252E52),
-                                          ),
-                                        ),
-                                        SizedBox(height: 3),
-                                        Text(
-                                          '安全分流 → 八域评估 → 课程行动 → 7天复验',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF596273),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const Icon(
-                                    Icons.chevron_right,
-                                    color: Color(0xFF5664D2),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              const Wrap(
-                                spacing: 14,
-                                runSpacing: 7,
-                                children: <Widget>[
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      Icon(
-                                        Icons.offline_bolt_outlined,
-                                        size: 16,
-                                        color: Color(0xFF39715D),
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        '本地优先',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF315C4E),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      Icon(
-                                        Icons.person_off_outlined,
-                                        size: 16,
-                                        color: Color(0xFF4554C5),
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        '无注册登录',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF3948A7),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      Icon(
-                                        Icons.verified_user_outlined,
-                                        size: 16,
-                                        color: Color(0xFF7A4E9D),
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        '种子完整性校验',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF694187),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F7F7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.assignment_outlined, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                '心理量表测评中心',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: () {
-                              // 跳转到新版心理量表测评中心页面
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (context) => const ScaleCenterPage(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F7F7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.flag_outlined, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                '愿景与目标',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (context) => const VisionGoalPage(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F7F7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Expanded(
-                            child: Row(
-                              children: [
-                                // 使用健身图标代表生理赋能入口
-                                Icon(Icons.fitness_center, size: 20),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '生理赋能',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      SizedBox(height: 2),
-                                      Text(
-                                        '运动、AI 冥想专家、睡眠、饮食与触摸：从身体支撑开始，按当下状态选择合适的恢复入口。',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Color(0xFF666666),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: () {
-                              // 点击跳转到生理赋能详情页
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (context) => const PhysicalEnhancementPage(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F7F7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.alarm_on_outlined, size: 20, color: Color(0xFF7C3AED)),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('语音闹钟', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                                SizedBox(height: 2),
-                                Text('预设时间、朗读内容、语音服务商、震动与音乐，支持5分钟后再次提醒', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Color(0xFF666666))),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: () => Navigator.of(context).push(
-                              CupertinoPageRoute(builder: (_) => const VoiceAlarmPage()),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // 听音乐入口
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F7F7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.music_note_outlined, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                '听音乐',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (context) => const GlobalMusicPage(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // 看电影入口
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F7F7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.movie_outlined, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                '看电影',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (context) => const MovieRankingPage(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // 看宇宙入口
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F7F7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.public_outlined, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                '看宇宙',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (context) => const SpaceExplorerPage(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-            ),
+            DiscoveryDirectory(destinations: _destinations(), onRefresh: _load),
             _buildMoodCardOverlay(),
-            const AiAssistantFloatingBubble(moduleKey: 'discover_home_ai_assistant'),
+            const AiAssistantFloatingBubble(
+              moduleKey: 'discover_home_ai_assistant',
+            ),
           ],
         ),
       ),
     );
   }
 }
+
 
 class QuestionnaireScalePage extends StatelessWidget {
   const QuestionnaireScalePage({super.key});

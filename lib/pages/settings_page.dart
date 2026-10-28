@@ -49,13 +49,14 @@ import '../services/quote_calligraphy_settings.dart';
 import '../platform/exact_alarm_permission_coordinator.dart';
 import '../platform/bg_guard_helper.dart';
 import '../widgets/quote_calligraphy_text.dart';
-import '../widgets/task_schedule_status.dart';
+import 'logs_page.dart';
+import '../widgets/quote_figure_picker.dart';
 // removed duplicate import of native_guard (already imported above)
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  SettingsPageState createState() => SettingsPageState();
 }
 
 class _CalligraphyStyleChoice extends StatelessWidget {
@@ -189,7 +190,10 @@ class _EnglishFontStyleChoice extends StatelessWidget {
       );
 }
 
-class _SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver {
+class SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver {
+  /// Shared by the task tab so existing scheduling and edit behavior remains
+  /// owned by the same settings state.
+  Future<void> openTaskEditor(Map<String, dynamic>? task) => _openTaskDialog(task: task);
   final _configDao = ConfigDao();
   final _taskDao = TaskDao();
   final _kvDao = KeyValueDao();
@@ -2207,34 +2211,58 @@ Future<String?> _saveAvatarTemp(File file) async {
     final isEdit = task != null;
 
     String name = isEdit ? (task['name'] ?? '') as String : '';
-    String type = isEdit ? (task['type'] ?? 'manual') as String : 'manual'; // manual / auto / carousel / 批量导入任务
-    String status = isEdit ? (task['status'] ?? 'on') as String : 'on';     // on / off
+    String type = isEdit
+        ? (task['type'] ?? 'manual') as String
+        : 'manual'; // manual / auto / carousel / 批量导入任务
+    const quoteTaskTypes = {'manual', 'auto', 'carousel', '批量导入任务'};
+    final externalTask = isEdit && !quoteTaskTypes.contains(type);
+    String status = isEdit
+        ? (task['status'] ?? 'on') as String
+        : 'on'; // on / off
     final String prompt = isEdit ? (task['prompt'] ?? '') as String : '';
-    final initialQuoteAiConfig = QuoteAiTaskConfig.fromTask(task ?? <String, dynamic>{});
+    final initialQuoteAiConfig = QuoteAiTaskConfig.fromTask(
+      task ?? <String, dynamic>{},
+    );
     bool quoteAiAutoEnabled = initialQuoteAiConfig.autoEnabled;
     bool quoteAiSaveLocally = initialQuoteAiConfig.saveLocally;
     bool quoteAiDownloadAvatar = initialQuoteAiConfig.downloadAvatar;
-    final selectedQuoteFigures = <String>{...initialQuoteAiConfig.selectedFigures};
+    final selectedQuoteFigures = <String>{
+      ...initialQuoteAiConfig.selectedFigures,
+    };
     String customQuoteFigures = initialQuoteAiConfig.customFigures.join('、');
     String quoteAiDescription = initialQuoteAiConfig.userDescription.isNotEmpty
         ? initialQuoteAiConfig.userDescription
         : prompt;
-    String quoteAiThemeChoice = quoteThemeOptions.contains(initialQuoteAiConfig.theme)
+    String quoteAiThemeChoice =
+        quoteThemeOptions.contains(initialQuoteAiConfig.theme)
         ? initialQuoteAiConfig.theme
         : (initialQuoteAiConfig.theme.trim().isEmpty ? '不限主题' : '自定义主题');
-    String customQuoteTheme = quoteAiThemeChoice == '自定义主题' ? initialQuoteAiConfig.theme : '';
+    String customQuoteTheme = quoteAiThemeChoice == '自定义主题'
+        ? initialQuoteAiConfig.theme
+        : '';
     int intervalMinutes = initialQuoteAiConfig.intervalMinutes;
-    if (!const <int>{15, 30, 60, 120, 240, 480, 720, 1440}.contains(intervalMinutes)) {
+    if (!const <int>{
+      15,
+      30,
+      60,
+      120,
+      240,
+      480,
+      720,
+      1440,
+    }.contains(intervalMinutes)) {
       intervalMinutes = 60;
     }
     // Carousel order: desc (降序) | asc (升序) | random (随机)
-    String carouselOrder = isEdit ? ((task?['carousel_order'] ?? 'desc') as String) : 'desc';
+    String carouselOrder = isEdit
+        ? ((task?['carousel_order'] ?? 'desc') as String)
+        : 'desc';
     String manualQuote = '';
     String theme = '';
     String authorName = '';
     String sourceFrom = '';
     String explanation = '';
-    
+
     // Prepare avatarPath early; it may be overwritten for bulk-import tasks based on quote avatar
     String avatarPath = isEdit ? (task['avatar_path'] ?? '') as String : '';
     // 回显手动任务或批量导入任务的名言及其他字段
@@ -2249,7 +2277,9 @@ Future<String?> _saveAvatarTemp(File file) async {
         explanation = (mq?['explanation'] ?? '') as String;
       } else if (type == '批量导入任务') {
         // Use cursor to select which quote to show.  Default to 0 if missing.
-        final cursorVal = (task['cursor'] is int) ? task['cursor'] as int : int.tryParse((task['cursor'] ?? '0').toString()) ?? 0;
+        final cursorVal = (task['cursor'] is int)
+            ? task['cursor'] as int
+            : int.tryParse((task['cursor'] ?? '0').toString()) ?? 0;
         final mq = await QuoteDao().findByTaskOffsetDesc(taskUid, cursorVal);
         if (mq != null) {
           manualQuote = (mq['content'] ?? '') as String;
@@ -2264,35 +2294,41 @@ Future<String?> _saveAvatarTemp(File file) async {
     }
 
     // freq
-    String freqType = isEdit ? (task['freq_type'] ?? 'daily') as String : 'daily'; // daily/weekly/monthly/custom
+    String freqType = isEdit
+        ? (task['freq_type'] ?? 'daily') as String
+        : 'daily'; // daily/weekly/monthly/custom
     int? selectedWeekday = (task?['freq_weekday'] as int?);
     int? selectedMonthDay = (task?['freq_day_of_month'] as int?);
-    TimeOfDay time = _parseTimeOfDay((task?['start_time'] ?? '') as String) ?? TimeOfDay.now();
+    TimeOfDay time =
+        _parseTimeOfDay((task?['start_time'] ?? '') as String) ??
+        TimeOfDay.now();
     final formKey = GlobalKey<FormState>();
+    bool isSaving = false;
 
-    // Auto-refresh "next trigger" preview
-    Timer? ticker;
-    void ensureTicker(StateSetter setStateDialog, BuildContext ctx) {
-      ticker ??= Timer.periodic(const Duration(seconds: 30), (_){
-        if (Navigator.of(ctx).mounted) setStateDialog((){});
-      });
+    String two(int n) => n.toString().padLeft(2, '0');
+    String weekdayText(int w) {
+      const names = ['一', '二', '三', '四', '五', '六', '日'];
+      return (w >= 1 && w <= 7) ? names[w - 1] : '一';
     }
 
-    String two(int n)=> n.toString().padLeft(2,'0');
-    String weekdayText(int w){
-      const names = ['一','二','三','四','五','六','日'];
-      return (w>=1 && w<=7)? names[w-1] : '一';
-    }
-    DateTime computeNext(DateTime now){
+    DateTime computeNext(DateTime now) {
       if (freqType == 'interval') {
-        return now.add(Duration(minutes: intervalMinutes.clamp(15, 24 * 60).toInt()));
-      } else if (freqType == 'weekly'){
+        return now.add(
+          Duration(minutes: intervalMinutes.clamp(15, 24 * 60).toInt()),
+        );
+      } else if (freqType == 'weekly') {
         final wd = (selectedWeekday ?? 1);
         int delta = (wd - now.weekday) % 7;
-        var cand = DateTime(now.year, now.month, now.day, time.hour, time.minute).add(Duration(days: delta));
+        var cand = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          time.hour,
+          time.minute,
+        ).add(Duration(days: delta));
         if (!cand.isAfter(now)) cand = cand.add(const Duration(days: 7));
         return cand;
-      } else if (freqType == 'monthly'){
+      } else if (freqType == 'monthly') {
         final d = (selectedMonthDay ?? 1);
         int y = now.year, m = now.month;
         int end = DateTime(y, m + 1, 0).day;
@@ -2304,549 +2340,909 @@ Future<String?> _saveAvatarTemp(File file) async {
         }
         return cand;
       } else {
-        final today = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+        final today = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          time.hour,
+          time.minute,
+        );
         if (today.isAfter(now)) return today;
         return today.add(const Duration(days: 1));
       }
     }
 
-    String _fmt(DateTime dt){ String two(int n)=> n.toString().padLeft(2,'0'); return '${dt.year}-${two(dt.month)}-${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}'; }
-    await showDialog(context: context, builder: (dialogCtx) {
-      return StatefulBuilder(
-        builder: (ctx, setStateDialog) {
-          ensureTicker(setStateDialog, ctx);
-          final next = computeNext(DateTime.now());
-          final nextStr = '${next.year}-${two(next.month)}-${two(next.day)} ${two(next.hour)}:${two(next.minute)}';
+    String _fmt(DateTime dt) {
+      String two(int n) => n.toString().padLeft(2, '0');
+      return '${dt.year}-${two(dt.month)}-${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}';
+    }
 
-          return AlertDialog(
-            title: Text(isEdit ? '编辑任务' : '新增任务'),
-            content: SingleChildScrollView(
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('任务标题'),
-                    TextFormField(
-                      initialValue: name,
-                      onChanged: (v)=> name = v,
-                      validator: (v)=> (v==null || v.trim().isEmpty) ? '请输入任务标题' : null,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('任务类型'),
-                    DropdownButton<String>(
-                      value: type,
-                      onChanged: (v){
-                        setStateDialog(() {
-                          type = v ?? 'manual';
-                          if (type != 'auto' && freqType == 'interval') freqType = 'daily';
-                        });
-                      },
-                      items: const [
-                        DropdownMenuItem(value: 'manual', child: Text('手动')),
-                        DropdownMenuItem(value: 'auto', child: Text('自动')),
-                        DropdownMenuItem(value: 'carousel', child: Text('轮播')),
-                        DropdownMenuItem(value: '批量导入任务', child: Text('批量导入任务')),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (type == 'auto') ...[
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('AI 自动获取名人名言'),
-                        subtitle: const Text('关闭后不调用 AI，也不再安排下一次自动获取'),
-                        value: quoteAiAutoEnabled,
-                        onChanged: (value) => setStateDialog(() => quoteAiAutoEnabled = value),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text('选择代表人物（可多选）', style: TextStyle(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      const Text('选择多个人物后，将严格按所选顺序循环获取。', style: TextStyle(color: Colors.black54, fontSize: 12)),
-                      const SizedBox(height: 8),
-                      ...quoteFigureCatalog.entries.map((entry) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(entry.key, style: const TextStyle(fontSize: 13, color: Colors.black54)),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              children: entry.value.map((figure) => FilterChip(
-                                label: Text(figure),
-                                selected: selectedQuoteFigures.contains(figure),
-                                onSelected: (selected) {
-                                  setStateDialog(() {
-                                    if (selected) {
-                                      selectedQuoteFigures.add(figure);
-                                    } else {
-                                      selectedQuoteFigures.remove(figure);
-                                    }
-                                  });
-                                },
-                              )).toList(),
-                            ),
-                          ],
-                        ),
-                      )),
-                      const Text('自定义人物'),
-                      TextFormField(
-                        initialValue: customQuoteFigures,
-                        decoration: const InputDecoration(
-                          hintText: '例如：汉娜·阿伦特、费曼（用逗号或顿号分隔）',
-                        ),
-                        onChanged: (value) => customQuoteFigures = value,
-                      ),
-                      const SizedBox(height: 10),
-                      const Text('主题或类别'),
-                      DropdownButtonFormField<String>(
-                        value: quoteAiThemeChoice,
-                        isExpanded: true,
-                        items: quoteThemeOptions
-                            .map((item) => DropdownMenuItem<String>(value: item, child: Text(item)))
-                            .toList(),
-                        onChanged: (value) => setStateDialog(() => quoteAiThemeChoice = value ?? '不限主题'),
-                      ),
-                      if (quoteAiThemeChoice == '自定义主题') ...[
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          initialValue: customQuoteTheme,
-                          decoration: const InputDecoration(hintText: '输入自定义主题'),
-                          onChanged: (value) => customQuoteTheme = value,
-                        ),
-                      ],
-                      const SizedBox(height: 10),
-                      const Text('描述你想表达或面对的内容'),
-                      TextFormField(
-                        initialValue: quoteAiDescription,
-                        decoration: const InputDecoration(
-                          hintText: 'AI 会分析核心思想，并匹配语义最接近的名言',
-                        ),
-                        onChanged: (value) => quoteAiDescription = value,
-                        minLines: 3,
-                        maxLines: 6,
-                        keyboardType: TextInputType.multiline,
-                      ),
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('自动下载人物头像'),
-                        subtitle: const Text('从 Wikipedia/Wikimedia 获取并保存到应用目录'),
-                        value: quoteAiDownloadAvatar,
-                        onChanged: (value) => setStateDialog(() => quoteAiDownloadAvatar = value),
-                      ),
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('自动保存到本地'),
-                        subtitle: const Text('保存正文、署名、出处、头像和完整思想分析'),
-                        value: quoteAiSaveLocally,
-                        onChanged: (value) => setStateDialog(() => quoteAiSaveLocally = value),
-                      ),
-                    ],
-                    if (type == 'manual' || type == '批量导入任务') ...[
-                      const Text('名人名言'),
-                      
-TextFormField(
-            initialValue: manualQuote,
-                        onChanged: (v)=> manualQuote = v,
-                        validator: (v)=> (type=='manual' && (v==null || v.trim().isEmpty)) ? '请输入名人名言' : null,
-                        minLines: 3,
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
-                        textInputAction: TextInputAction.newline,
-                      ),
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setStateDialog) {
+            final next = computeNext(DateTime.now());
+            final nextStr =
+                '${next.year}-${two(next.month)}-${two(next.day)} ${two(next.hour)}:${two(next.minute)}';
 
-  const SizedBox(height: 8),
-  const Text('主题'),
-  TextFormField(
-    initialValue: theme,
-    onChanged: (v) => theme = v,
-  ),
-  const SizedBox(height: 8),
-  const Text('署名'),
-  TextFormField(
-    initialValue: authorName,
-    onChanged: (v) => authorName = v,
-  ),
-  const SizedBox(height: 8),
-  const Text('出处'),
-  TextFormField(
-    initialValue: sourceFrom,
-    onChanged: (v) => sourceFrom = v,
-  ),
-  const SizedBox(height: 8),
-  const Text('简明解释'),
-  TextFormField(
-    initialValue: explanation,
-    onChanged: (v) => explanation = v,
-    minLines: 3,
-    maxLines: null,
-    keyboardType: TextInputType.multiline,
-    textInputAction: TextInputAction.newline,
-  ),
-],
-                    // When creating or editing a carousel task, allow the user to select the play order
-                    if (type == 'carousel') ...[
-                      const Text('轮播顺序'),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          RadioListTile<String>(
-                            title: const Text('降序'),
-                            value: 'desc',
-                            groupValue: carouselOrder,
-                            onChanged: (v) {
-                              setStateDialog(() => carouselOrder = v ?? 'desc');
-                            },
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('升序'),
-                            value: 'asc',
-                            groupValue: carouselOrder,
-                            onChanged: (v) {
-                              setStateDialog(() => carouselOrder = v ?? 'desc');
-                            },
-                          ),
-                          RadioListTile<String>(
-                            title: const Text('随机'),
-                            value: 'random',
-                            groupValue: carouselOrder,
-                            onChanged: (v) {
-                              setStateDialog(() => carouselOrder = v ?? 'desc');
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-const SizedBox(height: 8),
-const Text('头像（用于通知图标）'),
-                    Row(
-                      children: [
-                        // 显示文件名；若未选择则显示提示文字；不展示图片
-                        Flexible(
-                          child: Text(
-                            avatarPath.isNotEmpty ? p.basename(avatarPath) : '未选择',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: () async {
-                            final picker = ImagePicker();
-                            final x = await picker.pickImage(source: ImageSource.gallery);
-                            if (x != null) {
-                              final p = await _saveAvatarTemp(File(x.path));
-                              setStateDialog(()=> avatarPath = p ?? '');
-                            }
-                          },
-                          icon: const Icon(Icons.photo),
-                          label: const Text('选择图片'),
-                        ),
-                      ],
+            Widget section(
+              String title,
+              String subtitle,
+              List<Widget> children,
+            ) => Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      color: Color(0xff293e35),
+                      fontWeight: FontWeight.w700,
                     ),
-                    const SizedBox(height: 8),
-                    const Text('状态'),
-                    DropdownButton<String>(
-                      value: status,
-                      onChanged: (v){ setStateDialog(()=> status = v ?? 'on'); },
-                      items: const [
-                        DropdownMenuItem(value: 'on', child: Text('开启')),
-                        DropdownMenuItem(value: 'off', child: Text('关闭')),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('自动获取频率与时间：'),
-                    // frequency row
-                    Row(
-                      children: [
-                        DropdownButton<String>(
-                          value: freqType,
-                          onChanged: (v){ setStateDialog(()=> freqType = v ?? 'daily'); },
-                          items: [
-                            if (type == 'auto')
-                              const DropdownMenuItem(value: 'interval', child: Text('按间隔')),
-                            const DropdownMenuItem(value: 'daily', child: Text('每天')),
-                            const DropdownMenuItem(value: 'weekly', child: Text('每周')),
-                            const DropdownMenuItem(value: 'monthly', child: Text('每月')),
-                          ],
-                        ),
-                        const SizedBox(width: 12),
-                        if (freqType=='interval')
-                          DropdownButton<int>(
-                            value: intervalMinutes,
-                            onChanged: (value) => setStateDialog(() => intervalMinutes = value ?? 60),
-                            items: const [
-                              DropdownMenuItem(value: 15, child: Text('15 分钟')),
-                              DropdownMenuItem(value: 30, child: Text('30 分钟')),
-                              DropdownMenuItem(value: 60, child: Text('1 小时')),
-                              DropdownMenuItem(value: 120, child: Text('2 小时')),
-                              DropdownMenuItem(value: 240, child: Text('4 小时')),
-                              DropdownMenuItem(value: 480, child: Text('8 小时')),
-                              DropdownMenuItem(value: 720, child: Text('12 小时')),
-                              DropdownMenuItem(value: 1440, child: Text('24 小时')),
-                            ],
-                          ),
-                        if (freqType=='weekly')
-                          DropdownButton<int>(
-                            value: selectedWeekday ?? 1,
-                            onChanged: (v){ setStateDialog(()=> selectedWeekday = v ?? 1); },
-                            items: const [
-                              DropdownMenuItem(value: 1, child: Text('周一')),
-                              DropdownMenuItem(value: 2, child: Text('周二')),
-                              DropdownMenuItem(value: 3, child: Text('周三')),
-                              DropdownMenuItem(value: 4, child: Text('周四')),
-                              DropdownMenuItem(value: 5, child: Text('周五')),
-                              DropdownMenuItem(value: 6, child: Text('周六')),
-                              DropdownMenuItem(value: 7, child: Text('周日')),
-                            ],
-                          ),
-                        if (freqType=='monthly')
-                          DropdownButton<int>(
-                            value: (selectedMonthDay ?? 1).clamp(1, 28),
-                            onChanged: (v){ setStateDialog(()=> selectedMonthDay = (v ?? 1).clamp(1, 28)); },
-                            items: [
-                              for (int d=1; d<=28; d++)
-                                DropdownMenuItem(value: d, child: Text('$d日')),
-                            ],
-                          ),
-                        if (freqType!='interval') ...[
-                          const Spacer(),
-                          IconButton(
-                            onPressed: () async {
-                              final t = await showTimePicker(context: ctx, initialTime: time);
-                              if (t != null) setStateDialog(()=> time = t);
-                            },
-                            icon: const Icon(Icons.access_time),
-                          ),
-                          Text('${two(time.hour)}:${two(time.minute)}'),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 6),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 4),
                     Text(
-                      () {
-                        final hhmm = '${two(time.hour)}:${two(time.minute)}';
-                        if (freqType=='interval') {
-                          final label = intervalMinutes < 60
-                              ? '$intervalMinutes 分钟'
-                              : intervalMinutes % 60 == 0
-                                  ? '${intervalMinutes ~/ 60} 小时'
-                                  : '$intervalMinutes 分钟';
-                          return '每 $label 自动获取一次（下一次：$nextStr）';
-                        } else if (freqType=='weekly') {
-                          final w = selectedWeekday ?? 1;
-                          return '每周${weekdayText(w)} $hhmm （下一次：$nextStr）';
-                        } else if (freqType=='monthly') {
-                          final d = selectedMonthDay ?? 1;
-                          return '每月${d}日 $hhmm （下一次：$nextStr）';
-                        } else {
-                          return '每天 $hhmm （下一次：$nextStr）';
-                        }
-                      }(),
-                      style: const TextStyle(color: Colors.black54),
+                      subtitle,
+                      style: const TextStyle(
+                        color: Color(0xff78877d),
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
                     ),
                   ],
-                ),
+                  const SizedBox(height: 15),
+                  ...children,
+                ],
               ),
-            ),
-            actions: [
-              if (isEdit)
-                TextButton(
-                  onPressed: () async {
-                    final uid = task!['task_uid'] as String;
-                    // Cancel AM/WM using the latest persisted next_time from DB rather than computing a value.
-                    try {
-                      final nextMillis = await _readNextMillisFromDbOrNull(uid);
-                      if (await NativeGuard.isNativeWM()) {
-                        await NativeWm.cancelWmByUidBoth(uid);
-                      }
-                      if (await NativeGuard.isNativeAM()) {
-                        if (nextMillis != null) {
-                          await NativeAm.cancelExactByNext(uid, nextMillis);
-                        } else {
-                          final _t = await _taskDao.getByUid(uid);
-                          final rk = (_t?['scheduled_run_key'] ?? '') as String?;
-                          await NativeAm.cancelExactById(uid, rk);
-                        }
-                      }
-                    } catch (_) {}
-                    await SchedulerService.cancelNextForTask(uid);
-                    await _taskDao.delete(uid);
-                    showToast('已删除任务');
-                    await _load();
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  child: const Text('删除'),
-                ),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  if (formKey.currentState?.validate() != true) return;
+            );
 
-                  if (status == 'on') {
-                    final notificationGranted = !Platform.isAndroid ||
-                        await NativeScheduler.requestNotificationPermissionSystem();
-                    if (!notificationGranted) {
-                      showToast('请先允许通知权限，否则后台任务无法送达');
-                      return;
-                    }
-                    if (type != 'auto') {
-                      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+            return Dialog.fullscreen(
+              child: Scaffold(
+                backgroundColor: const Color(0xfff7f6f1),
+                appBar: AppBar(
+                  backgroundColor: const Color(0xfff7f6f1),
+                  surfaceTintColor: Colors.transparent,
+                  leading: IconButton(
+                    tooltip: '关闭',
+                    onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close),
+                  ),
+                  title: Text(
+                    isEdit ? '编辑任务' : '新增任务',
+                    style: const TextStyle(
+                      color: Color(0xff293e35),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                body: AbsorbPointer(
+                  absorbing: isSaving,
+                  child: Theme(
+                    data: Theme.of(ctx).copyWith(
+                      colorScheme: Theme.of(
                         ctx,
-                        featureName: '定时任务通知',
-                        explanation: '启用中的任务会在下一次计划时间准确触发。',
-                      );
-                      if (!exactGranted) return;
-                    }
-                  }
+                      ).colorScheme.copyWith(primary: const Color(0xff42634f)),
+                      inputDecorationTheme: InputDecorationTheme(
+                        filled: true,
+                        fillColor: const Color(0xfff5f7f3),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 13,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    child: Form(
+                      key: formKey,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            section('一份温柔的提醒', '给它一个名字，选择与你相伴的方式。', [
+                              TextFormField(
+                                initialValue: name,
+                                decoration: const InputDecoration(
+                                  labelText: '任务名称',
+                                  hintText: '例如：每天读一句好思想',
+                                ),
+                                onChanged: (v) => name = v,
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                    ? '请输入任务标题'
+                                    : null,
+                              ),
+                              const SizedBox(height: 12),
+                              DropdownButtonFormField<String>(
+                                value: type,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  labelText: '任务类型',
+                                ),
+                                onChanged: externalTask
+                                    ? null
+                                    : (v) => setStateDialog(() {
+                                        type = v ?? 'manual';
+                                        if (type != 'auto' &&
+                                            freqType == 'interval') {
+                                          freqType = 'daily';
+                                        }
+                                      }),
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: 'manual',
+                                    child: Text('手动名言'),
+                                  ),
+                                  const DropdownMenuItem(
+                                    value: 'auto',
+                                    child: Text('AI 自动获取'),
+                                  ),
+                                  const DropdownMenuItem(
+                                    value: 'carousel',
+                                    child: Text('名言轮播'),
+                                  ),
+                                  const DropdownMenuItem(
+                                    value: '批量导入任务',
+                                    child: Text('批量导入任务'),
+                                  ),
+                                  if (!quoteTaskTypes.contains(type))
+                                    DropdownMenuItem(
+                                      value: type,
+                                      child: Text(type),
+                                    ),
+                                ],
+                              ),
+                              if (externalTask) ...[
+                                const SizedBox(height: 8),
+                                const Text(
+                                  '此任务由其他功能创建，任务内容请在对应功能中修改。',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xff78877d),
+                                  ),
+                                ),
+                              ],
+                            ]),
+                            if (type == 'auto')
+                              section('让思想与你相遇', '选择人物和主题，写下此刻希望探索的内容。', [
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('AI 自动获取名人名言'),
+                                  subtitle: const Text('关闭后暂停自动获取'),
+                                  value: quoteAiAutoEnabled,
+                                  onChanged: (v) => setStateDialog(
+                                    () => quoteAiAutoEnabled = v,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                QuoteFigurePicker(
+                                  selected: selectedQuoteFigures,
+                                  onChanged: (selection) => setStateDialog(() {
+                                    selectedQuoteFigures
+                                      ..clear()
+                                      ..addAll(selection);
+                                  }),
+                                ),
+                                const SizedBox(height: 14),
+                                TextFormField(
+                                  initialValue: customQuoteFigures,
+                                  decoration: const InputDecoration(
+                                    labelText: '自定义人物',
+                                    hintText: '多个人物用逗号或顿号分隔',
+                                  ),
+                                  onChanged: (value) =>
+                                      customQuoteFigures = value,
+                                ),
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<String>(
+                                  value: quoteAiThemeChoice,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: '主题或类别',
+                                  ),
+                                  items: quoteThemeOptions
+                                      .map(
+                                        (item) => DropdownMenuItem(
+                                          value: item,
+                                          child: Text(item),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) => setStateDialog(
+                                    () => quoteAiThemeChoice = value ?? '不限主题',
+                                  ),
+                                ),
+                                if (quoteAiThemeChoice == '自定义主题') ...[
+                                  const SizedBox(height: 12),
+                                  TextFormField(
+                                    initialValue: customQuoteTheme,
+                                    decoration: const InputDecoration(
+                                      labelText: '自定义主题',
+                                    ),
+                                    onChanged: (v) => customQuoteTheme = v,
+                                  ),
+                                ],
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  initialValue: quoteAiDescription,
+                                  decoration: const InputDecoration(
+                                    labelText: '想表达或面对的内容',
+                                    hintText: '写下你的想法，寻找与之相遇的名言',
+                                  ),
+                                  onChanged: (value) =>
+                                      quoteAiDescription = value,
+                                  minLines: 3,
+                                  maxLines: 6,
+                                  keyboardType: TextInputType.multiline,
+                                ),
+                                const SizedBox(height: 6),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('自动下载人物头像'),
+                                  subtitle: const Text(
+                                    '从 Wikipedia / Wikimedia 获取',
+                                  ),
+                                  value: quoteAiDownloadAvatar,
+                                  onChanged: (v) => setStateDialog(
+                                    () => quoteAiDownloadAvatar = v,
+                                  ),
+                                ),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('自动保存到本地'),
+                                  subtitle: const Text('保存名言、出处与思想分析'),
+                                  value: quoteAiSaveLocally,
+                                  onChanged: (v) => setStateDialog(
+                                    () => quoteAiSaveLocally = v,
+                                  ),
+                                ),
+                              ]),
+                            if (type == 'manual' || type == '批量导入任务')
+                              section('珍藏一句话', '写下希望在生活中再次遇见的内容。', [
+                                TextFormField(
+                                  initialValue: manualQuote,
+                                  decoration: const InputDecoration(
+                                    labelText: '名人名言',
+                                  ),
+                                  onChanged: (v) => manualQuote = v,
+                                  validator: (v) =>
+                                      type == 'manual' &&
+                                          (v == null || v.trim().isEmpty)
+                                      ? '请输入名人名言'
+                                      : null,
+                                  minLines: 3,
+                                  maxLines: null,
+                                  keyboardType: TextInputType.multiline,
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  initialValue: theme,
+                                  decoration: const InputDecoration(
+                                    labelText: '主题',
+                                  ),
+                                  onChanged: (v) => theme = v,
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  initialValue: authorName,
+                                  decoration: const InputDecoration(
+                                    labelText: '署名',
+                                  ),
+                                  onChanged: (v) => authorName = v,
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  initialValue: sourceFrom,
+                                  decoration: const InputDecoration(
+                                    labelText: '出处',
+                                  ),
+                                  onChanged: (v) => sourceFrom = v,
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  initialValue: explanation,
+                                  decoration: const InputDecoration(
+                                    labelText: '简明解释',
+                                  ),
+                                  onChanged: (v) => explanation = v,
+                                  minLines: 2,
+                                  maxLines: null,
+                                  keyboardType: TextInputType.multiline,
+                                ),
+                              ]),
+                            if (type == 'carousel')
+                              section('轮播顺序', '选择阅读名言的顺序。', [
+                                Wrap(
+                                  spacing: 8,
+                                  children: [
+                                    for (final option in const {
+                                      'desc': '降序',
+                                      'asc': '升序',
+                                      'random': '随机',
+                                    }.entries)
+                                      ChoiceChip(
+                                        label: Text(option.value),
+                                        selected: carouselOrder == option.key,
+                                        onSelected: (_) => setStateDialog(
+                                          () => carouselOrder = option.key,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ]),
+                            section('提醒节奏', '按自己的生活节奏安排，不必急于改变。', [
+                              SwitchListTile.adaptive(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('启用任务'),
+                                subtitle: Text(
+                                  status == 'on' ? '按计划提醒' : '已暂停提醒',
+                                ),
+                                value: status == 'on',
+                                onChanged: (v) => setStateDialog(
+                                  () => status = v ? 'on' : 'off',
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: freqType,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  labelText: '频率',
+                                ),
+                                onChanged: (v) => setStateDialog(
+                                  () => freqType = v ?? 'daily',
+                                ),
+                                items: [
+                                  if (type == 'auto' || freqType == 'interval')
+                                    const DropdownMenuItem(
+                                      value: 'interval',
+                                      child: Text('按间隔'),
+                                    ),
+                                  const DropdownMenuItem(
+                                    value: 'daily',
+                                    child: Text('每天'),
+                                  ),
+                                  const DropdownMenuItem(
+                                    value: 'weekly',
+                                    child: Text('每周'),
+                                  ),
+                                  const DropdownMenuItem(
+                                    value: 'monthly',
+                                    child: Text('每月'),
+                                  ),
+                                  if (!const {
+                                    'interval',
+                                    'daily',
+                                    'weekly',
+                                    'monthly',
+                                  }.contains(freqType))
+                                    DropdownMenuItem(
+                                      value: freqType,
+                                      child: Text(freqType),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              if (freqType == 'interval')
+                                DropdownButtonFormField<int>(
+                                  key: const ValueKey('interval'),
+                                  value: intervalMinutes,
+                                  decoration: const InputDecoration(
+                                    labelText: '获取间隔',
+                                  ),
+                                  onChanged: (v) => setStateDialog(
+                                    () => intervalMinutes = v ?? 60,
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 15,
+                                      child: Text('15 分钟'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 30,
+                                      child: Text('30 分钟'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 60,
+                                      child: Text('1 小时'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 120,
+                                      child: Text('2 小时'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 240,
+                                      child: Text('4 小时'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 480,
+                                      child: Text('8 小时'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 720,
+                                      child: Text('12 小时'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 1440,
+                                      child: Text('24 小时'),
+                                    ),
+                                  ],
+                                ),
+                              if (freqType == 'weekly')
+                                DropdownButtonFormField<int>(
+                                  key: const ValueKey('weekday'),
+                                  value: selectedWeekday ?? 1,
+                                  decoration: const InputDecoration(
+                                    labelText: '星期',
+                                  ),
+                                  onChanged: (v) => setStateDialog(
+                                    () => selectedWeekday = v ?? 1,
+                                  ),
+                                  items: [
+                                    for (var i = 1; i <= 7; i++)
+                                      DropdownMenuItem(
+                                        value: i,
+                                        child: Text('周${weekdayText(i)}'),
+                                      ),
+                                  ],
+                                ),
+                              if (freqType == 'monthly')
+                                DropdownButtonFormField<int>(
+                                  key: const ValueKey('monthday'),
+                                  value: (selectedMonthDay ?? 1).clamp(1, 28),
+                                  decoration: const InputDecoration(
+                                    labelText: '日期',
+                                  ),
+                                  onChanged: (v) => setStateDialog(
+                                    () => selectedMonthDay = (v ?? 1).clamp(
+                                      1,
+                                      28,
+                                    ),
+                                  ),
+                                  items: [
+                                    for (var i = 1; i <= 28; i++)
+                                      DropdownMenuItem(
+                                        value: i,
+                                        child: Text('$i 日'),
+                                      ),
+                                  ],
+                                ),
+                              if (freqType != 'interval') ...[
+                                const SizedBox(height: 8),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(
+                                    Icons.schedule_outlined,
+                                    color: Color(0xff64816c),
+                                  ),
+                                  title: const Text('提醒时间'),
+                                  trailing: Text(
+                                    '${two(time.hour)}:${two(time.minute)}  ›',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xff42634f),
+                                    ),
+                                  ),
+                                  onTap: () async {
+                                    final chosen = await showTimePicker(
+                                      context: ctx,
+                                      initialTime: time,
+                                    );
+                                    if (chosen != null)
+                                      setStateDialog(() => time = chosen);
+                                  },
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              Text(
+                                '下次预计：$nextStr',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xff758579),
+                                ),
+                              ),
+                            ]),
+                            section('通知头像', '可选，用于通知图标。', [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      avatarPath.isEmpty
+                                          ? '尚未选择图片'
+                                          : p.basename(avatarPath),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Color(0xff758579),
+                                      ),
+                                    ),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final x = await ImagePicker().pickImage(
+                                        source: ImageSource.gallery,
+                                      );
+                                      if (x != null) {
+                                        final path = await _saveAvatarTemp(
+                                          File(x.path),
+                                        );
+                                        setStateDialog(
+                                          () => avatarPath = path ?? '',
+                                        );
+                                      }
+                                    },
+                                    icon: const Icon(Icons.photo_outlined),
+                                    label: const Text('选择图片'),
+                                  ),
+                                ],
+                              ),
+                            ]),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                bottomNavigationBar: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (isEdit)
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xffa45950),
+                            ),
+                            onPressed: isSaving
+                                ? null
+                                : () async {
+                                    final confirmed = await showDialog<bool>(
+                                      context: ctx,
+                                      builder: (dialogContext) => AlertDialog(
+                                        title: const Text('删除这个任务？'),
+                                        content: const Text('删除后将取消该任务的提醒。'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(
+                                              dialogContext,
+                                              false,
+                                            ),
+                                            child: const Text('取消'),
+                                          ),
+                                          FilledButton(
+                                            onPressed: () => Navigator.pop(
+                                              dialogContext,
+                                              true,
+                                            ),
+                                            child: const Text('删除'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirmed != true) return;
+                                    final uid = task!['task_uid'] as String;
+                                    // Cancel AM/WM using the latest persisted next_time from DB rather than computing a value.
+                                    try {
+                                      final nextMillis =
+                                          await _readNextMillisFromDbOrNull(
+                                            uid,
+                                          );
+                                      if (await NativeGuard.isNativeWM()) {
+                                        await NativeWm.cancelWmByUidBoth(uid);
+                                      }
+                                      if (await NativeGuard.isNativeAM()) {
+                                        if (nextMillis != null) {
+                                          await NativeAm.cancelExactByNext(
+                                            uid,
+                                            nextMillis,
+                                          );
+                                        } else {
+                                          final _t = await _taskDao.getByUid(
+                                            uid,
+                                          );
+                                          final rk =
+                                              (_t?['scheduled_run_key'] ?? '')
+                                                  as String?;
+                                          await NativeAm.cancelExactById(
+                                            uid,
+                                            rk,
+                                          );
+                                        }
+                                      }
+                                    } catch (_) {}
+                                    await SchedulerService.cancelNextForTask(
+                                      uid,
+                                    );
+                                    await _taskDao.delete(uid);
+                                    showToast('已删除任务');
+                                    await _reloadTasksAfterSave();
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                  },
+                            child: const Text('删除'),
+                          ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xff42634f),
+                          ),
+                          onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                          child: const Text('取消'),
+                        ),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xff293e35),
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  if (formKey.currentState?.validate() !=
+                                      true) {
+                                    showToast('请检查任务名称和名言内容');
+                                    return;
+                                  }
+                                  setStateDialog(() => isSaving = true);
+                                  try {
+                                    if (status == 'on') {
+                                      final notificationGranted =
+                                          !Platform.isAndroid ||
+                                          await NativeScheduler.requestNotificationPermissionSystem();
+                                      if (!notificationGranted) {
+                                        showToast('请先允许通知权限，否则后台任务无法送达');
+                                        return;
+                                      }
+                                      if (type != 'auto') {
+                                        final exactGranted =
+                                            await ExactAlarmPermissionCoordinator.ensureGranted(
+                                              ctx,
+                                              featureName: '定时任务通知',
+                                              explanation:
+                                                  '启用中的任务会在下一次计划时间准确触发。',
+                                            );
+                                        if (!exactGranted) return;
+                                      }
+                                    }
 
-                  String? uidToSchedule;
+                                    if (!isEdit &&
+                                        type == 'manual' &&
+                                        await QuoteDao().existsSimilar(
+                                          manualQuote.trim(),
+                                        )) {
+                                      showToast('数据重复!请重新输入名人名言');
+                                      return;
+                                    }
 
-                  final resolvedQuoteTheme = quoteAiThemeChoice == '自定义主题'
-                      ? customQuoteTheme.trim()
-                      : (quoteAiThemeChoice == '不限主题' ? '' : quoteAiThemeChoice);
-                  final quoteAiConfig = QuoteAiTaskConfig(
-                    autoEnabled: quoteAiAutoEnabled,
-                    saveLocally: quoteAiSaveLocally,
-                    downloadAvatar: quoteAiDownloadAvatar,
-                    selectedFigures: QuoteAiTaskConfig.normalizeFigures(selectedQuoteFigures),
-                    customFigures: QuoteAiTaskConfig.parseFigureInput(customQuoteFigures),
-                    theme: resolvedQuoteTheme,
-                    userDescription: quoteAiDescription.trim(),
-                    intervalMinutes: intervalMinutes,
-                  );
-                  final freqCustomJson = type == 'auto' ? quoteAiConfig.encode() : '';
+                                    String? uidToSchedule;
 
-                  if (isEdit) {
-                    final patch = <String, dynamic>{
-                      'name': name.trim(),
-                      'type': type,
-                      'prompt': type=='auto' ? quoteAiDescription.trim() : '',
-                      'avatar_path': avatarPath,
-                      'status': status,
-                      'freq_type': freqType,
-                      'freq_weekday': selectedWeekday,
-                      'freq_day_of_month': selectedMonthDay,
-                      'start_time': _fmt(computeNext(DateTime.now())),
-                      'freq_custom': freqCustomJson,
-                    };
-                    if (type == 'auto' &&
-                        initialQuoteAiConfig.figures.join('\u0000') != quoteAiConfig.figures.join('\u0000')) {
-                      // A changed roster starts again from the first selected
-                      // person so the visible order is deterministic.
-                      patch['cursor'] = 0;
-                    }
-                    // Handle carousel order updates: persist and reset cursor when changed
-                    if (type == 'carousel') {
-                      patch['carousel_order'] = carouselOrder;
-                      final oldOrder = (task?['carousel_order'] ?? 'desc').toString();
-                      if (oldOrder != carouselOrder) {
-                        // When order changes, reset cursor to 0
-                        patch['cursor'] = 0;
-                      }
-                    }
-                    await _taskDao.update(task!['task_uid'] as String, patch);
-                    // Cancel existing alarms using the latest persisted next_time from DB rather than computing a value
-                    try {
-                      final uid = task['task_uid'] as String;
-                      final nextMillis = await _readNextMillisFromDbOrNull(uid);
-                      if (await NativeGuard.isNativeWM()) {
-                        await NativeWm.cancelWmByUidBoth(uid);
-                      }
-                      if (await NativeGuard.isNativeAM()) {
-                        if (nextMillis != null) {
-                          await NativeAm.cancelExactByNext(uid, nextMillis);
-                        } else {
-                          final _t2 = await _taskDao.getByUid(uid);
-                          final rk = (_t2?['scheduled_run_key'] ?? '') as String?;
-                          await NativeAm.cancelExactById(uid, rk);
-                        }
-                      }
-                    } catch (_) {}
-                    await SchedulerService.cancelNextForTask(task['task_uid'] as String);
-                    uidToSchedule = task['task_uid'] as String;
-                    await _reloadTasksAfterSave();
+                                    final resolvedQuoteTheme =
+                                        quoteAiThemeChoice == '自定义主题'
+                                        ? customQuoteTheme.trim()
+                                        : (quoteAiThemeChoice == '不限主题'
+                                              ? ''
+                                              : quoteAiThemeChoice);
+                                    final quoteAiConfig = QuoteAiTaskConfig(
+                                      autoEnabled: quoteAiAutoEnabled,
+                                      saveLocally: quoteAiSaveLocally,
+                                      downloadAvatar: quoteAiDownloadAvatar,
+                                      selectedFigures:
+                                          QuoteAiTaskConfig.normalizeFigures(
+                                            selectedQuoteFigures,
+                                          ),
+                                      customFigures:
+                                          QuoteAiTaskConfig.parseFigureInput(
+                                            customQuoteFigures,
+                                          ),
+                                      theme: resolvedQuoteTheme,
+                                      userDescription: quoteAiDescription
+                                          .trim(),
+                                      intervalMinutes: intervalMinutes,
+                                    );
+                                    final freqCustomJson = type == 'auto'
+                                        ? quoteAiConfig.encode()
+                                        : externalTask
+                                        ? (task?['freq_custom'] ?? '')
+                                              .toString()
+                                        : '';
 
-                                          
-                    if (type == 'manual') {
-                      final content = manualQuote.trim();
-                      if (content.isNotEmpty) {
-                        final ok = await QuoteDao().updateLatestForTaskDetailed(
-                          taskUid: task['task_uid'] as String,
-                          content: content,
-                          theme: theme,
-                          authorName: authorName,
-                          sourceFrom: sourceFrom,
-                          explanation: explanation,
-                          avatarPath: avatarPath,
-                        );
-                        if (!ok) {
-                          // 按你的要求：编辑手动任务时不新增，只更新
-                          showToast('未找到该任务的现有名言（未新增）');
-                        }
-                      }
-                    }
-                  } else {
-                    final newUid = await _taskDao.create(
-                      name: name.trim(),
-                      type: type,
-                      startTime: _fmt(computeNext(DateTime.now())),
-                      prompt: type=='auto' ? quoteAiDescription.trim() : '',
-                      avatarPath: avatarPath,
-                      status: status,
-                      freqType: freqType,
-                      freqWeekday: selectedWeekday,
-                      freqDayOfMonth: selectedMonthDay,
-                      freqCustom: freqCustomJson,
-                      carouselOrder: carouselOrder,
-                    );
-                    uidToSchedule = newUid;
-                    await _reloadTasksAfterSave();
+                                    if (isEdit) {
+                                      final patch = <String, dynamic>{
+                                        'name': name.trim(),
+                                        'type': type,
+                                        'prompt': type == 'auto'
+                                            ? quoteAiDescription.trim()
+                                            : externalTask
+                                            ? prompt
+                                            : '',
+                                        'avatar_path': avatarPath,
+                                        'status': status,
+                                        'freq_type': freqType,
+                                        'freq_weekday': selectedWeekday,
+                                        'freq_day_of_month': selectedMonthDay,
+                                        'start_time': _fmt(
+                                          computeNext(DateTime.now()),
+                                        ),
+                                        'freq_custom': freqCustomJson,
+                                      };
+                                      if (type == 'auto' &&
+                                          initialQuoteAiConfig.figures.join(
+                                                '\u0000',
+                                              ) !=
+                                              quoteAiConfig.figures.join(
+                                                '\u0000',
+                                              )) {
+                                        // A changed roster starts again from the first selected
+                                        // person so the visible order is deterministic.
+                                        patch['cursor'] = 0;
+                                      }
+                                      // Handle carousel order updates: persist and reset cursor when changed
+                                      if (type == 'carousel') {
+                                        patch['carousel_order'] = carouselOrder;
+                                        final oldOrder =
+                                            (task?['carousel_order'] ?? 'desc')
+                                                .toString();
+                                        if (oldOrder != carouselOrder) {
+                                          // When order changes, reset cursor to 0
+                                          patch['cursor'] = 0;
+                                        }
+                                      }
+                                      await _taskDao.update(
+                                        task!['task_uid'] as String,
+                                        patch,
+                                      );
+                                      // Cancel existing alarms using the latest persisted next_time from DB rather than computing a value
+                                      try {
+                                        final uid = task['task_uid'] as String;
+                                        final nextMillis =
+                                            await _readNextMillisFromDbOrNull(
+                                              uid,
+                                            );
+                                        if (await NativeGuard.isNativeWM()) {
+                                          await NativeWm.cancelWmByUidBoth(uid);
+                                        }
+                                        if (await NativeGuard.isNativeAM()) {
+                                          if (nextMillis != null) {
+                                            await NativeAm.cancelExactByNext(
+                                              uid,
+                                              nextMillis,
+                                            );
+                                          } else {
+                                            final _t2 = await _taskDao.getByUid(
+                                              uid,
+                                            );
+                                            final rk =
+                                                (_t2?['scheduled_run_key'] ??
+                                                        '')
+                                                    as String?;
+                                            await NativeAm.cancelExactById(
+                                              uid,
+                                              rk,
+                                            );
+                                          }
+                                        }
+                                      } catch (_) {}
+                                      await SchedulerService.cancelNextForTask(
+                                        task['task_uid'] as String,
+                                      );
+                                      uidToSchedule =
+                                          task['task_uid'] as String;
+                                      await _reloadTasksAfterSave();
 
-                    if (type == 'manual') {
-                      final content = manualQuote.trim();
-                      if (content.isNotEmpty) {
-                        final dup = await QuoteDao().existsSimilar(content);
-                        if (dup) {
-                          showToast('数据重复!请重新输入名人名言');
-                          return;
-                        }
-                        final now = DateTime.now(); String two(int n)=> n<10? '0$n':'$n'; final nowStr='${now.year}-${two(now.month)}-${two(now.day)} ${now.hour}:${two(now.minute)}:${two(now.second)}';
-                        await QuoteDao().insertIfUniqueDetailed(taskUid: newUid, content: content, theme: theme, authorName: authorName, sourceFrom: sourceFrom, explanation: explanation, avatarPath: avatarPath, taskName: name, taskType: type, insertedAt: nowStr);
-                      }
-                    }
-                  }
+                                      if (type == 'manual') {
+                                        final content = manualQuote.trim();
+                                        if (content.isNotEmpty) {
+                                          final ok = await QuoteDao()
+                                              .updateLatestForTaskDetailed(
+                                                taskUid:
+                                                    task['task_uid'] as String,
+                                                content: content,
+                                                theme: theme,
+                                                authorName: authorName,
+                                                sourceFrom: sourceFrom,
+                                                explanation: explanation,
+                                                avatarPath: avatarPath,
+                                              );
+                                          if (!ok) {
+                                            // 按你的要求：编辑手动任务时不新增，只更新
+                                            showToast('未找到该任务的现有名言（未新增）');
+                                          }
+                                        }
+                                      }
+                                    } else {
+                                      final newUid = await _taskDao.create(
+                                        name: name.trim(),
+                                        type: type,
+                                        startTime: _fmt(
+                                          computeNext(DateTime.now()),
+                                        ),
+                                        prompt: type == 'auto'
+                                            ? quoteAiDescription.trim()
+                                            : '',
+                                        avatarPath: avatarPath,
+                                        status: status,
+                                        freqType: freqType,
+                                        freqWeekday: selectedWeekday,
+                                        freqDayOfMonth: selectedMonthDay,
+                                        freqCustom: freqCustomJson,
+                                        carouselOrder: carouselOrder,
+                                      );
+                                      uidToSchedule = newUid;
+                                      await _reloadTasksAfterSave();
 
-                                    await _load();
-                  if (uidToSchedule != null) {
-                    await SchedulerService.scheduleNextForTask(uidToSchedule!);
-                  }
-                  await _refreshTaskRuntimeState();
-                  showToast('已保存');
-                  if (context.mounted) Navigator.pop(context);
-                  if (status == 'on' && context.mounted) {
-                    unawaited(BgGuardHelper.maybeShowGuide(
-                      context,
-                      feature: type == 'auto' ? 'AI 自动获取名人名言' : '定时任务通知',
-                    ));
-                  }
-                }
-                  ,
-                child: const Text('保存'),
+                                      if (type == 'manual') {
+                                        final content = manualQuote.trim();
+                                        if (content.isNotEmpty) {
+                                          final now = DateTime.now();
+                                          String two(int n) =>
+                                              n < 10 ? '0$n' : '$n';
+                                          final nowStr =
+                                              '${now.year}-${two(now.month)}-${two(now.day)} ${now.hour}:${two(now.minute)}:${two(now.second)}';
+                                          await QuoteDao()
+                                              .insertIfUniqueDetailed(
+                                                taskUid: newUid,
+                                                content: content,
+                                                theme: theme,
+                                                authorName: authorName,
+                                                sourceFrom: sourceFrom,
+                                                explanation: explanation,
+                                                avatarPath: avatarPath,
+                                                taskName: name,
+                                                taskType: type,
+                                                insertedAt: nowStr,
+                                              );
+                                        }
+                                      }
+                                    }
+
+                                    if (uidToSchedule != null) {
+                                      await SchedulerService.scheduleNextForTask(
+                                        uidToSchedule!,
+                                      );
+                                    }
+                                    await _refreshTaskRuntimeState();
+                                    showToast('已保存');
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    if (status == 'on' && context.mounted) {
+                                      unawaited(
+                                        BgGuardHelper.maybeShowGuide(
+                                          context,
+                                          feature: type == 'auto'
+                                              ? 'AI 自动获取名人名言'
+                                              : '定时任务通知',
+                                        ),
+                                      );
+                                    }
+                                  } catch (_) {
+                                    showToast('保存未完成，请检查任务和提醒设置');
+                                  } finally {
+                                    if (ctx.mounted)
+                                      setStateDialog(() => isSaving = false);
+                                  }
+                                },
+                          child: Text(isSaving ? '正在保存…' : '保存'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ],
-          );
-        },
-      );
-    });
-    ticker?.cancel();
+            );
+          },
+        );
+      },
+    );
   }
 
-  
   TimeOfDay? _parseTimeOfDay(String startTime){
     // supports 'HH:mm' or 'yyyy-MM-dd HH:mm'
     startTime = (startTime ?? '').trim();
@@ -3818,22 +4214,25 @@ const Text('头像（用于通知图标）'),
             ),
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Material(
-              color: Colors.white,
-              elevation: 6,
-              shape: const CircleBorder(),
-              child: IconButton(onPressed: ()=> _openTaskDialog(), icon: const Icon(Icons.add, color: Colors.black87)),
-            ),
-          ),
-        ],
       ),
       body: Padding(
         // Remove top and bottom padding; keep horizontal padding only
         padding: const EdgeInsets.only(left: 12.0, right: 12.0),
         child: ListView(children: [
+          ListTile(
+            leading: const Icon(Icons.receipt_long_outlined),
+            title: const Text('运行日志'),
+            subtitle: const Text('查看、筛选和复制任务及 AI 日志'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (context) => Scaffold(
+                appBar: AppBar(title: const Text('运行日志')),
+                body: MediaQuery.removePadding(
+                  context: context, removeTop: true, child: const LogsPage(),
+                ),
+              ),
+            )),
+          ),
           ListTile(title: const Text('日记设置'), trailing: const Icon(Icons.chevron_right), onTap: (){ Navigator.push(context, MaterialPageRoute(builder: (_)=>const DiarySettingsPage())); },),
           _quoteCalligraphySettingsCard(),
           ListTile(
@@ -4189,27 +4588,6 @@ const Text('头像（用于通知图标）'),
             const BaiduAndroidAkConfigWidget(),
             const SizedBox(height: 16),
 
-            const Text('任务列表', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            const Text(
-              '“最近成功执行”来自实际通知完成时间；“下次计划执行”来自系统已登记的下一次任务。倒计时每秒更新，执行后列表会自动读取新时间。',
-              style: TextStyle(color: Colors.black54, fontSize: 12, height: 1.4),
-            ),
-            const SizedBox(height: 8),
-            for (final t in _tasks)
-              ListTile(
-                title: InkWell(
-                  onTap: () => _openTaskDialog(task: t),
-                  child: Text((t['name'] ?? '') as String, style: const TextStyle(decoration: TextDecoration.underline)),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 5),
-                  child: TaskScheduleStatusView(
-                    key: ValueKey('task-schedule-${t['task_uid']}'),
-                    task: t,
-                  ),
-                ),
-              ),
           ],
         ),
       ),

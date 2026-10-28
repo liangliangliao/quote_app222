@@ -3,19 +3,26 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 import '../data/dao.dart';
 import '../widgets/quote_history_avatar.dart';
+import '../utils/quote_change_bus.dart';
+import '../utils/simple_bus.dart';
 
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key});
+  const HistoryPage({super.key, this.loadQuotes});
+  final Future<List<Map<String, dynamic>>> Function({
+    required int limit, required int offset, String? q,
+  })? loadQuotes;
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
-class _HistoryPageState extends State<HistoryPage> {
+class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
         
   Future<String?> _saveAvatarTemp(File file) async {
     final docs = await getApplicationDocumentsDirectory();
@@ -26,11 +33,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _reload() async {
-    _items.clear();
-    _offset = 0;
-    _done = false;
-    await _loadMore();
-    if (mounted) setState((){});
+    await _refresh();
   }
 
   final _dao = QuoteDao();
@@ -40,11 +43,36 @@ class _HistoryPageState extends State<HistoryPage> {
   int _offset = 0;
   bool _loading = false;
   bool _done = false;
+  bool _refreshing = false;
+  bool _refreshAgain = false;
+  int _generation = 0;
+  Timer? _searchTimer;
+  Timer? _changeTimer;
+  Timer? _pollTimer;
+
+  Future<List<Map<String, dynamic>>> _query(int limit, int offset, String query) {
+    final loader = widget.loadQuotes;
+    return loader != null
+        ? loader(limit: limit, offset: offset, q: query.isEmpty ? null : query)
+        : _dao.latest(limit: limit, offset: offset, q: query.isEmpty ? null : query);
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadMore();
+    WidgetsBinding.instance.addObserver(this);
+    QuoteChangeBus.changes.addListener(_onQuoteChange);
+    SimpleBus.navIndex.addListener(_onNavigation);
+    _refresh();
+    // Native writers cannot signal a Dart isolate. Check only while this tab is
+    // visible, and rebuild only when the loaded rows actually changed.
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (SimpleBus.navIndex.value == 1 &&
+          (WidgetsBinding.instance.lifecycleState == null ||
+              WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed)) {
+        _checkForNewQuotes();
+      }
+    });
     _scroll.addListener(() {
       if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 100 && !_loading && !_done) {
         _loadMore();
@@ -54,18 +82,94 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    QuoteChangeBus.changes.removeListener(_onQuoteChange);
+    SimpleBus.navIndex.removeListener(_onNavigation);
+    _searchTimer?.cancel();
+    _changeTimer?.cancel();
+    _pollTimer?.cancel();
     _scroll.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && SimpleBus.navIndex.value == 1) {
+      _refresh();
+    }
+  }
+
+  void _onNavigation() {
+    if (SimpleBus.navIndex.value == 1) _refresh();
+  }
+
+  void _onQuoteChange() {
+    _changeTimer?.cancel();
+    _changeTimer = Timer(const Duration(milliseconds: 120), _refresh);
+  }
+
+  Future<void> _checkForNewQuotes() async {
+    if (_refreshing) return;
+    final query = _q;
+    try {
+      final head = await _query(1, 0, query);
+      if (!mounted || query != _q) return;
+      final latestId = head.isEmpty
+          ? null
+          : head.first['quote_uid'] ?? head.first['id'];
+      final visibleId = _items.isEmpty
+          ? null
+          : _items.first['quote_uid'] ?? _items.first['id'];
+      if (latestId != visibleId) await _refresh();
+    } catch (_) {
+      // The next visible-tab check can retry if a native write is in progress.
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_refreshing) {
+      _refreshAgain = true;
+      return;
+    }
+    _refreshing = true;
+    final generation = ++_generation;
+    final query = _q;
+    final limit = _items.length > 100 ? _items.length : 100;
+    try {
+      final rows = await _query(limit, 0, query);
+      if (!mounted || generation != _generation || query != _q) return;
+      final changed = rows.length != _items.length ||
+          List.generate(rows.length, (i) => i).any((i) => !mapEquals(rows[i], _items[i]));
+      _offset = rows.length;
+      _done = rows.length < limit;
+      if (changed) setState(() => _items = rows);
+    } catch (_) {
+      // Keep the visible snapshot if the database is temporarily busy.
+    } finally {
+      _refreshing = false;
+      if (_refreshAgain && mounted) {
+        _refreshAgain = false;
+        unawaited(_refresh());
+      }
+    }
+  }
+
   Future<void> _loadMore() async {
+    if (_loading || _refreshing || _done) return;
     _loading = true;
-    final rows = await _dao.latest(limit: 100, offset: _offset, q: _q.isEmpty ? null : _q);
-    _offset += rows.length;
-    _items.addAll(rows);
-    _loading = false;
-    if (mounted) setState((){});
-    if (rows.length < 100) _done = true;
+    final generation = _generation;
+    final query = _q;
+    try {
+      final rows = await _query(100, _offset, query);
+      if (!mounted || generation != _generation || query != _q) return;
+      _offset += rows.length;
+      _done = rows.length < 100;
+      if (rows.isNotEmpty) setState(() => _items.addAll(rows));
+    } catch (_) {
+      // A later scroll or refresh can retry without clearing the list.
+    } finally {
+      _loading = false;
+    }
   }
 
   ImageProvider? _avatarProvider(String raw) {
@@ -186,10 +290,8 @@ class _HistoryPageState extends State<HistoryPage> {
                     ),
                     onChanged: (v) {
                       _q = v;
-                      _items.clear();
-                      _offset = 0;
-                      _done = false;
-                      _loadMore();
+                      _searchTimer?.cancel();
+                      _searchTimer = Timer(const Duration(milliseconds: 220), _refresh);
                     },
                   ),
                 ),
@@ -209,8 +311,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           await _dao.shuffleQuotesPhysically();
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已完成洗牌')));
-                          _items.clear(); _offset = 0; _done = false;
-                          await _loadMore();
+                          await _reload();
                         } catch (e) {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('洗牌失败: ' + e.toString())));
@@ -233,8 +334,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           await _dao.restoreQuotesToOriginalOrder();
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已恢复最初顺序')));
-                          _items.clear(); _offset = 0; _done = false;
-                          await _loadMore();
+                          await _reload();
                         } catch (e) {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('恢复失败: ' + e.toString())));
@@ -399,6 +499,12 @@ class _HistoryPageState extends State<HistoryPage> {
               controller: _scroll,
               padding: EdgeInsets.zero,
               itemCount: _items.length,
+              findChildIndexCallback: (key) {
+                if (key is! ValueKey<String>) return null;
+                final index = _items.indexWhere((item) =>
+                    'quote-${item['quote_uid'] ?? item['id']}' == key.value);
+                return index < 0 ? null : index;
+              },
               itemBuilder: (_, i) {
                 final e = _items[i];
                 final content = (e['content'] ?? '').toString();
@@ -414,9 +520,10 @@ class _HistoryPageState extends State<HistoryPage> {
                   if (taskName.isNotEmpty) taskName,
                 ].join(' · ');
                 return ListTile(
+                  key: ValueKey<String>('quote-${e['quote_uid'] ?? e['id']}'),
                   minVerticalPadding: 8,
                   leading: QuoteHistoryAvatar(
-                    key: ValueKey('quote-history-list-avatar-$i'),
+                    key: ValueKey('quote-history-list-avatar-${e['quote_uid'] ?? e['id']}'),
                     image: avatar,
                     diameter: 56,
                   ),

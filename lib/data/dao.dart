@@ -8,6 +8,7 @@ import 'db.dart';
 import 'thought_taxonomy_seed.dart';
 import '../utils/text_utils.dart';
 import '../utils/debug_logger.dart';
+import '../utils/quote_change_bus.dart';
 
 String _uid(String prefix){
   final r = Random();
@@ -1130,6 +1131,7 @@ Future<List<Map<String,dynamic>>> all({int limit=100, int offset=0, String q=''}
       'notified': 0,
       'created_at': DateTime.now().millisecondsSinceEpoch,
     });
+    QuoteChangeBus.notifyWrite();
     await LogDao().add(taskUid: taskUid, detail: '成功! 已插入名言');
     return uid;
   }
@@ -1145,6 +1147,7 @@ Future<List<Map<String,dynamic>>> all({int limit=100, int offset=0, String q=''}
       where: 'quote_uid=?',
       whereArgs: <Object?>[uid],
     );
+    QuoteChangeBus.notifyWrite();
   }
 
   // Deduplication: return true if content is unique against all existing quotes
@@ -1244,6 +1247,7 @@ Future<bool> updateLatestForTask(String taskUid, String content) async {
     if (rows.isNotEmpty) {
       final id = rows.first['id'] as int;
       await db.update('quotes', {'content': content}, where: 'id=?', whereArgs: [id]);
+      QuoteChangeBus.notifyWrite();
       return true;
     } else {
       await insertQuote(taskUid: taskUid, content: content);
@@ -1280,6 +1284,7 @@ Future<bool> updateLatestForTask(String taskUid, String content) async {
       if (avatarPath != null) patch['avatar'] = avatarPath;
       patch['inserted_at'] = nowStr;
       await db.update('quotes', patch, where: 'id=?', whereArgs: [id]);
+      QuoteChangeBus.notifyWrite();
       return true;
     } else {
       // Insert new quote with provided fields and the generated timestamp
@@ -2112,6 +2117,7 @@ extension QuoteDaoBulk on QuoteDao {
           }, conflictAlgorithm: ConflictAlgorithm.ignore);
         }
       });
+      QuoteChangeBus.notifyWrite();
       return BulkImportResult(true, []);
     } catch (e) {
       // Transaction will rollback automatically

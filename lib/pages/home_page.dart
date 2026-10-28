@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:characters/characters.dart';
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
@@ -355,6 +356,8 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
 
   Map<String, dynamic>? _latestRow;
   bool _firstLoaded = false;
+  bool _homeLoading = false;
+  bool _homeReloadQueued = false;
   bool _fav = false;
 
   bool _liked = false;
@@ -619,44 +622,91 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
 }
 
   Future<void> _load() async {
+    if (_homeLoading) {
+      _homeReloadQueued = true;
+      return;
+    }
+    _homeLoading = true;
+    try {
+      await _loadSnapshot();
+    } finally {
+      _homeLoading = false;
+      if (_homeReloadQueued && mounted) {
+        _homeReloadQueued = false;
+        unawaited(_load());
+      }
+    }
+  }
+
+  Future<void> _loadSnapshot() async {
     if (!_firstLoaded && mounted) setState(() => _firstLoaded = true);
     // 先加载随包发布的几十条默认名言，再异步请求 SQLite。
     // 旧逻辑先等 latestNotifiedToday()，首次启动/数据库受阻时整张画一直空白。
-    try {
-      final fallback = await _loadNextFallbackQuote();
-      if (!mounted) return;
-      if (_latestRow == null && (fallback['quote'] ?? '').toString().trim().isNotEmpty) {
-        setState(() => _todayData = fallback);
-        unawaited(_activateFrame(fallback));
-      }
-    } catch (e) {
-      await DLog.e('HOME', '兜底名言加载失败: $e');
-      if (mounted && _todayData == null) {
-        setState(() => _todayData = <String, dynamic>{
-          'topic': '每日名言',
-          'quote': '千里之行，始于足下。',
-          'author': '——《道德经》',
-          'note': '从眼前的一小步开始。',
-        });
+    if (_todayData == null) {
+      try {
+        final fallback = await _loadNextFallbackQuote();
+        if (!mounted) return;
+        if (_todayData == null &&
+            (fallback['quote'] ?? '').toString().trim().isNotEmpty) {
+          setState(() => _todayData = fallback);
+          unawaited(_activateFrame(fallback));
+        }
+      } catch (e) {
+        await DLog.e('HOME', '兜底名言加载失败: $e');
+        if (mounted && _todayData == null) {
+          setState(
+            () => _todayData = <String, dynamic>{
+              'topic': '每日名言',
+              'quote': '千里之行，始于足下。',
+              'author': '——《道德经》',
+              'note': '从眼前的一小步开始。',
+            },
+          );
+        }
       }
     }
+    final previousRow = _latestRow;
     try {
       final dao = QuoteDao();
       final latest = await dao.latestNotifiedToday();
       if (!mounted) return;
-      _latestRow = latest;
-      if (latest == null || (latest['content'] ?? latest['quote'] ?? '').toString().trim().isEmpty) {
+      if (latest == null ||
+          (latest['content'] ?? latest['quote'] ?? '')
+              .toString()
+              .trim()
+              .isEmpty) {
+        _latestRow = null;
+        if (previousRow != null) {
+          final fallback = await _loadNextFallbackQuote();
+          if (mounted &&
+              (fallback['quote'] ?? '').toString().trim().isNotEmpty) {
+            setState(() => _todayData = fallback);
+            unawaited(_activateFrame(fallback));
+          }
+        }
         // 没有今日有效记录时，保留刚刚即时显示的默认名言，不让首页回到空白。
         await DLog.i('HOME', '今日未检索到有效记录：显示默认名言');
         await _checkPinnedState();
         _requestNotifAfterFirstFrame();
+      } else if (mapEquals(previousRow, latest) && _todayData != null) {
+        // Keep the current poster (including a user-selected pinned quote)
+        // when a tab switch or duplicate event carries no new database row.
+        await _checkPinnedState();
+        _requestNotifAfterFirstFrame();
       } else {
+        _latestRow = latest;
         // 根据署名和出处组装 author 字段。若存在署名或出处则前缀“——”，否则为空
-        final String authorName = (latest['author_name'] ?? latest['author'] ?? '').toString().trim();
-        final String source = (latest['source_from'] ?? latest['source'] ?? '').toString().trim();
+        final String authorName =
+            (latest['author_name'] ?? latest['author'] ?? '').toString().trim();
+        final String source = (latest['source_from'] ?? latest['source'] ?? '')
+            .toString()
+            .trim();
         final storedAvatar = (latest['avatar'] ?? '').toString().trim();
-        final storedAvatarVerified =
-            _isIdentityVerifiedAvatar(latest, authorName, storedAvatar);
+        final storedAvatarVerified = _isIdentityVerifiedAvatar(
+          latest,
+          authorName,
+          storedAvatar,
+        );
         // Old auto-downloaded files were selected without identity checking.
         // Never render them while the new resolver validates the author again.
         var avatarUrl = storedAvatarVerified
@@ -673,8 +723,13 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
           // 如果署名不为空，使用“——署名 出处”，否则仅加前缀
           authorLine = '——';
           if (authorName.isNotEmpty) {
-            authorLine += authorName; if (source.isNotEmpty) { authorLine += '《' + source + '》'; }
-          } else { authorLine += (source.isNotEmpty ? ('《' + source + '》') : ''); }
+            authorLine += authorName;
+            if (source.isNotEmpty) {
+              authorLine += '《' + source + '》';
+            }
+          } else {
+            authorLine += (source.isNotEmpty ? ('《' + source + '》') : '');
+          }
         }
         final payload = <String, dynamic>{
           'topic': (latest['theme'] ?? latest['topic'] ?? '').toString(),
@@ -687,19 +742,23 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         };
         await DLog.i('HOME', '已检索到今日最新已通知记录：准备注入');
         await _logInject('db', payload);
-        if (mounted) setState(() { _todayData = payload; });
+        if (mounted)
+          setState(() {
+            _todayData = payload;
+          });
         if (mounted) unawaited(_activateFrame(payload));
-      // Update pinned state after injecting DB content
-      await _checkPinnedState();
-      _requestNotifAfterFirstFrame();
-      }
-    } catch (e) {
-      await DLog.e('HOME', '查询异常：注入兜底内容；err=$e');
-      // 异常也不擦掉已显示的随包兜底名言。
-        // Update pinned state after error fallback
+        // Update pinned state after injecting DB content
         await _checkPinnedState();
         _requestNotifAfterFirstFrame();
-        }
+      }
+    } catch (e) {
+      _latestRow = previousRow;
+      await DLog.e('HOME', '查询异常：注入兜底内容；err=$e');
+      // 异常也不擦掉已显示的随包兜底名言。
+      // Update pinned state after error fallback
+      await _checkPinnedState();
+      _requestNotifAfterFirstFrame();
+    }
   }
 
   Future<void> _copyLatest() async {
