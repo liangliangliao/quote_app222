@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
 import 'package:quote_app/widgets/quote_art_layout.dart';
@@ -139,13 +141,14 @@ void main() {
       }
       expect(signature.bottom, lessThanOrEqualTo(paper.bottom - 26));
       expect(signature.right, lessThanOrEqualTo(paper.right - 11.5));
+      expect(signature.right, greaterThan(paper.left + paper.width * .78));
       expect(find.byType(SingleChildScrollView), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
 
   testWidgets(
-    'short, long and English quotes retain the same restrained 25 point ink',
+    'short, long and English quotes retain the same restrained 23 point ink',
     (tester) async {
       for (final text in [
         '知行合一，止于至善。',
@@ -157,7 +160,7 @@ void main() {
         expect(bodyLines(), findsWidgets);
         for (final line in tester.widgetList<Text>(bodyLines())) {
           for (final span in spans(line.textSpan! as TextSpan)) {
-            expect(span.style!.fontSize, 25);
+            expect(span.style!.fontSize, 23);
             expect(span.style!.fontWeight, QuoteArtworkTypography.weight);
             expect(span.style!.color, QuoteArtworkTypography.ink);
           }
@@ -181,15 +184,16 @@ void main() {
         find.byKey(const ValueKey('quote-author')),
       );
       expect(signature.text, 'Sigmund Freud');
+      expect(signature.textAlign, TextAlign.right);
       expect(signature.style.color, QuoteArtworkTypography.ink);
-      expect(signature.style.fontWeight, QuoteArtworkTypography.weight);
+      expect(signature.style.fontWeight, QuoteArtworkTypography.signatureWeight);
       final nativeSpan = quoteAuthorSignatureSpan(
         signature.text,
         signature.style,
       );
       expect(
         nativeSpan.children!.whereType<TextSpan>().every(
-          (span) => span.style!.fontWeight == QuoteArtworkTypography.weight,
+          (span) => span.style!.fontWeight == QuoteArtworkTypography.signatureWeight,
         ),
         isTrue,
       );
@@ -342,7 +346,7 @@ void main() {
       for (final line in tester.widgetList<CalligraphyWritingText>(
         find.byType(CalligraphyWritingText),
       )) {
-        expect(line.style.fontSize, 25);
+        expect(line.style.fontSize, 23);
         expect(line.overflow, TextOverflow.visible);
       }
       expect(tester.takeException(), isNull);
@@ -397,6 +401,9 @@ void main() {
           File(
             '${dir.path}/${entry.key}.png',
           ).writeAsBytesSync(png!.buffer.asUint8List());
+          final review = img.encodeJpg(img.decodeImage(png.buffer.asUint8List())!, quality: 80);
+          // ignore: avoid_print
+          print('QUOTE_ART_REVIEW:${entry.key}:${base64Encode(review)}');
           image.dispose();
         });
       });

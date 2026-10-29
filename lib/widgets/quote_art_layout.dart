@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 /// A modest increase from the original brush typography, without heavy ink.
 /// Content length changes composition and excerpt length, never this type size.
 abstract final class QuoteArtworkTypography {
-  static const bodySize = 25.0;
+  static const bodySize = 23.0;
   static const signatureSize = 21.0;
   static const ink = Color(0xff211a16);
-  static const weight = FontWeight.w600;
+  static const weight = FontWeight.w500;
+  // The cursive signature face has finer strokes than the brush face.
+  static const signatureWeight = FontWeight.w600;
   static const signatureRuleWidth = 20.0;
   static const signatureRuleGap = 9.0;
 }
@@ -150,6 +152,15 @@ class QuoteArtLayout {
         while (stop > start + 1 && opening.hasMatch(characters[stop - 1])) {
           stop--;
         }
+        // Avoid a solitary character before a comma on the next line.
+        if (!english && stop - start >= 5) {
+          for (var ahead = 1; ahead <= 2 && stop + ahead < end; ahead++) {
+            if (pause.hasMatch(characters[stop + ahead])) {
+              stop -= math.min(3 - ahead, stop - start - 3);
+              break;
+            }
+          }
+        }
         // Keep a Chinese linking particle or negation with the following words.
         if (!english &&
             stop > start + 2 &&
@@ -174,54 +185,130 @@ class QuoteArtLayout {
     final belowPortrait =
         portrait != null &&
         portrait.bottom + 12 + fullWidthLines * leading <= bodyBottom;
-    var y = belowPortrait ? portrait.bottom + 12 : top;
-    var cursor = 0;
-    final lines = <QuoteArtLine>[];
-    while (cursor < characters.length) {
-      if (characters[cursor] == '\n') {
-        cursor++;
-        if (lines.isNotEmpty) y += leading * (verse ? .12 : .18);
-        continue;
-      }
-      if (characters[cursor].trim().isEmpty) {
-        cursor++;
-        continue;
-      }
-      if (y + leading > bodyBottom + .01) break;
-      final besidePortrait = portrait != null && y < portrait.bottom + 10;
-      final lineRight = besidePortrait ? portrait.left - 14 : right;
-      final available = math.max(1.0, lineRight - inset);
-      final end = breakAt(cursor, available);
-      final value = characters.sublist(cursor, end).join().trim();
-      lines.add(
-        QuoteArtLine(
-          value,
+    final readingTop = belowPortrait ? portrait.bottom + 12 : top;
+    final gap = compact ? 23.0 : (dense ? 16.0 : 20.0);
+    final safeBodyBottom = signatureBottom - band - 12;
+
+    ({List<QuoteArtLine> lines, int cursor}) placeLines(
+      double start, double bottom, {int? maximumLines}) {
+      var y = start;
+      var cursor = 0;
+      final placed = <QuoteArtLine>[];
+      while (cursor < characters.length) {
+        if (characters[cursor] == '\n') {
+          cursor++;
+          if (placed.isNotEmpty) y += leading * (verse ? .12 : .18);
+          continue;
+        }
+        if (characters[cursor].trim().isEmpty) { cursor++; continue; }
+        if (y + leading > bottom + .01 ||
+            (maximumLines != null && placed.length >= maximumLines)) break;
+        final besidePortrait = portrait != null && y < portrait.bottom + 10;
+        final lineRight = besidePortrait ? portrait.left - 14 : right;
+        final available = math.max(1.0, lineRight - inset);
+        final end = breakAt(cursor, available);
+        final value = characters.sublist(cursor, end).join().trim();
+        placed.add(QuoteArtLine(value,
           Rect.fromLTWH(inset, y, available, leading),
-          !besidePortrait && (compact || verse)
-              ? TextAlign.center
-              : TextAlign.start,
-        ),
-      );
-      cursor = end;
-      y += leading;
-      if (!dense && sentenceEnd.hasMatch(value)) y += leading * .10;
+          !besidePortrait && (compact || verse) ? TextAlign.center : TextAlign.start));
+        cursor = end;
+        y += leading;
+        if (!dense && sentenceEnd.hasMatch(value)) y += leading * .10;
+      }
+      return (lines: placed, cursor: cursor);
     }
+
+    final initial = placeLines(readingTop, bodyBottom);
+    var placed = initial;
+    var shift = 0.0;
+    // Centre the quote and its following signature together in the usable
+    // paper. A stable reference height prevents a name lookup moving the body.
+    const referenceSignatureHeight = QuoteArtworkTypography.signatureSize * 1.30;
+    for (var pass = 0; pass < 3 && placed.lines.isNotEmpty; pass++) {
+      final unshiftedEnd = placed.lines.last.rect.bottom - shift;
+      final ideal = (signatureBottom - unshiftedEnd - gap - referenceSignatureHeight) / 2;
+      final nextShift = ideal.clamp(0.0,
+        math.max(0.0, safeBodyBottom - unshiftedEnd)).toDouble();
+      if ((nextShift - shift).abs() < .25) break;
+      shift = nextShift;
+      // Re-measure around the portrait at the final vertical position so
+      // newly available full-width space is used.
+      placed = placeLines(readingTop + shift,
+        math.min(bodyBottom + shift, safeBodyBottom), maximumLines: initial.lines.length);
+    }
+    final cursor = placed.cursor;
+    final lines = placed.lines;
     final truncated = cursor < characters.length;
     if (truncated && lines.isNotEmpty) {
       final last = lines.removeLast();
       var tail = last.text.characters.toList();
       const ellipsis = '…';
+      var shortened = false;
       while (tail.isNotEmpty &&
           measure('${tail.join()}$ellipsis') > last.rect.width) {
         tail.removeLast();
+        shortened = true;
       }
       // End English excerpts at a word and avoid a dangling Chinese comma or
       // linking word, without discarding a large portion of the visible line.
       if (english &&
           cursor < characters.length &&
-          !RegExp(r'\s').hasMatch(characters[cursor])) {
+          (shortened || !RegExp(r'\s').hasMatch(characters[cursor]))) {
         final boundary = tail.lastIndexWhere((c) => c.trim().isEmpty);
-        if (boundary >= tail.length * .45) tail = tail.sublist(0, boundary);
+        if (boundary > 0) tail = tail.sublist(0, boundary);
+      }
+      if (!english) {
+        final ending = RegExp(r'(?:为了|因为|所以|因此|而且|并且|但是|如果|虽然|以及|对于|关于|通过|能够|可以|变得|成为) ||
+              RegExp(r'^[，。；：、,;:（(“‘《]$').hasMatch(tail.last) ||
+              (!english && hanging.hasMatch(tail.last)))) {
+        tail.removeLast();
+      }
+      lines.add(QuoteArtLine('${tail.join()}$ellipsis', last.rect, last.align));
+    }
+    final signatureWidth = math.min(signatureSize.width, content.width);
+    final signatureHeight = signatureSize.height;
+    final last = lines.isEmpty ? null : lines.last;
+    final lastWidth = last == null ? 0.0 : measure(last.text);
+    final tailFill = lastWidth / content.width;
+    // Default to the right of the text column, retaining the wood's margin.
+    final edgeBreathing = (content.width *
+        (compact || verse ? .065 : (tailFill < .55 ? .07 : .035)))
+        .clamp(6.0, 16.0).toDouble();
+    final desiredRight = content.right - edgeBreathing;
+    final signatureLeft = (desiredRight - signatureWidth)
+        .clamp(
+          content.left,
+          math.max(content.left, content.right - signatureWidth - 6),
+        )
+        .toDouble();
+    final afterBody = last?.rect.bottom ?? (portrait?.bottom ?? content.top);
+    final signatureTop = (afterBody + gap)
+        .clamp(top, math.max(top, signatureBottom - signatureHeight))
+        .toDouble();
+
+    return QuoteArtLayout(
+      lines: List.unmodifiable(lines),
+      portrait: portrait,
+      contentBounds: Rect.fromLTRB(content.left, content.top, content.right, safeBodyBottom),
+      signatureRect: Rect.fromLTWH(
+        signatureLeft,
+        signatureTop,
+        signatureWidth,
+        signatureHeight,
+      ),
+      footerRect: footer,
+      leading: leading,
+      letterSpacing: spacing,
+      isTruncated: truncated,
+    );
+  }
+}
+)
+            .firstMatch(tail.join());
+        if (ending != null) {
+          final count = ending.group(0)!.characters.length;
+          if (tail.length - count >= 3) tail = tail.sublist(0, tail.length - count);
+        }
       }
       while (tail.isNotEmpty &&
           (tail.last.trim().isEmpty ||
@@ -231,40 +318,22 @@ class QuoteArtLayout {
       }
       lines.add(QuoteArtLine('${tail.join()}$ellipsis', last.rect, last.align));
     }
-    if (lines.isNotEmpty) {
-      final room = math.max(0.0, bodyBottom - lines.last.rect.bottom);
-      final shift = room * (compact ? .44 : (dense ? .10 : .28));
-      for (var i = 0; i < lines.length; i++) {
-        lines[i] = lines[i].shifted(shift);
-      }
-    }
-
     final signatureWidth = math.min(signatureSize.width, content.width);
     final signatureHeight = signatureSize.height;
     final last = lines.isEmpty ? null : lines.last;
     final lastWidth = last == null ? 0.0 : measure(last.text);
-    final lastRight = last == null
-        ? content.center.dx
-        : last.rect.left +
-              (last.align == TextAlign.center
-                  ? (last.rect.width + lastWidth) / 2
-                  : lastWidth);
     final tailFill = lastWidth / content.width;
-    // Follow the last phrase's visual centre; short endings draw the signature
-    // inward. A full final line allows it a little farther right, with margins.
-    final desiredRight = compact || verse
-        ? content.center.dx + math.max(signatureWidth / 2, content.width * .24)
-        : math.max(
-            content.center.dx + signatureWidth * .32,
-            lastRight + (tailFill < .6 ? 12 : -8),
-          );
+    // Default to the right of the text column, retaining the wood's margin.
+    final edgeBreathing = (content.width *
+        (compact || verse ? .065 : (tailFill < .55 ? .07 : .035)))
+        .clamp(6.0, 16.0).toDouble();
+    final desiredRight = content.right - edgeBreathing;
     final signatureLeft = (desiredRight - signatureWidth)
         .clamp(
           content.left,
           math.max(content.left, content.right - signatureWidth - 6),
         )
         .toDouble();
-    final gap = compact ? 23.0 : (dense ? 16.0 : 20.0);
     final afterBody = last?.rect.bottom ?? (portrait?.bottom ?? content.top);
     final signatureTop = (afterBody + gap)
         .clamp(top, math.max(top, signatureBottom - signatureHeight))
@@ -273,7 +342,7 @@ class QuoteArtLayout {
     return QuoteArtLayout(
       lines: List.unmodifiable(lines),
       portrait: portrait,
-      contentBounds: content,
+      contentBounds: Rect.fromLTRB(content.left, content.top, content.right, safeBodyBottom),
       signatureRect: Rect.fromLTWH(
         signatureLeft,
         signatureTop,

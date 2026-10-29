@@ -228,7 +228,7 @@ class _PaperCompositionState extends State<_PaperComposition> {
       final image = _posterAvatar(widget.avatar.trim());
       const signatureStyle = TextStyle(
         fontSize: QuoteArtworkTypography.signatureSize,
-        fontWeight: QuoteArtworkTypography.weight,
+        fontWeight: QuoteArtworkTypography.signatureWeight,
         color: QuoteArtworkTypography.ink,
         height: 1.25,
       );
@@ -248,15 +248,11 @@ class _PaperCompositionState extends State<_PaperComposition> {
         textScaler: TextScaler.noScaling,
         maxLines: 3,
       )..layout(maxWidth: nameAvailable);
-      final signatureSize = Size(
-        math.min(
-              nameAvailable,
-              authorPainter.maxIntrinsicWidth.ceilToDouble() + 2,
-            ) +
-            ruleWidth +
-            ruleGap,
-        authorPainter.height,
-      );
+      final authorLines = authorPainter.computeLineMetrics();
+      final widestAuthorLine = authorLines.fold<double>(0, (width, line) => math.max(width, line.width));
+      final nameWidth = math.min(nameAvailable, widestAuthorLine.ceilToDouble() + 2);
+      final signatureRuleInset = authorLines.isEmpty ? 0.0 : math.max(0.0, nameWidth - authorLines.first.width);
+      final signatureSize = Size(nameWidth + ruleWidth + ruleGap, authorPainter.height);
       authorPainter.dispose();
       TextStyle bodyStyle(double spacing) => TextStyle(
         fontSize: QuoteArtworkTypography.bodySize,
@@ -351,7 +347,7 @@ class _PaperCompositionState extends State<_PaperComposition> {
                   clipBehavior: Clip.none,
                   children: [
                     Positioned(
-                      left: 0,
+                      left: signatureRuleInset,
                       top: QuoteArtworkTypography.signatureSize * .61,
                       child: Container(
                         key: const ValueKey('quote-signature-rule'),
@@ -368,7 +364,7 @@ class _PaperCompositionState extends State<_PaperComposition> {
                         widget.author,
                         key: const ValueKey('quote-author'),
                         style: signatureStyle,
-                        textAlign: TextAlign.left,
+                        textAlign: TextAlign.right,
                         maxLines: 3,
                       ),
                     ),

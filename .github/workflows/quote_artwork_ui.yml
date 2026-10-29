@@ -54,7 +54,7 @@ jobs:
       - name: Prepare SQLite
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev
+          sudo apt-get install -y libsqlite3-dev fonts-noto-cjk
       - run: flutter pub get
       - name: Analyze artwork and controls
         run: >-
@@ -76,6 +76,7 @@ jobs:
         run: >-
           flutter test --no-pub --reporter expanded
           --dart-define=QUOTE_ART_PREVIEW=true
+          --dart-define=JOURNEY_PREVIEW=true
           test/quote_art_layout_test.dart
           test/quote_author_signature_test.dart
           test/baidu_credential_settings_test.dart
@@ -92,5 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: quote-artwork-preview
-          path: build/quote-frame-preview/
+          path: |
+            build/quote-frame-preview/
+            build/journey-preview/home-preview.png
           if-no-files-found: ignore

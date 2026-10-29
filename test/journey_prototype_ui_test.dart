@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:quote_app/pages/tasks_page.dart';
 import 'package:quote_app/widgets/discovery_directory.dart';
 import 'package:quote_app/widgets/journey_design.dart';
@@ -215,14 +217,16 @@ void main() {
     testWidgets('export three prototype previews', (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
+      final flutterRoot = Platform.environment['FLUTTER_ROOT'] ?? '/workspace/flutter';
       for (final entry in {
         'JourneyPreviewCJK':
             '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
         'MaterialIcons':
-            '/workspace/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+            '$flutterRoot/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
         'QuoteKaiShu': 'assets/fonts/MaShanZheng-Regular.ttf',
         'QuoteXingShu': 'assets/fonts/ZhiMangXing-Regular.ttf',
         'QuoteLiterarySerif': 'assets/fonts/LibreBaskerville-Variable.ttf',
+        'QuoteSignatureLatin': 'assets/fonts/Allura-Regular.ttf',
       }.entries) {
         final bytes = File(entry.value).readAsBytesSync();
         final font = FontLoader(entry.key)
@@ -318,6 +322,11 @@ void main() {
           File(
             '${folder.path}/${entry.key}-preview.png',
           ).writeAsBytesSync(bytes!.buffer.asUint8List());
+          if (entry.key == 'home') {
+            final review = img.encodeJpg(img.decodeImage(bytes.buffer.asUint8List())!, quality: 82);
+            // ignore: avoid_print
+            print('JOURNEY_HOME_REVIEW_BASE64:${base64Encode(review)}');
+          }
           image.dispose();
         });
         expect(tester.takeException(), isNull);

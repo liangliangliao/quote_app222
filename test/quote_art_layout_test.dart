@@ -120,6 +120,28 @@ void main() {
     },
   );
 
+  test('quote and signature use spare vertical space as one centred group', () {
+    final samples = ['知行合一。', '给自己一些耐心，让每一个选择，都有重新开始的可能。',
+      List.filled(6, '在行动中认识自己，让重要的事情慢慢发生。').join()];
+    for (final text in samples) {
+      for (final portrait in [false, true]) {
+        final layout = compose(text, portrait: portrait);
+        final belowPortrait = portrait && layout.lines.first.rect.top > layout.portrait!.bottom;
+        final readingTop = belowPortrait ? layout.portrait!.bottom + 12 : layout.contentBounds.top;
+        final availableCentre = (readingTop + layout.footerRect.top - 10) / 2;
+        final visualCentre = (layout.lines.first.rect.top + layout.signatureRect.bottom) / 2;
+        expect((visualCentre - availableCentre).abs(), lessThan(16));
+      }
+    }
+  });
+
+  test('a short phrase ending is not stranded before a Chinese comma', () {
+    const text = '现实和想象的区别，因此每一个真实的行动都值得被认真地看见。';
+    final layout = compose(text);
+    expect(layout.lines.any((line) => RegExp(r'^[\u3400-\u9fff][，。；]').hasMatch(line.text)), isFalse);
+    expect(text.startsWith(layout.lines.map((line) => line.text).join().replaceAll('…', '')), isTrue);
+  });
+
   test('English words and complete multilingual graphemes remain intact', () {
     const english =
         'No man is an island, entire of itself. Every man is a piece of the continent.';
@@ -142,15 +164,15 @@ void main() {
     'moderate size and ink weight stay consistent across brush and Latin faces',
     () {
       const base = TextStyle(
-        fontSize: 25,
+        fontSize: 23,
         color: QuoteArtworkTypography.ink,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w500,
       );
       for (final style in QuoteCalligraphyStyle.values) {
         final span = quoteBodyTextSpan('知行 Truth', base, style);
         for (final child in span.children!.whereType<TextSpan>()) {
-          expect(child.style!.fontSize, 25);
-          expect(child.style!.fontWeight, FontWeight.w600);
+          expect(child.style!.fontSize, 23);
+          expect(child.style!.fontWeight, FontWeight.w500);
           expect(child.style!.color, QuoteArtworkTypography.ink);
         }
       }
