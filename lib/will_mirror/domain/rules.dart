@@ -66,7 +66,8 @@ class EvidenceRules {
       }
       for (final id in node.dependencies) {
         final target = all[id];
-        if (target == null) throw MirrorProblem('来源不存在：$id');
+        if (target == null)
+          throw MirrorProblem('来源不存在：$id', code: 'source_reference_invalid');
         if (!target.usable &&
             !(node.kind == NodeKind.reminder &&
                 node.text('state') == 'cancelled'))
@@ -132,7 +133,8 @@ class EvidenceRules {
             if (expected != null) {
               for (final id in e.value is List ? e.value as List : [e.value]) {
                 if (id != null && all[id]?.kind != expected)
-                  throw const MirrorProblem('关联标识的对象类型不匹配');
+                  throw const MirrorProblem('关联标识的对象类型不匹配',
+                      code: 'source_reference_invalid');
               }
             }
             if (e.value is Map || e.value is List) checkTypes(e.value);
@@ -147,6 +149,16 @@ class EvidenceRules {
       if (node.kind != NodeKind.seal && node.kind != NodeKind.deliberation)
         checkTypes(node.body);
       if (node.kind == NodeKind.understanding) {
+        final clarity = node.object('clarity');
+        if (clarity.isNotEmpty &&
+            clarity.values.any((v) =>
+                v is String &&
+                (v.runes.length > 120 ||
+                    ['当事人', '如果此候选成立', '记录没有说明'].any(v.contains)))) {
+          throw const MirrorProblem(
+              '请将首屏内容改为直接对用户说的简短建议：卡点、一个新角度和一小步；每项不超过120字，推理说明放详情。',
+              code: 'clarity_style_invalid');
+        }
         for (final fact in node.objects('facts')) {
           final ids = stringList(fact['evidenceIds']);
           final quote = fact['quote'] as String;

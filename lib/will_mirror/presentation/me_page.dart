@@ -149,6 +149,7 @@ class _MirrorMePageState extends State<MirrorMePage> {
       child: MirrorCard(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        AiOriginLabel(node: n, resolve: c.resolve),
         MirrorTag(humanValue(n.text('maturity'))),
         const SizedBox(height: 12),
         Text(n.text('claim'), style: Theme.of(context).textTheme.titleMedium),
@@ -173,6 +174,7 @@ class _MirrorMePageState extends State<MirrorMePage> {
       child: MirrorCard(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        AiOriginLabel(node: n, resolve: c.resolve),
         MirrorTag(humanValue(n.text('relation'))),
         const SizedBox(height: 10),
         Text(n.text('claim')),
@@ -205,6 +207,7 @@ class _MirrorMePageState extends State<MirrorMePage> {
         child: MirrorCard(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          AiOriginLabel(node: n, resolve: c.resolve),
           Wrap(spacing: 6, runSpacing: 6, children: [
             MirrorTag(statusLabel(n.status)),
             MirrorTag(needsReview ? '需要对照反例' : humanValue(n.text('maturity'))),

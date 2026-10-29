@@ -21,6 +21,8 @@ class StrengthOpportunityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final route = resolve(node.text('routeId'));
     return _ExperienceCard(
+      node: node,
+      resolve: resolve,
       title: '已有能力，可以怎样用？',
       state: humanValue(node.text('state')),
       summary: node.text('claim'),
@@ -62,6 +64,8 @@ class ChangeabilityCard extends StatelessWidget {
     final fact = resolve(node.text('factId'));
     final actions = node.strings('safeAlternatives');
     return _ExperienceCard(
+      node: node,
+      resolve: resolve,
       title: '这件事，还能改变哪一部分？',
       state: humanValue(node.text('classification')),
       summary: node.text('reason'),
@@ -88,6 +92,7 @@ class InterpersonalBoundaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _ExperienceCard(
+        node: node,
         title: '我的行动，与对方的选择',
         state: '沟通、义务与边界分别看',
         summary: node.strings('ownActions').isEmpty
@@ -110,7 +115,9 @@ class InterpersonalBoundaryCard extends StatelessWidget {
 
 class _ExperienceCard extends StatelessWidget {
   const _ExperienceCard(
-      {required this.title,
+      {required this.node,
+      this.resolve,
+      required this.title,
       required this.state,
       required this.summary,
       required this.lines,
@@ -120,6 +127,8 @@ class _ExperienceCard extends StatelessWidget {
       this.onRecord,
       this.blocked = false});
   final String title, state, summary, nextStep, review;
+  final MirrorNode node;
+  final MirrorNode? Function(String)? resolve;
   final List<String> lines;
   final bool blocked;
   final VoidCallback onDetails;
@@ -132,6 +141,7 @@ class _ExperienceCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            AiOriginLabel(node: node, resolve: resolve),
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
             MirrorTag(state),

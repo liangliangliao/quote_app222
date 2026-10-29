@@ -67,6 +67,7 @@ extension _ReviewViews on _CaseWorkbenchState {
               '基于真实记录复盘', _busy ? null : () => _analyze(AnalysisStage.review),
               icon: Icons.auto_awesome_outlined),
         ] else ...[
+          AiOriginLabel(node: review, resolve: c.resolve),
           if (review.objects('revisedClaims').isNotEmpty) ...[
             Text(
               '这次现实改变了哪些判断',
@@ -591,6 +592,7 @@ extension _ReviewViews on _CaseWorkbenchState {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const MirrorTag('我的经验原则 · 仍可修订', icon: Icons.bookmark_border),
+              AiOriginLabel(node: principle, resolve: c.resolve),
               const SizedBox(height: 12),
               Text(atField ? cue : principle.text('summary'),
                   style: Theme.of(context).textTheme.titleMedium),

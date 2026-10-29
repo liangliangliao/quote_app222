@@ -8,6 +8,7 @@ import '../data/store.dart';
 import '../domain/model.dart';
 import '../domain/ranking.dart';
 import '../domain/rules.dart';
+import '../domain/failures.dart';
 import '../integration/reminders.dart';
 
 class MirrorController extends ChangeNotifier {
@@ -531,7 +532,7 @@ class MirrorController extends ChangeNotifier {
           result, commands.append(result, [complete], authorized: external));
     } catch (e) {
       if (!cancel.cancelled) {
-        error = e is MirrorProblem ? e.message : '分析没有完成，已有阶段结果已保存';
+        error = analysisFailureMessage(e);
         final failed = await store.load(initial.id);
         if (failed != null && !cancel.cancelled) {
           final audit = commands.record(

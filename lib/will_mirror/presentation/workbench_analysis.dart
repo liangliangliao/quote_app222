@@ -4,10 +4,13 @@ extension _AnalysisViews on _CaseWorkbenchState {
   Widget _understanding() {
     final understood = f.latest(NodeKind.understanding);
     final wants = f.current(NodeKind.want);
+    final clarity = understood?.object('clarity') ?? <String, dynamic>{};
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _heading('这次满足了什么，\n又可能牺牲什么？'),
+      _heading('先抓住这件事的关键。'),
+      if (understood != null)
+        AiOriginLabel(node: understood, resolve: c.resolve),
       if (understood == null) ...[
-        const Text('先忠实保留你的描述。AI 会从这里分开事实、当时的认识和仍然未知的部分。'),
+        const Text('先找出一个卡点，看看能否换个角度，再留下一步具体可以做的事。'),
         const SizedBox(height: 14),
         for (final node in f.current(NodeKind.evidence))
           ListTile(
@@ -17,70 +20,126 @@ extension _AnalysisViews on _CaseWorkbenchState {
               onTap: () => _details(node)),
         _primary('从这件事开始分析', _busy ? null : () => _analyze(),
             icon: Icons.auto_awesome_outlined),
+      ] else if (clarity.isNotEmpty) ...[
+        _claritySection('我理解的卡点', clarity['stuckPoint'] as String),
+        _claritySection('可以重新看的一点', clarity['perspective'] as String),
+        MirrorCard(
+          key: const ValueKey('mirror-clarity-next-step'),
+          padding: const EdgeInsets.all(15),
+          color: Theme.of(context)
+              .colorScheme
+              .primaryContainer
+              .withValues(alpha: .35),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('下一小步', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            Text(clarity['nextStep'] as String,
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Text(clarity['whyThisStep'] as String),
+          ]),
+        ),
+        if ((clarity['question'] as String).isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(clarity['question'] as String),
+              TextButton.icon(
+                  onPressed: () => _evidence(),
+                  icon: const Icon(Icons.add_comment_outlined, size: 17),
+                  label: const Text('补充一点，让下一步更具体')),
+            ]),
+          ),
+        TextButton(
+            onPressed: () => _evidence(category: 'correction'),
+            child: const Text('理解不对，我来补充')),
       ] else ...[
         Text(understood.text('summary'),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyLarge),
-        const SizedBox(height: 16),
-        CaseSituationCard(
-          file: f,
-          onNode: _details,
-          onAdd: () => _evidence(),
+        const SizedBox(height: 12),
+        const Text('原来的分析保留在详情中，可以重新梳理出一个卡点和下一步。'),
+        OutlinedButton(
+            onPressed: _busy ? null : () => _analyze(),
+            child: const Text('重新梳理为简短建议')),
+      ],
+      if (understood != null)
+        ExpansionTile(
+          key: const ValueKey('mirror-understanding-evidence'),
+          tilePadding: EdgeInsets.zero,
+          title: const Text('原话、依据与未确认的部分'),
+          children: [
+            CaseSituationCard(
+                file: f,
+                onNode: _details,
+                onAdd: () => _evidence(),
+                showQuestion: false),
+            _nodeList(NodeKind.capability, title: '原文中的能力线索'),
+            _sourceLink(understood, label: '查看完整原话与来源'),
+          ],
         ),
-        _sourceLink(understood, label: '查看完整原话与来源'),
-      ],
-      _nodeList(NodeKind.capability, title: '原文中的任务能力线索 · 待核实'),
       if (wants.isNotEmpty) ...[
-        const Divider(),
-        Text('可能在意的东西', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        const Text('它们是候选。你可以认可，也可以说不符合。'),
-        for (final want in wants)
-          Padding(
-              padding: const EdgeInsets.only(top: 14),
-              child: MirrorCard(
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(want.text('claim'),
-                            style: Theme.of(context).textTheme.titleSmall),
-                        const SizedBox(height: 8),
-                        Wrap(spacing: 5, runSpacing: 5, children: [
-                          MirrorTag(humanValue(want.text('specificity'))),
-                          if (want.status == NodeStatus.accepted)
-                            const MirrorTag('你已认可')
-                        ]),
-                        if (want.text('immediateBenefit').isNotEmpty) ...[
-                          const SizedBox(height: 9),
-                          Text('当下：${want.text('immediateBenefit')}')
-                        ],
-                        if (want.text('longTermCost').isNotEmpty)
-                          Text('更长时间：${want.text('longTermCost')}'),
-                        _sourceLink(want),
-                        Wrap(spacing: 6, children: [
-                          TextButton(
-                              onPressed: () => _act(
-                                  () => c.feedback(f.id, want.id, 'accept')),
-                              child: const Text('符合我')),
-                          TextButton(
-                              onPressed: () => _act(
-                                  () => c.feedback(f.id, want.id, 'reject')),
-                              child: const Text('不符合'))
-                        ]),
-                      ])))
+        ExpansionTile(
+          key: const ValueKey('mirror-optional-wants'),
+          tilePadding: EdgeInsets.zero,
+          title: const Text('进一步看看：我可能在意什么'),
+          children: [
+            const Text('你可以认可、纠正，也可以暂时不选。'),
+            for (final want in wants)
+              Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: MirrorCard(
+                      color: Theme.of(context).colorScheme.surfaceContainerLow,
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AiOriginLabel(node: want, resolve: c.resolve),
+                            Text(want.text('claim'),
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 8),
+                            Wrap(spacing: 5, runSpacing: 5, children: [
+                              MirrorTag(humanValue(want.text('specificity'))),
+                              if (want.status == NodeStatus.accepted)
+                                const MirrorTag('你已认可')
+                            ]),
+                            _sourceLink(want),
+                            Wrap(spacing: 6, children: [
+                              TextButton(
+                                  onPressed: () => _act(() =>
+                                      c.feedback(f.id, want.id, 'accept')),
+                                  child: const Text('符合我')),
+                              TextButton(
+                                  onPressed: () => _act(() =>
+                                      c.feedback(f.id, want.id, 'reject')),
+                                  child: const Text('不符合'))
+                            ]),
+                          ]))),
+          ],
+        ),
       ],
       if (understood != null)
-        _primary('看看有哪些正反理由', _busy ? null : () => _continue(1)),
-      if (understood != null)
+        _primary('继续看看有哪些选择与理由', _busy ? null : () => _continue(1)),
+      if (understood != null && clarity.isNotEmpty)
         TextButton(
-            onPressed:
-                _busy ? null : () => _analyze(null, {'fullWorkflow': true}),
-            child: const Text('根据补充的事实更新分析')),
+            onPressed: _busy ? null : () => _analyze(),
+            child: const Text('补充后，重新梳理这一步')),
       if (f.retrospective)
         TextButton(onPressed: () => _go(6), child: const Text('直接记录实际发生的事')),
     ]);
   }
+
+  Widget _claritySection(String label, String body) => Padding(
+        padding: const EdgeInsets.only(bottom: 18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 7),
+          Text(body, style: Theme.of(context).textTheme.bodyLarge),
+        ]),
+      );
 
   Widget _motives() {
     final ranking = f.latest(NodeKind.recommendation);
@@ -112,6 +171,7 @@ extension _AnalysisViews on _CaseWorkbenchState {
         _primary('补全这次的理由', _busy ? null : () => _analyze(),
             icon: Icons.auto_awesome_outlined)
       ] else ...[
+        if (ranking != null) AiOriginLabel(node: ranking, resolve: c.resolve),
         Wrap(spacing: 6, runSpacing: 6, children: [
           MirrorTag('${motives.length} 条不同候选'),
           MirrorTag(ranking?.text('method') == 'decisions'
@@ -157,8 +217,8 @@ extension _AnalysisViews on _CaseWorkbenchState {
               title: Text('${i + 1}. ${displayed[i].text('summary')}'),
               subtitle: Text(
                 f.selectedMotiveIds.contains(displayed[i].id)
-                    ? '你已认可，留作现场理由'
-                    : '${humanValue(displayed[i].text('horizon'))} · ${humanValue(displayed[i].text('factStatus'))}',
+                    ? '${contentSourceLabel(displayed[i], resolve: c.resolve)} · 你已认可，留作现场理由'
+                    : '${contentSourceLabel(displayed[i], resolve: c.resolve)} · ${humanValue(displayed[i].text('horizon'))} · ${humanValue(displayed[i].text('factStatus'))}',
               ),
               children: [
                 _motiveCard(displayed[i], rank: i + 1, score: ranked[i]),
@@ -213,6 +273,7 @@ extension _AnalysisViews on _CaseWorkbenchState {
             padding: const EdgeInsets.all(16),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              AiOriginLabel(node: motive, resolve: c.resolve),
               if (rank != null)
                 Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -286,6 +347,9 @@ extension _AnalysisViews on _CaseWorkbenchState {
           title: '这条理由为什么值得先看',
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            AiOriginLabel(node: motive, resolve: c.resolve),
+            if (f.latest(NodeKind.recommendation) case final ranking?)
+              AiOriginLabel(node: ranking, resolve: c.resolve),
             Text(motive.text('summary'),
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
@@ -524,6 +588,8 @@ extension _AnalysisViews on _CaseWorkbenchState {
             padding: const EdgeInsets.all(16),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              AiOriginLabel(
+                  node: route, resolve: c.resolve, showHumanSource: true),
               Text(route.text('title'),
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 7),

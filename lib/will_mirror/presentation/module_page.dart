@@ -427,6 +427,11 @@ class _CasesHomeState extends State<_CasesHome> {
                             const MirrorTag('预案已保存 · 现实条件仍需核实',
                                 icon: Icons.hourglass_bottom),
                             const SizedBox(height: 10),
+                            if (f.latest(NodeKind.plan) case final plan?)
+                              AiOriginLabel(
+                                  node: plan,
+                                  resolve: c.resolve,
+                                  showHumanSource: true),
                             Text(
                                 f.latest(NodeKind.trigger)?.text('signal') ??
                                     f.issue,
