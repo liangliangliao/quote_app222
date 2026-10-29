@@ -279,6 +279,9 @@ void main() {
         ]
       });
     });
+    for (final source in history) {
+      source.v37.settings['shareExperience'] = true;
+    }
     final rows = await ai.suggest(c, history, 'cognition');
     final preferences =
         osMap(osMap(input['personalEvidence'])['representationPreferences']);

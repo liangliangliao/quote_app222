@@ -60,6 +60,14 @@ class SelfOsLearning {
     }
     final node =
         c.v37.nodes.where((n) => n.id == experiment['nodeId']).firstOrNull;
+    final sealed = osMaps(osMap(review.snapshot['v37'])['nodes'])
+        .where((n) => n['id'] == experiment['nodeId'])
+        .firstOrNull;
+    final originalNode = sealed == null ? node : OsConsequence(sealed);
+    if (conclusive &&
+        originalNode != null &&
+        !originalNode.observableAt(review.createdAt))
+      throw const FormatException('长期结果还未到可以核验的时点，先保留待观察；实际努力与短期体验仍然有效。');
     final beforeNode = node?.toJson();
     final before = osClone(c.cognitiveSnapshot());
     final id = selfOsId(), now = DateTime.now().toIso8601String();
@@ -218,7 +226,8 @@ class SelfOsLearning {
 
   static List<Map<String, dynamic>> history(List<SelfOsCase> cases) => [
         for (final c in cases)
-          for (final r in c.reviews.where(calibrated))
+          for (final r in c.reviews.where(
+              (r) => calibrated(r) && r.notes['experienceWithdrawn'] != 'yes'))
             {
               'caseId': c.id,
               'reviewId': r.id,

@@ -378,6 +378,8 @@ extension _KnowledgePanel on _SelfOsWorkbenchState {
           const OsInput('order', '第几阶后果（1–12）',
               kind: 'number', max: 12, required: true),
           const OsInput('horizon', '时间跨度', options: osHorizons, required: true),
+          const OsInput('observableAfter', '最早何时能核验这个结果？长期未知就保持待观察',
+              kind: 'datetime'),
           const OsInput('valence', '收益 / 代价',
               options: osValences, required: true),
           const OsInput('label', '证据标签',
@@ -413,6 +415,9 @@ extension _KnowledgePanel on _SelfOsWorkbenchState {
           osText(v['observedAt']).isEmpty) return '真实结果需要观察时间';
       final at = DateTime.tryParse(osText(v['observedAt']));
       if (at != null && at.isAfter(DateTime.now())) return '尚未发生的结果不能记录为实际观察';
+      if (osText(v['observedOutcome']).isNotEmpty &&
+          !OsConsequence(v).observableAt(at ?? DateTime.now()))
+        return '尚未到这个预测的观察窗口，请保留待观察或先更正预测的适用范围';
       try {
         final draft = s.copy();
         put(draft.nodes, OsConsequence(v));

@@ -329,7 +329,8 @@ void main() {
   });
 
   test('校准结论和来源进入AI上下文，前后认识可恢复且不会代替原始预测', () async {
-    final observed = observedExperiment();
+    final observed = observedExperiment()
+      ..v37.settings['shareExperience'] = true;
     calibrate(observed, verdict: 'uncertain', influence: 'unchanged');
     final restored =
         SelfOsCase.fromJson(jsonDecode(jsonEncode(observed.toJson())));

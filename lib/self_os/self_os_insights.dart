@@ -91,8 +91,8 @@ class SelfOsInsights {
     final groups = <String, List<SelfOsObservation>>{};
     for (final o in SelfOsEngineService.observations(cases)) {
       final r = o.review;
-      if (r.notes['evidenceUse'] != 'usable' ||
-          (r.notes['patternClaim'] ?? '').trim().isEmpty) continue;
+      if (!r.mayGeneralize || (r.notes['patternClaim'] ?? '').trim().isEmpty)
+        continue;
       final conditions = attribution(r).take(6).toList();
       if (['K', 'M', 'Att', 'E', 'T', 'Skill']
               .any((k) => r.notes['control.$k'] != 'stable') ||

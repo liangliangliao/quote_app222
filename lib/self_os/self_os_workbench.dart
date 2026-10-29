@@ -10,6 +10,7 @@ import 'self_os_progress.dart';
 import 'self_os_horizon_view.dart';
 import 'self_os_widgets.dart';
 import 'self_os_workbench_widgets.dart';
+import 'self_os_principles.dart';
 
 part 'self_os_routes_panel.dart';
 part 'self_os_knowledge_panel.dart';

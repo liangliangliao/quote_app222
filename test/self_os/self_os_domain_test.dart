@@ -53,6 +53,8 @@ SelfOsReview reviewFor(SelfOsCase c,
         snapshot: c.commitment ?? c.evidenceSnapshot(),
         scores: {'actualDiscomfort': 6, 'actualCostAcceptance': 60},
         notes: {
+          'opportunity': 'present',
+          'autonomy': 'voluntary',
           'servedDesire': '稳定',
           'evidenceUse': 'usable',
           'actualCost': '紧张与等待',

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'self_os_codec.dart';
 import 'self_os_v37_models.dart';
 
@@ -149,8 +150,36 @@ class SelfOsV37Rules {
     ];
   }
 
-  static OsGate gate(SelfOsV37 s, {DateTime? at}) {
+  static String? taskLimit(SelfOsV37 s, {String? routeId, DateTime? at}) {
+    final selected = routeId ?? s.text('actionRouteId');
+    final latest = <String, Map<String, dynamic>>{};
+    for (final a in osMaps(s.settings['changeabilityAssessments'])) {
+      latest[osText(a['factId']).isEmpty
+          ? osText(a['id'])
+          : osText(a['factId'])] = a;
+    }
+    for (final a in latest.values) {
+      final boundRoute = osText(a['routeId']);
+      if (boundRoute.isNotEmpty &&
+          selected.isNotEmpty &&
+          boundRoute != selected) continue;
+      if (a['safetyReviewRequired'] == true)
+        return '这项任务限制的依据已撤回，先重新核实或明确选择其他安全路线。';
+      if (a['classification'] != 'hard_limit_for_task' || a['stale'] == true)
+        continue;
+      final proof = osStrings(a['sourceEvidenceIds']);
+      if (!s.evidence.any(
+          (e) => proof.contains(e.id) && e.reliableAt(at ?? DateTime.now())))
+        return '任务限制的依据需要复核，不能用优势或动机分代替安全资格。';
+      return '这条任务路线存在已核实的限制：${a['fact']}。先选择替代路线或重新核实条件。';
+    }
+    return null;
+  }
+
+  static OsGate gate(SelfOsV37 s, {DateTime? at, String? routeId}) {
     final now = at ?? DateTime.now();
+    final limit = taskLimit(s, routeId: routeId, at: now);
+    if (limit != null) return OsGate('HOLD', [limit]);
     if (s.flag('requiresReconsideration')) {
       return const OsGate('ASK', ['现实条件有新变化，先回应新信息并更新认识，再确认原来的约定。']);
     }
@@ -252,11 +281,17 @@ class SelfOsV37Rules {
     for (final m in motives) {
       if (m['selected'] != true || (osNumber(m['importance']) ?? 0) < 60)
         continue;
-      final option = osText(m['optionId']);
-      if (option.isEmpty) continue;
-      byOption
-          .putIfAbsent(option, () => {})
-          .add(m['side'] == 'against' ? 'against' : 'for');
+      final relations = osMaps(m['routeEffects']);
+      for (final edge in relations.isEmpty
+          ? [
+              {'routeId': m['optionId'], 'side': m['side']}
+            ]
+          : relations) {
+        final option = osText(edge['routeId']);
+        if (option.isEmpty || !['for', 'against'].contains(edge['side']))
+          continue;
+        byOption.putIfAbsent(option, () => {}).add(edge['side'] as String);
+      }
     }
     final mixed = byOption.values.where((v) => v.length == 2).length;
     if (s.flag('mutuallyExclusive') && mixed >= 2) return 'double';
@@ -330,7 +365,8 @@ class SelfOsV37Rules {
       }
       if (gains.isNotEmpty ||
           a?['attention'] != b?['attention'] ||
-          a?['actionLink'] != b?['actionLink']) {
+          a?['actionLink'] != b?['actionLink'] ||
+          jsonEncode(a?['routeEffects']) != jsonEncode(b?['routeEffects'])) {
         final total = gains.fold<double>(0, (a, b) => a + b);
         result.add({
           'id': id,

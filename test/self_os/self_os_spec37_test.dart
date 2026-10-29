@@ -266,6 +266,7 @@ void main() {
     final profile = strengthProfile();
     for (var i = 0; i < 3; i++) {
       final c = strengthCase();
+      c.v37.settings['shareExperience'] = true;
       c.reviews.single.notes.addAll({
         'strength.curiosity.cognition.effect': 'helped',
         'strength.curiosity.cognition.observation': '实际用问题澄清了条件 $i'

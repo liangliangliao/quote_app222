@@ -14,6 +14,7 @@ import 'self_os_insights.dart';
 import 'self_os_v37_rules.dart';
 import 'self_os_progress.dart';
 import 'self_os_learning.dart';
+import 'self_os_experience_widgets.dart';
 
 class SelfOsHomePage extends StatefulWidget {
   const SelfOsHomePage({super.key, this.repository, this.ai});
@@ -157,30 +158,16 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
   }
 
   Future<void> _principle(SelfOsObservation evidence) async {
-    final values = await osEditDialog(context,
-        title: '从证据提炼一条原则',
-        labels: const {
-          'condition': '什么情境下适用？',
-          'rule': '我准备怎样选择？',
-          'notApplicable': '哪些情境不适用？',
-          'exception': '哪些新信息出现时要重审？'
-        },
-        initial: {'rule': evidence.review.learning},
-        requiredFields: {'condition', 'rule', 'notApplicable', 'exception'},
-        hint: '来源：${evidence.review.context}。这是一条待持续验证的个人原则。');
-    if (values == null) return;
-    final draft = SelfOsProfile.fromJson(_profile.toJson());
-    draft.principles.add({
-      ...values,
-      'id': selfOsId(),
-      'evidenceIds': [evidence.review.id],
-      'createdAt': DateTime.now().toIso8601String()
-    });
+    final principle = await osCreatePrinciple(context, _cases,
+        initialReviewId: evidence.review.id);
+    if (principle == null) return;
+    final draft = SelfOsProfile.fromJson(osClone(_profile.toJson()));
+    draft.principles.add(principle);
     try {
       await _repository.saveProfile(draft);
       if (mounted) {
         setState(() => _profile = draft);
-        osMessage(context, '已保存到个人决策宪法');
+        osMessage(context, '候选已保存，请展开个人原则后决定是否认可');
       }
     } catch (_) {
       if (mounted) osMessage(context, '原则保存失败，请重试。');
@@ -596,7 +583,6 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
     final patterns = SelfOsEngineService.patterns(_cases);
     final conflicts = SelfOsEngineService.conflicts(_cases);
     final calibration = SelfOsEngineService.actionCalibrationError(_cases);
-    final evidenceIds = obs.map((o) => o.review.id).toSet();
     final coverage = [
       _cases.any((c) => c.acceptedDesires.isNotEmpty),
       _profile.manual.entries.any((e) =>
@@ -770,72 +756,19 @@ class _SelfOsHomePageState extends State<SelfOsHomePage> {
                           '${o.review.context}\n口头接受 ${_number(osMap(o.review.snapshot['scores'])['costAcceptance'])} → 实际接受 ${_number(o.review.scores['actualCostAcceptance'])}\n真实代价：${o.review.notes['actualCost']?.isNotEmpty == true ? o.review.notes['actualCost'] : '未记录'}\n保住「${o.review.notes['servedDesire'] ?? '未记录'}」 / 让位「${o.review.notes['sacrificedDesire'] ?? '未记录'}」',
                           style: const TextStyle(height: 1.5))))
                   .toList()),
-      OsSection(
-          title: '个人决策宪法',
-          subtitle: '从具体证据提炼适用条件，也保留例外。',
-          children: _profile.principles.isEmpty
-              ? [const Text('在新证据下点击「提炼为我的原则」，建立自己的选择依据。')]
-              : _profile.principles
-                  .map((p) => Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('当 ${p['condition']}',
-                                style: const TextStyle(color: osGold)),
-                            Text(osText(p['rule']),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600, height: 1.6)),
-                            Text('不适用：${p['notApplicable'] ?? '尚未补充'}'),
-                            Text('重审条件：${p['exception']}'),
-                            Text(
-                                osStrings(p['evidenceIds'])
-                                        .any(evidenceIds.contains)
-                                    ? '来自真实行动证据 · 仍可修正'
-                                    : '来源证据已删除 · 需要重新验证',
-                                style: const TextStyle(
-                                    fontSize: 12, color: Color(0xFF68786E))),
-                            TextButton(
-                                onPressed: () async {
-                                  final values = await osEditDialog(context,
-                                      title: '修订个人原则',
-                                      labels: const {
-                                        'condition': '适用情境',
-                                        'rule': '原则',
-                                        'notApplicable': '不适用情境',
-                                        'exception': '重审条件'
-                                      },
-                                      initial: {
-                                        'condition': osText(p['condition']),
-                                        'rule': osText(p['rule']),
-                                        'notApplicable':
-                                            osText(p['notApplicable']),
-                                        'exception': osText(p['exception'])
-                                      },
-                                      requiredFields: {
-                                        'condition',
-                                        'rule',
-                                        'notApplicable',
-                                        'exception'
-                                      });
-                                  if (values == null) return;
-                                  final draft = SelfOsProfile.fromJson(
-                                      jsonDecode(
-                                          jsonEncode(_profile.toJson())));
-                                  draft.principles
-                                      .firstWhere((v) => v['id'] == p['id'])
-                                      .addAll(values);
-                                  try {
-                                    await _repository.saveProfile(draft);
-                                    if (mounted)
-                                      setState(() => _profile = draft);
-                                  } catch (_) {
-                                    if (mounted) osMessage(context, '保存失败');
-                                  }
-                                },
-                                child: const Text('修订原则'))
-                          ])))
-                  .toList()),
+      SelfOsPrincipleLibrary(
+          profile: _profile,
+          cases: _cases,
+          onSave: (profile) async {
+            try {
+              await _repository.saveProfile(profile);
+              if (mounted) setState(() => _profile = profile);
+              return true;
+            } catch (_) {
+              if (mounted) osMessage(context, '原则保存失败，请重试');
+              return false;
+            }
+          }),
       OsSection(
           title: '可追溯的行动证据',
           children: obs.isEmpty

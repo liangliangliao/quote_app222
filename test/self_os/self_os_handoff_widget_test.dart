@@ -8,6 +8,7 @@ import 'self_os_domain_test.dart' show plannedCase;
 import 'self_os_v37_rules_test.dart' show decision;
 import 'self_os_v37_widget_test.dart' show scrollTo;
 import 'self_os_widget_test.dart' show MemoryRepository, offlineAi;
+import 'self_os_principles_test.dart' show experienceSource, principleFor;
 
 Widget workbench(SelfOsCase c, MemoryRepository repo, int section) =>
     MaterialApp(
@@ -15,7 +16,7 @@ Widget workbench(SelfOsCase c, MemoryRepository repo, int section) =>
             value: c,
             repository: repo,
             ai: offlineAi(),
-            history: [c],
+            history: [...repo.records.values.where((v) => v.id != c.id), c],
             profile: repo.profile,
             initialWorkspace: section));
 
@@ -105,13 +106,16 @@ void main() {
     testWidgets('调用原则保留不适用情境、重审条件和来源：$field', (tester) async {
       final c = plannedCase();
       final repo = MemoryRepository();
+      final source = experienceSource();
+      repo.records[source.id] = source;
       repo.profile.principles.add({
+        ...principleFor([source])..remove('notApplicable'),
         'id': 'p',
         'rule': '先核对实际投入再承诺',
         'condition': '存在可核对的实际时间安排',
         field: '紧急情境不适用',
         'exception': '有新时间约束时重审',
-        'evidenceIds': ['prior-review']
+        'evidenceIds': [source.reviews.single.id]
       });
       await tester.pumpWidget(workbench(c, repo, 2));
       await tester.pumpAndSettle();
@@ -125,7 +129,8 @@ void main() {
       await tester.tap(apply);
       await tester.pumpAndSettle();
       expect(repo.records[c.id]!.v37.text('principleId'), 'p');
-      expect(repo.profile.principles.single['evidenceIds'], ['prior-review']);
+      expect(repo.profile.principles.single['evidenceIds'],
+          [source.reviews.single.id]);
       expect(repo.records[c.id]!.commitment, isNull);
       expect(tester.takeException(), isNull);
     });

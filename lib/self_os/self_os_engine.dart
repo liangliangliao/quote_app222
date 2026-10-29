@@ -1,4 +1,5 @@
 import 'self_os_models.dart';
+import 'self_os_action_facts.dart';
 
 class SelfOsNextStep {
   const SelfOsNextStep(this.engine, this.reason);
@@ -53,7 +54,11 @@ class SelfOsEngineService {
                     (osNumber(osMap(r.snapshot['scores'])['planProbability']) ??
                             0) >=
                         70 &&
-                    r.outcome == 'notDone')
+                    r.outcome == 'notDone' &&
+                    !['started_blocked', 'revised_on_new_information']
+                        .contains(r.notes['attemptStatus']) &&
+                    r.notes['autonomy'] != 'coerced' &&
+                    r.notes['opportunity'] != 'absent')
                 .length >=
             2) {
       return const SelfOsNextStep(
@@ -83,6 +88,7 @@ class SelfOsEngineService {
     final result = <SelfOsObservation>[];
     for (final c in cases) {
       for (final r in c.reviews) {
+        if (r.notes['experienceWithdrawn'] == 'yes') continue;
         if (seen.add(r.id)) result.add(SelfOsObservation(c.id, c.problem, r));
       }
     }
@@ -164,7 +170,7 @@ class SelfOsEngineService {
   static List<String> patterns(List<SelfOsCase> cases) {
     final grouped = <String, List<SelfOsObservation>>{};
     for (final o in observations(cases)) {
-      if (o.review.notes['evidenceUse'] != 'usable') continue;
+      if (!o.review.mayGeneralize) continue;
       final desire = (o.review.notes['servedDesire'] ?? '').trim();
       if (desire.isNotEmpty) grouped.putIfAbsent(desire, () => []).add(o);
     }
@@ -184,6 +190,7 @@ class SelfOsEngineService {
     final pairs = <String, SelfOsConflict>{};
     for (final o in observations(cases)) {
       final served = (o.review.notes['servedDesire'] ?? '').trim();
+      if (!o.review.mayGeneralize) continue;
       final sacrificed = (o.review.notes['sacrificedDesire'] ?? '').trim();
       if (served.isEmpty || sacrificed.isEmpty || served == sacrificed)
         continue;
@@ -205,7 +212,12 @@ class SelfOsEngineService {
         final r = o.review;
         final p = osNumber(osMap(r.snapshot['scores'])['revisedProbability']) ??
             osNumber(osMap(r.snapshot['scores'])['actionProbability']);
-        if (p == null || r.outcome == 'partial') return null;
+        if (p == null ||
+            r.outcome == 'partial' ||
+            ['started_blocked', 'revised_on_new_information']
+                .contains(r.notes['attemptStatus']) ||
+            r.notes['autonomy'] == 'coerced' ||
+            r.notes['opportunity'] == 'absent') return null;
         return (p - (r.outcome == 'done' ? 100 : 0)).abs();
       }));
 
@@ -218,6 +230,7 @@ class SelfOsEngineService {
                   'context': o.review.context,
                   'result': o.review.result,
                   'learning': o.review.learning,
+                  'actionFacts': SelfOsActionFacts.forAnalysis(o.review.notes),
                   'predictionError': o.review.predictionError
                 })
             .toList(),

@@ -201,6 +201,9 @@ class OsConsequence extends OsEntity {
       osEpistemicLabels.containsKey(text('label')) ? text('label') : 'unknown';
   bool get relevant => text('relevance') != 'low';
   List<String> get evidenceIds => strings('evidenceIds');
+  bool observableAt(DateTime at) => date('observableAfter') != null
+      ? !date('observableAfter')!.isAfter(at)
+      : horizon != 'long';
 }
 
 class OsCausalEdge extends OsEntity {

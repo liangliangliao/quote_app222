@@ -71,6 +71,8 @@ class _SelfOsHorizonViewState extends State<SelfOsHorizonView> {
                                   Text('${item.value}：${node.text(item.key)}')),
                       const SizedBox(height: 16),
                       Text('证据标签：${osEpistemicLabels[node.label]}；候选标签不等于已核实。'),
+                      if (!node.observableAt(DateTime.now()))
+                        const OsNote('长期结果待观察，不能用今天的一次行动宣布长期成败。'),
                       if (node.flag('calibrationNeedsReview'))
                         const OsNote('实际反馈使原推断需要修订，后续推演已暂停。请保留原预期，并根据反证调整条件。'),
                       for (final observation

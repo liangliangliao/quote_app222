@@ -6,6 +6,8 @@ extension _ConflictPanel on _SelfOsWorkbenchState {
     final conflict = SelfOsV37Rules.conflict(s, map);
     final mode = SelfOsV37Rules.jamesMode(s);
     final breaks = SelfOsV37Rules.attentionBreaks(map);
+    final principles = SelfOsPrinciples.eligible(widget.profile,
+        [...widget.history.where((item) => item.id != c.id), c], c);
     return [
       OsSection(
           title: '${SelfOsV37Rules.conflictLabels[conflict]}',
@@ -97,12 +99,12 @@ extension _ConflictPanel on _SelfOsWorkbenchState {
                   '我选择让一条路成为现实，同时承认「${s.text('sacrificedValue')}」仍有价值。\n愿意接受：${s.text('opportunityCost')}'),
             if (s.text('reviewAt').isNotEmpty)
               text('约定复审：${osMoment(DateTime.tryParse(s.text('reviewAt')))}'),
-            if (widget.profile.principles.isNotEmpty)
+            if (principles.isNotEmpty)
               ExpansionTile(
                   tilePadding: EdgeInsets.zero,
                   title: const Text('调用已经认可的个人原则'),
                   children: [
-                    for (final p in widget.profile.principles)
+                    for (final p in principles)
                       OsRecordCard(title: osText(p['rule']), children: [
                         text(
                             '适用：${p['condition']}\n不适用：${p['notApplicable'] ?? p['doesNotApply'] ?? '待补充'}\n覆盖旧原则的新证据：${p['overrideEvidence'] ?? p['exception']}'),

@@ -1,15 +1,13 @@
-import '../services/native_guard.dart';
-
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import '../evidence_growth/evidence_growth_notification_link.dart';
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../kindling/kindling.dart';
 import '../will_mirror/will_mirror.dart';
+import '../self_os/self_os_experience_entry.dart';
 import '../kindling_host/kindling_host_reminder.dart';
 
 import 'native_guard.dart';
@@ -55,6 +53,7 @@ class NotificationService {
   static bool _homeVisible = false;
   static bool _requestedThisSession = false;
   static final Set<String> _openWillMirrorPayloads = <String>{};
+  static final Set<String> _openSelfOsPayloads = <String>{};
 
   /// 仅供主入口消费使用：是否由通知启动（冷启动）
   static Future<bool> didLaunchFromNotification() async {
@@ -99,6 +98,7 @@ class NotificationService {
   }
 
   static Future<void> handleNotificationPayload(String? payload) async {
+    if (await _tryNavigateSelfOs(payload)) return;
     if (await _tryNavigateWillMirror(payload)) return;
     if (await _tryNavigateKindling(payload)) return;
     if (await _tryNavigateBeliefMentor(payload)) return;
@@ -110,6 +110,33 @@ class NotificationService {
     if (await _tryNavigateHealthDiet(payload)) return;
     SimpleBus.navHome();
     SimpleBus.pokeHome();
+  }
+
+  static Future<bool> _tryNavigateSelfOs(String? payload) async {
+    final link = OsPrincipleLink.parse(payload);
+    if (link == null) return false;
+    final nav = SimpleBus.navigatorKey.currentState;
+    if (nav == null) {
+      _pendingPayload = payload;
+      _launchFromNotif = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (SimpleBus.navigatorKey.currentState != null) {
+          handlePendingNotificationNavigation();
+        }
+      });
+      return true;
+    }
+    if (_pendingPayload == payload) {
+      _pendingPayload = null;
+      _launchFromNotif = false;
+    }
+    final identity = link.encode();
+    if (!_openSelfOsPayloads.add(identity)) return true;
+    nav
+        .push(MaterialPageRoute<void>(
+            builder: (_) => SelfOsExperienceEntry(link: link)))
+        .whenComplete(() => _openSelfOsPayloads.remove(identity));
+    return true;
   }
 
   static Future<bool> _tryNavigateWillMirror(String? payload) async {
@@ -478,7 +505,9 @@ class NotificationService {
         try {
           await NotificationService.markLaunchedFromNotification(p);
         } catch (_) {}
-        if (await NotificationService._tryNavigateWillMirror(p)) {
+        if (await NotificationService._tryNavigateSelfOs(p)) {
+          return;
+        } else if (await NotificationService._tryNavigateWillMirror(p)) {
           return;
         } else if (p != null && p.startsWith('vision_focus')) {
           try {

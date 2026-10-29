@@ -119,6 +119,7 @@ class _OsRecordEditorState extends State<_OsRecordEditor> {
                             padding: const EdgeInsets.only(bottom: 14),
                             child: f.kind == 'bool'
                                 ? SwitchListTile.adaptive(
+                                    key: ValueKey('v37_edit_${f.keyName}'),
                                     contentPadding: EdgeInsets.zero,
                                     title: Text(f.label),
                                     value: values[f.keyName] == true,

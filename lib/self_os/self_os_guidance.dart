@@ -1,4 +1,5 @@
 import 'self_os_models.dart';
+import 'self_os_v37_rules.dart';
 import 'self_os_progress.dart';
 import 'self_os_representation_learning.dart';
 
@@ -209,6 +210,9 @@ class SelfOsGuidance {
   /// underlying life decision or permit promotion to the global life line.
   static void commitExperiment(SelfOsCase c) {
     final g = c.guide, d = c.guide.draft;
+    final taskLimit =
+        SelfOsV37Rules.taskLimit(c.v37, routeId: osText(d['routeId']));
+    if (taskLimit != null) throw FormatException(taskLimit);
     if (c.reviewed || !g.confirmed || g.phase != 'plan') {
       throw const FormatException('先确认当前理解，再安排验证动作');
     }
@@ -248,6 +252,7 @@ class SelfOsGuidance {
     if (osText(d['routeId']).isNotEmpty && route == null) {
       throw const FormatException('关联的路径已改变，请重新选择');
     }
+    c.v37.settings['actionRouteId'] = osText(d['routeId']);
     if (route != null) {
       final prediction = OsConsequence({
         'routeId': route.id,
@@ -323,6 +328,7 @@ class SelfOsGuidance {
     required String learning,
     required String context,
     String actualCost = '',
+    Map<String, String> actionFacts = const {},
   }) {
     final snapshot = c.commitment ?? c.evidenceSnapshot();
     final review = SelfOsReview(
@@ -333,6 +339,7 @@ class SelfOsGuidance {
       context: context.trim(),
       snapshot: osClone(snapshot),
       notes: {
+        ...actionFacts,
         'evidenceUse': 'usable',
         'actualCost': actualCost.trim(),
         'cognitionFeedback': 'unknown',

@@ -3,6 +3,7 @@ import 'self_os_codec.dart';
 import 'self_os_v37_models.dart';
 import 'self_os_v37_rules.dart';
 import 'self_os_guide_models.dart';
+import 'self_os_action_facts.dart';
 export 'self_os_codec.dart';
 export 'self_os_v37_models.dart';
 export 'self_os_guide_models.dart';
@@ -144,9 +145,15 @@ class SelfOsMotive {
       this.endorsement = 'known',
       this.actionLink = '',
       this.strengthId = '',
+      this.semanticKey = '',
+      this.userStatus = 'candidate',
+      List<String>? evidenceIds,
+      List<Map<String, dynamic>>? routeEffects,
       this.importance,
       this.occupancy})
-      : id = id ?? selfOsId();
+      : id = id ?? selfOsId(),
+        evidenceIds = evidenceIds ?? [],
+        routeEffects = routeEffects ?? [];
   final String id;
   String optionId,
       desireId,
@@ -155,6 +162,9 @@ class SelfOsMotive {
       endorsement,
       actionLink,
       strengthId;
+  String semanticKey, userStatus;
+  List<String> evidenceIds;
+  List<Map<String, dynamic>> routeEffects;
   double? importance, occupancy;
   String title, type, side, layer, kind, reason, source;
   double? predicted, credibility, vividness, presence;
@@ -179,6 +189,10 @@ class SelfOsMotive {
         'endorsement': endorsement,
         'actionLink': actionLink,
         'strengthId': strengthId,
+        'semanticKey': semanticKey,
+        'userStatus': userStatus,
+        'evidenceIds': evidenceIds,
+        'routeEffects': routeEffects.map(osClone).toList(),
         'importance': importance,
         'occupancy': occupancy,
         'source': source
@@ -207,6 +221,17 @@ class SelfOsMotive {
           : 'known',
       actionLink: osText(j['actionLink']),
       strengthId: osText(j['strengthId']),
+      semanticKey: osText(j['semanticKey']),
+      userStatus:
+          ['candidate', 'rejected', 'needs_review'].contains(j['userStatus'])
+              ? j['userStatus']
+              : 'candidate',
+      evidenceIds: osStrings(j['evidenceIds']),
+      routeEffects: osMaps(j['routeEffects'])
+          .where((e) =>
+              osText(e['routeId']).isNotEmpty &&
+              ['for', 'against', 'unknown'].contains(e['side']))
+          .toList(),
       importance: osNumber(j['importance']),
       occupancy: osNumber(j['occupancy']),
       source: osText(j['source']));
@@ -239,6 +264,13 @@ class SelfOsReview {
   final Map<String, double> scores;
   final List<String> effectiveMotives;
   final bool motiveFeedbackRecorded;
+  bool get mayGeneralize => SelfOsActionFacts.mayGeneralize(notes);
+  String get actionLabel => switch (notes['attemptStatus']) {
+        'started_blocked' => '已尝试 · 途中受阻',
+        'revised_on_new_information' => '依据新信息改道',
+        _ => {'done': '已行动', 'partial': '部分行动', 'notDone': '未行动'}[outcome] ??
+            '尚待核实',
+      };
   double? get predictedDiscomfort =>
       osNumber(osMap(snapshot['scores'])['predictedDiscomfort'], 10);
   double? get predictionError =>
@@ -292,6 +324,7 @@ class SelfOsCase {
   String problem;
   bool retrospective;
   int round = 1;
+  int storageRevision = 0;
   String blocker = 'unknown';
   String routeStatus = 'experimental';
   DateTime? committedAt;
@@ -470,7 +503,10 @@ class SelfOsCase {
     if (!motives.any((m) => m.selected && m.side == 'for') ||
         !motives.any((m) => m.selected && m.side == 'against'))
       throw const FormatException('请同时选入至少一个正方动机和一个反方动机');
-    final gate = SelfOsV37Rules.gate(v37);
+    if (text('routeId').isNotEmpty &&
+        !v37.routes.any((r) => r.id == text('routeId')))
+      throw const FormatException('关联路线已改变，请先重新选择');
+    final gate = SelfOsV37Rules.gate(v37, routeId: text('routeId'));
     if (!gate.mayCommit)
       throw FormatException('${gate.label}：${gate.reasons.first}');
     if (text('newInformation').trim().isNotEmpty &&
@@ -484,6 +520,7 @@ class SelfOsCase {
     }
     if (commitment != null) v37.priorCommitments.add(osClone(commitment!));
     committedAt = DateTime.now();
+    v37.settings['actionRouteId'] = text('routeId');
     v37.settings['phase'] =
         gate.action == 'EXPERIMENT' ? 'experiment' : 'commit';
     commitment = osClone({
@@ -544,6 +581,7 @@ class SelfOsCase {
         review.learning.trim().isEmpty ||
         review.context.trim().isEmpty)
       throw const FormatException('请记录真实行动、结果、情境和至少一条新证据');
+    review.notes.addAll(SelfOsActionFacts.normalize(review.notes));
     reviews.add(review);
     v37.settings['phase'] = 'revise';
     v37.decisionTraces.add({
@@ -618,6 +656,7 @@ class SelfOsCase {
   Map<String, dynamic> toJson() => {
         'schemaVersion': 2,
         'v37': v37.toJson(),
+        'storageRevision': storageRevision,
         'guide': guide.toJson(),
         'id': id,
         'problem': problem,
@@ -651,6 +690,10 @@ class SelfOsCase {
     c.guide = OsGuideState.fromJson(osMap(j['guide']));
     c.updatedAt = DateTime.tryParse(osText(j['updatedAt'])) ?? c.createdAt;
     c.round = (j['round'] as num?)?.toInt() ?? 1;
+    if (j.containsKey('storageRevision') &&
+        (j['storageRevision'] is! int || (j['storageRevision'] as int) < 0))
+      throw const FormatException('案例保存版本损坏，请保留原始资料后检查');
+    c.storageRevision = j['storageRevision'] as int? ?? 0;
     c.blocker =
         selfOsBlockers.containsKey(j['blocker']) ? j['blocker'] : 'unknown';
     c.routeStatus = selfOsRouteStates.containsKey(j['routeStatus'])
@@ -676,6 +719,8 @@ class SelfOsCase {
 }
 
 class SelfOsProfile {
+  int storageRevision = 0;
+  final Map<String, dynamic> experienceSettings = {'remindersEnabled': false};
   final Map<String, String> manual = {};
   final List<Map<String, dynamic>> principles = [];
   final List<Map<String, dynamic>> tradeoffs = [];
@@ -683,6 +728,8 @@ class SelfOsProfile {
   String activeCaseId = '', activeRouteId = '';
   Map<String, dynamic> toJson() => {
         'schemaVersion': 2,
+        'experienceSettings': experienceSettings,
+        'storageRevision': storageRevision,
         'strengths': strengths.map((s) => s.toJson()).toList(),
         'activeCaseId': activeCaseId,
         'activeRouteId': activeRouteId,
@@ -694,6 +741,8 @@ class SelfOsProfile {
     if (j.isNotEmpty && ![1, 2].contains(j['schemaVersion']))
       throw const FormatException('无法读取此版本的 Self OS 个人模型');
     return SelfOsProfile()
+      ..storageRevision = j['storageRevision'] as int? ?? 0
+      ..experienceSettings.addAll(osMap(j['experienceSettings']))
       ..strengths.addAll(osMaps(j['strengths']).map(OsStrength.new))
       ..activeCaseId = osText(j['activeCaseId'])
       ..activeRouteId = osText(j['activeRouteId'])

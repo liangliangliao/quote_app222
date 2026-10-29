@@ -8,6 +8,7 @@ import 'self_os_insights.dart';
 import 'self_os_learning.dart';
 import 'self_os_progress.dart';
 import 'self_os_representation_learning.dart';
+import 'self_os_principles.dart';
 
 typedef SelfOsGenerate = Future<String> Function(
     {required String prompt,
@@ -47,6 +48,10 @@ class SelfOsAiService {
 来源冲突与过期材料必须保留。关键未知会翻转高风险决定时先获取证据，不能用更多激励绕过。
 未来因果需要条件、证据与未知边界，保留双向动机和对称的选项展开，不用单一预言替代分支。
 力量不是赞美标签，行为变化优先比较 K/M/Att/E/T/Skill，跨情境重复证据才支持稳定模式。
+个人原则仅为已认可的、有来源且有条件的经验启发；不能当作强制命令或无条件高分。
+原则本身和动机排序分都不能作为证明原则正确的新证据；保留合法反方与其他现实路线。
+已发生事实与可干预条件分开，未知保留未知；面对伤害、强迫、不公或安全威胁，保护、求助和适当合法渠道优先，不劝顺从认命。
+不诊断他人永久本性；区分自己的行动、对方自主选择与需核实的契约法定义务。
 James 五类只描述本次决意过程，尚未形成时不分类；不替用户定义高尚/低级动机。
 不要诊断疾病或建议危险实验。简洁中文，不使用 Markdown 代码块。''';
 
@@ -75,6 +80,8 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
 
   Future<List<SelfOsDesire>> discover(
       SelfOsCase c, List<SelfOsCase> history) async {
+    SelfOsPrinciples.assertRemoteAllowed(c);
+    history = SelfOsPrinciples.allowedHistory(c, history);
     // Deliberately exclude the user's Why Tree and self-explanations here.
     final j = await _request(
         '仅根据原始问题独立提出5–10个不同的欲求假设。不要把目标/手段误当欲求。返回 {"desires":[{"title":"", "support":"来自原始输入的支持或明确暂无", "counter":"反证或缺失", "question":"可验证的反事实问题", "confidence":0到100}]}',
@@ -104,12 +111,20 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
       {SelfOsProfile? profile,
       void Function(int)? progress,
       bool Function()? isCancelled}) async {
+    SelfOsPrinciples.assertRemoteAllowed(c);
+    history = SelfOsPrinciples.allowedHistory(c, history);
+    if (profile != null)
+      profile = SelfOsPrinciples.analysisProfile(profile, history, c);
     final result = <SelfOsMotive>[];
     final names = <String>{};
+    final knownIds = {
+      ...SelfOsPrinciples.evidence(history, currentCaseId: c.id).keys,
+      ...c.v37.evidence.map((e) => e.id),
+    };
     for (var batch = 0; batch < 3; batch++) {
       if (isCancelled?.call() == true) throw const SelfOsAiCancelled();
       final j = await _request(
-          '发散第${batch + 1}/3批，每批20个有因果机制的真实候选动机，与已有候选去重。覆盖${selfOsMotiveTypes.join('、')}。每批同时包含正方和反方，不用口号。优先用 personalEvidence 中已验证力量与真实历史，力量使用必须有具体机制和过度使用边界；仅可引用提供的 strengthId，未验证力量只能作实验候选。关联已有 optionId、desireId；标注 horizon(now/near/long)、attention(foreground/midground/background/omitted)、importance(重要度)与occupancy(注意占据)，两者分开。重要度是待校准建议，不替用户确认长期价值。返回 {"motives":[{"title":"简短动机", "type":"上述类别", "side":"for或against", "layer":"理性 / 概念 或 直观 / 现场 或 结构 / 环境", "kind":"事实 或 概率推断 或 想象模拟", "reason":"因果解释，不超过40字", "predicted":0到100, "credibility":0到100, "vividness":0到100, "presence":0到100, "importance":0到100, "occupancy":0到100, "optionId":"已有路线id或空", "desireId":"已有欲求id或空", "strengthId":"实际提供的力量id或空", "horizon":"now/near/long", "attention":"foreground/midground/background/omitted"}]}',
+          '发散第${batch + 1}/3批，每批20个有因果机制的真实候选动机，与已有候选去重。覆盖${selfOsMotiveTypes.join('、')}。每批同时包含正方和反方，不用口号。优先用 personalEvidence 中已验证力量与真实历史，力量使用必须有具体机制和过度使用边界；仅可引用提供的 strengthId，未验证力量只能作实验候选。关联已有 optionId、desireId；返回 semanticKey（同义理由同一键）、真实 evidenceIds，以及 routeEffects（routeId、side=for/against/unknown、condition、evidenceIds）；同一理由对不同路线可以有不同方向。不编造ID。标注 horizon(now/near/long)、attention(foreground/midground/background/omitted)、importance(重要度)与occupancy(注意占据)，两者分开。重要度是待校准建议，不替用户确认长期价值。返回 {"motives":[{"title":"简短动机", "type":"上述类别", "side":"for或against", "layer":"理性 / 概念 或 直观 / 现场 或 结构 / 环境", "kind":"事实 或 概率推断 或 想象模拟", "reason":"因果解释，不超过40字", "predicted":0到100, "credibility":0到100, "vividness":0到100, "presence":0到100, "importance":0到100, "occupancy":0到100, "optionId":"已有路线id或空", "desireId":"已有欲求id或空", "strengthId":"实际提供的力量id或空", "horizon":"now/near/long", "attention":"foreground/midground/background/omitted"}]}',
           {
             'case': _context(c),
             'history': SelfOsEngineService.historyForAi(history),
@@ -126,6 +141,20 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
             !['for', 'against'].contains(row['side']) ||
             !selfOsMotiveTypes.contains(row['type'])) continue;
         if (!names.add(title)) continue;
+        row['evidenceIds'] =
+            osStrings(row['evidenceIds']).where(knownIds.contains).toList();
+        row['userStatus'] = 'candidate';
+        row['routeEffects'] = osMaps(row['routeEffects'])
+            .where((e) =>
+                c.v37.routes.any((r) => r.id == e['routeId']) &&
+                ['for', 'against', 'unknown'].contains(e['side']))
+            .map((e) => {
+                  ...e,
+                  'evidenceIds': osStrings(e['evidenceIds'])
+                      .where(knownIds.contains)
+                      .toList()
+                })
+            .toList();
         // A generated claim is never promoted to a verified fact by the model.
         row['kind'] = row['kind'] == '想象模拟' ? '想象模拟' : '概率推断';
         row['strengthId'] =
@@ -153,7 +182,7 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
         !result.any((m) => m.side == 'for'))
       throw const FormatException('有效且去重的候选不足 50 个，或缺少正反方；原有动机已保留，请重试');
     final fingerprint = SelfOsEngineService.motiveFingerprint(history);
-    return result.take(100).toList()
+    return result.take(70).toList()
       ..sort((a, b) => SelfOsEngineService.motiveRank(b, fingerprint)
           .compareTo(SelfOsEngineService.motiveRank(a, fingerprint)));
   }
@@ -186,24 +215,39 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
         'problem': c.problem,
         'blocker': c.blocker,
         'round': c.round,
-        'fields': c.fields.map((k, v) =>
+        'fields': Map<String, String>.fromEntries(
+            c.fields.entries.where((e) => !e.key.startsWith('review.'))).map((k,
+                v) =>
             MapEntry(k, v.length > 1800 ? '${v.substring(0, 1800)}（已截取）' : v)),
         'scores': c.scores,
         'hypotheses': c.desires.take(30).map((d) => d.toJson()).toList(),
         'whyTree': c.whyTree.take(40).map((n) => n.toJson()).toList(),
-        'workbench': c.v37.toJson()
-          ..remove('priorCommitments')
-          ..remove('pendingProposal')
-          ..remove('knowledgeBefore')
-          ..remove('knowledgeTraces')
-          ..remove('causalTraces')
-          ..remove('decisionTraces'),
+        'workbench': _analysisWorkbench(c),
         'selectedMotives': c.motives
             .where((m) => m.selected)
             .take(30)
             .map((m) => m.toJson())
             .toList(),
       };
+
+  Map<String, dynamic> _analysisWorkbench(SelfOsCase c) {
+    final workbench = c.v37.toJson()
+      ..remove('priorCommitments')
+      ..remove('pendingProposal')
+      ..remove('knowledgeBefore')
+      ..remove('knowledgeTraces')
+      ..remove('causalTraces')
+      ..remove('decisionTraces');
+    final settings = osMap(workbench['settings'])
+      ..remove('principleApplications')
+      ..remove('motiveRecommendationRuns');
+    settings['changeabilityAssessments'] =
+        osMaps(settings['changeabilityAssessments'])
+            .where((a) => a['stale'] != true)
+            .toList();
+    workbench['settings'] = settings;
+    return workbench;
+  }
 
   Map<String, dynamic> _personalEvidence(List<SelfOsCase> history,
           SelfOsProfile? profile, SelfOsCase current) =>
@@ -255,6 +299,9 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
 
   Future<OsAnalysisProposal> analyseV37(SelfOsCase c, List<SelfOsCase> history,
       SelfOsProfile profile, String task) async {
+    SelfOsPrinciples.assertRemoteAllowed(c);
+    history = SelfOsPrinciples.allowedHistory(c, history);
+    profile = SelfOsPrinciples.analysisProfile(profile, history, c);
     final instruction = OsAnalysisProposal.instructions[task];
     if (instruction == null) throw ArgumentError.value(task);
     final j = await _request(
@@ -278,6 +325,9 @@ James 五类只描述本次决意过程，尚未形成时不分类；不替用�
 
   Future<OsGuideFrame> guide(
       SelfOsCase c, List<SelfOsCase> history, SelfOsProfile profile) async {
+    SelfOsPrinciples.assertRemoteAllowed(c);
+    history = SelfOsPrinciples.allowedHistory(c, history);
+    profile = SelfOsPrinciples.analysisProfile(profile, history, c);
     const instruction = '''你正在陪用户理清一个真实困惑。请承担理解、取舍和串联工作，不要求用户填写分析框架。
 先准确回应具体处境，区分想接近的欲求和想保护的价值。解释保持暂定，主动保留其他解释，不把想换手段等同于欲求改变。
 每轮只问一个最能改变下一步的问题。说明为什么问，可给最多3个易区分的选项，允许用户自由表达或不确定。
@@ -347,9 +397,85 @@ insight 无内容时为 null；早期 routes 可为空。每段不超过400字�
         knownGapIds: c.v37.gaps.map((g) => g.id).toSet());
   }
 
+  Future<List<Map<String, dynamic>>> principleCandidates(
+      SelfOsCase c, List<SelfOsCase> history) async {
+    SelfOsPrinciples.assertRemoteAllowed(c);
+    history = SelfOsPrinciples.allowedHistory(c, history);
+    final at = DateTime.now();
+    final sources =
+        SelfOsPrinciples.evidence(history, currentCaseId: c.id, knownAt: at);
+    if (sources.isEmpty) return [];
+    final response = await _request('''从允许的真实经历提出0至3条可撤回的个人经验原则；没有可靠方法时返回空列表。
+先主动搜索反例，逐项比较任务、当时认识、状态、资源、外界要求、他人参与与时间；不可比就保留不同条件，不强行统一。
+单次也可作暂定候选，次数不是稳定人格定律。只提出可以观察的小动作，保留反方、安全资格与他人自主权。
+每条含 condition(如果)、rule(那么先做什么)、notApplicable、riskGate、exception(推翻条件)、nextTest、comparability(可比与不可比处)、counterSearch(检查了什么，未找到不代表不存在)、evidenceIds与counterEvidenceIds。
+每个事实ID必须来自本次提供的experiences，不能引用模型假设、未来记录或推荐分；不生成用户认可状态，不声称已应用或有效。
+仅返回 {"principles":[上述结构],"unknowns":[仍待核实的事项]}。''', {
+      'currentProblem': c.problem,
+      'knownAt': at.toIso8601String(),
+      'experiences': [
+        for (final e in sources.entries)
+          {
+            'id': e.key,
+            'caseId': e.value.$1.id,
+            'task': e.value.$1.problem,
+            'context': e.value.$2.context,
+            'observed': e.value.$2.result,
+            'learning': e.value.$2.learning,
+            'kind': 'user_self_report',
+            'knownAt': e.value.$2.createdAt.toIso8601String(),
+          }
+      ],
+    }, 'principles', tokens: 4000);
+    if (response['principles'] is! List)
+      throw const FormatException('原则候选缺少结构，已保留原有记录');
+    final rows = osMaps(response['principles']);
+    if (rows.length != (response['principles'] as List).length ||
+        rows.length > 3) throw const FormatException('原则候选最多三条，已保留原有记录');
+    return [
+      for (final row in rows)
+        _validatedPrinciple(row, history, c.id, at)
+          ..['unknowns'] = osStrings(response['unknowns'])
+    ];
+  }
+
+  Map<String, dynamic> _validatedPrinciple(Map<String, dynamic> row,
+      List<SelfOsCase> history, String caseId, DateTime at) {
+    if ([
+      'condition',
+      'rule',
+      'notApplicable',
+      'riskGate',
+      'exception',
+      'nextTest',
+      'comparability',
+      'counterSearch'
+    ].any((k) => osText(row[k]).trim().isEmpty))
+      throw const FormatException('原则需有条件、出处、反例检查与下次检验');
+    if (row['evidenceIds'] is! List ||
+        row['counterEvidenceIds'] is! List ||
+        [
+          ...row['evidenceIds'],
+          ...row['counterEvidenceIds']
+        ].any((id) => id is! String)) throw const FormatException('原则来源ID格式无效');
+    return SelfOsPrinciples.candidate(row, osStrings(row['evidenceIds']),
+        osStrings(row['counterEvidenceIds']), history,
+        currentCaseId: caseId, at: DateTime.now())
+      ..addAll({
+        'comparability': row['comparability'],
+        'counterSearch': row['counterSearch'],
+        'source': 'AI候选 · 未经本人认可',
+        'evidenceKnownAt': at.toIso8601String()
+      });
+  }
+
   Future<List<Map<String, dynamic>>> suggest(
       SelfOsCase c, List<SelfOsCase> history, String task,
       {SelfOsProfile? profile}) async {
+    SelfOsPrinciples.assertRemoteAllowed(c);
+    history = SelfOsPrinciples.allowedHistory(c, history);
+    if (profile != null)
+      profile = SelfOsPrinciples.analysisProfile(profile, history, c);
     final allowed = allowedFields[task];
     if (allowed == null) throw ArgumentError.value(task);
     final taskPrompt = <String, String>{

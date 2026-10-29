@@ -44,6 +44,13 @@ class SelfOsProgress {
       c.v37.text('reviewedConflict') != conflictFingerprint(c);
 
   static String? actionBlocker(SelfOsCase c, {DateTime? at}) {
+    final frozenRoute = osText(osMap(c.commitment?['experiment'])['routeId']);
+    final limit = SelfOsV37Rules.taskLimit(c.v37,
+        at: at,
+        routeId: frozenRoute.isNotEmpty
+            ? frozenRoute
+            : osText(osMap(c.commitment?['fields'])['routeId']));
+    if (limit != null) return limit;
     if (c.v37.flag('requiresReconsideration') ||
         (c.text('newInformation').isNotEmpty &&
             !c.v37.flag('newInformationReviewed'))) {

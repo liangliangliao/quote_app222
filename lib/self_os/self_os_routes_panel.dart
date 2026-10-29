@@ -57,6 +57,13 @@ extension _RoutesPanel on _SelfOsWorkbenchState {
                       '一般价值 ${route.number('generalValue')?.toStringAsFixed(0) ?? '未知'}')
                 ]),
                 const SizedBox(height: 12),
+                text('实施难度：${const {
+                          'unknown': '未知',
+                          'low': '较低',
+                          'medium': '中等',
+                          'high': '较高'
+                        }[route.text('difficulty')] ?? '未知'} · '
+                    '依据：${route.text('difficultyBasis').isEmpty ? '尚待核实' : route.text('difficultyBasis')}。与欲求一致性和安全分别判断。'),
                 for (final e in {
                   'desire': '服务欲求',
                   'ability': '能力与训练',
@@ -141,6 +148,13 @@ extension _RoutesPanel on _SelfOsWorkbenchState {
           OsInput('strength', '哪些力量可用？证据是什么？'),
           OsInput('cost', '完整代价：时间、压力、资源与不确定性'),
           OsInput('reality', '现实约束与尚未满足的条件'),
+          OsInput('difficulty', '当前实施难度（独立判断）', options: {
+            'unknown': '尚不清楚',
+            'low': '较低',
+            'medium': '中等',
+            'high': '较高'
+          }),
+          OsInput('difficultyBasis', '难在哪里？依据、可降低阻力的支持与未知'),
           OsInput('opportunityCost', '选择它会让什么让位？'),
           OsInput('relation', '与当前主线的关系', options: {
             'enhance': '增强',

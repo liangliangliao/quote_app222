@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/self_os/self_os_ai_service.dart';
+import 'package:quote_app/self_os/self_os_case_page.dart';
 import 'package:quote_app/self_os/self_os_guide_page.dart';
 import 'package:quote_app/self_os/self_os_home_page.dart';
 import 'package:quote_app/self_os/self_os_models.dart';
@@ -58,6 +59,68 @@ Widget guideApp(SelfOsCase c, MemoryRepository repo, SelfOsAiService ai,
             profile: SelfOsProfile()));
 
 void main() {
+  testWidgets('T331 引导等待期间原则资料修订，迟到分析不能重新采用旧资料', (tester) async {
+    final pending = Completer<String>();
+    final c = SelfOsCase(problem: '想换工作')
+      ..desires.add(SelfOsDesire(title: '自主'));
+    final repo = MemoryRepository();
+    final ai = SelfOsAiService(
+        generate: (
+                {required prompt,
+                required purpose,
+                required systemPrompt,
+                required maxTokens}) =>
+            pending.future);
+    await tester.pumpWidget(guideApp(c, repo, ai));
+    await tester.pump();
+    await tester.pump();
+    repo.profile.storageRevision++;
+    pending.complete(jsonEncode(guideResponse('problem', c.problem)));
+    await tester.pumpAndSettle();
+    expect(repo.records[c.id]!.guide.frame, isNull);
+    expect(find.textContaining('这次旧分析未采用'), findsOneWidget);
+    expect(repo.profile.storageRevision, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('T331 详细分析等待期间原则资料修订，旧候选不能写入', (tester) async {
+    final pending = Completer<String>();
+    final c = SelfOsCase(problem: '想换工作'), repo = MemoryRepository();
+    final ai = SelfOsAiService(
+        generate: (
+                {required prompt,
+                required purpose,
+                required systemPrompt,
+                required maxTokens}) =>
+            pending.future);
+    await tester.pumpWidget(MaterialApp(
+        home: SelfOsCasePage(
+            value: c,
+            repository: repo,
+            ai: ai,
+            history: [c],
+            profile: repo.profile,
+            initialAiTask: 'desires')));
+    await tester.pump();
+    await tester.pump();
+    repo.profile.storageRevision++;
+    pending.complete(jsonEncode({
+      'desires': List.generate(
+          5,
+          (i) => {
+                'title': '候选$i',
+                'support': '待核对的理由',
+                'counter': '存在不同解释',
+                'question': '是否适合当前条件？'
+              })
+    }));
+    await tester.pumpAndSettle();
+    expect(repo.records[c.id]!.desires, isEmpty);
+    expect(find.textContaining('这次旧分析未采用'), findsOneWidget);
+    expect(repo.profile.storageRevision, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('修改动作后旧边界确认失效，必须重新确认才能封存', (tester) async {
     final c = experimentGuide(), repo = MemoryRepository();
     await repo.saveCase(c);
@@ -166,7 +229,11 @@ void main() {
     await guideTap(tester, find.byKey(const ValueKey('guide_review')));
     expect(repo.records.values.single.reviews, hasLength(1));
     expect(repo.records.values.single.reviews.single.outcome, 'partial');
-    expect(find.text('这次，带走一条认识。'), findsOneWidget);
+    expect(find.text('这次，带走一条认识。'), findsOneWidget,
+        reason: tester
+            .widgetList<Text>(find.byType(Text))
+            .map((w) => w.data ?? '')
+            .join('\n'));
     expect(purposes, ['self_os.desires', 'self_os.guide', 'self_os.guide']);
     expect(tester.takeException(), isNull);
   });
