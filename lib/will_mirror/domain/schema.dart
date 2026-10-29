@@ -536,6 +536,7 @@ final Map<NodeKind, Json> nodeShapes = {
         'enum:tentative,multiple_contexts,contradicted,insufficient_evidence',
     'falsifier': 'text',
     'nextTest': 'text',
+    'reviewReason?': 'note',
     'unknowns': ['text']
   },
   NodeKind.manifestation: {
@@ -551,6 +552,7 @@ final Map<NodeKind, Json> nodeShapes = {
   },
   NodeKind.principle: {
     'summary': 'text',
+    'fieldCue?': 'text',
     'ifCondition': 'text',
     'thenAction': 'text',
     'exceptionRule': 'text',
@@ -558,6 +560,7 @@ final Map<NodeKind, Json> nodeShapes = {
     'maturity': 'enum:tentative,multiple_contexts,needs_review',
     'falsifier': 'text',
     'nextTest': 'text',
+    'reviewReason?': 'note',
     'riskGate': safetyState,
     'insightIds': ['text']
   },
@@ -571,6 +574,7 @@ final Map<NodeKind, Json> nodeShapes = {
     'application':
         'enum:unknown,applied_verified,applied_self_report,not_applied',
     'attemptIds': ['text'],
+    'preparationIds?': ['text'],
     'observationIds': ['text'],
     'detail': 'note'
   },

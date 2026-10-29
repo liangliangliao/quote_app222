@@ -36,10 +36,11 @@ class TextQuestion {
       {this.initial = '',
       this.hint = '',
       this.required = false,
+      this.maxLength = 8000,
       this.lines = 2});
   final String key, label, initial, hint;
   final bool required;
-  final int lines;
+  final int lines, maxLength;
 }
 
 Future<Map<String, String>?> askText(BuildContext context,
@@ -68,7 +69,7 @@ Future<Map<String, String>?> askText(BuildContext context,
                           controller: inputs[q.key],
                           minLines: q.lines,
                           maxLines: q.lines + 2,
-                          maxLength: 8000,
+                          maxLength: q.maxLength,
                           decoration: InputDecoration(
                               labelText: q.label,
                               hintText: q.hint,
@@ -76,7 +77,9 @@ Future<Map<String, String>?> askText(BuildContext context,
                           validator: (value) =>
                               q.required && (value ?? '').trim().isEmpty
                                   ? '请填写这一项'
-                                  : null),
+                                  : (value ?? '').runes.length > q.maxLength
+                                      ? '请保留在 ${q.maxLength} 字以内'
+                                      : null),
                       const SizedBox(height: 14)
                     ],
                     FilledButton(
@@ -425,6 +428,7 @@ const fieldLabels = <String, String>{
   'nextStep': '接下来能做的一步',
   'category': '经验所属方面',
   'maturity': '经验支持程度',
+  'reviewReason': '为什么需要重新对照',
   'ifCondition': '什么情境下',
   'thenAction': '可观察的做法',
   'exceptionRule': '哪些情况下不适用',

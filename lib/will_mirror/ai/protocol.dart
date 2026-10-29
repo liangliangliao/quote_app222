@@ -172,6 +172,8 @@ matrix每项欲求分别列now/near/long，有条件与支持，未知不得编�
 按相关性给consequence时间窗口/重复累计阈值/暂时可恢复或不可逆；未来日期只有已知才填，永久损失的感受不是事实。
 给有证据相关的obstacle（阶段、机制、控制度、客观与T0信念、支持反例）、taskRequirement、supportVariant。未知身体条件不猜测不强制问卷，技能可训练有支持变体；功能限制仅属特定任务。
 实际共享资源才给resourceConflict（兼容/先后/竞争/互斥/未知），没有容量证据不得强迫舍弃。给最多2项strengthMatch及必要boundaryReview，个人行动/他人自主/已证义务/待核实分别写。
+strengthMatch非unknown必须引用本路线有真实出处的requirementIds和有reported/observed/verified出处的capabilityIds，supportVariantIds也须属于该路线；没有资料就unknown或零条，不为新兴趣补造能力证据。风险门槛不能低于路线和当前安全评估。
+boundaryReview的verifiedObligations必须直接引用已授权外部观察或已核实的taskRequirement；用户推测、未核实约定放unknownObligations，允许保留未知。
 若授权资料里有已接受的principle，比较真实场景、反例和新风险，生成0–1个principleMatch；不适用或未知可零条，不能自动采用。
 不新增路线总分，不因高欲求或Top5越过硬风险。''',
       AnalysisStage.prepare =>
@@ -189,12 +191,14 @@ frames有事实/可能未来/真实或可能障碍/具体应对，claimType严�
 behaviorQualification逐项检查行为观察可靠性、真实可选路线、当时自主、动机进入审议的机会、当时已知代价、情境覆盖和替代解释七个维度；未知必须保留未知。已完成行为不自动是自由取舍证据。decisionModes仅在有具体事件证据时给James五类决意机制的竞争性候选（可空或unknown），不能给人贴类型标签。
 已实施且先于结果不等于必要或唯一因果；required_by_rule必须规则证据。区分信息/策略/执行/不可控损失/道德/预期后悔。保留真实责任、补救、未知和下次低风险验证。
 revisedClaims引用哪些既有判断因此获支持/受质疑/未知；不能回写过去事实。changeability是特定事实的状态，不是人的永久边界；不公/伤害允许保护、求助、投诉/合法渠道，不劝忍受。
+changeability.factId仅指具体事实、障碍或任务条件；非uncertain必须有真实来源。irreversible_past只能指有已发生时点的本人/授权事实，不能指未来猜测。hard_limit_for_task必须有routeId及该任务已verified的taskRequirement出处，否则uncertain并给核实步骤。modifiable_with_support写出工具、协作或训练等条件、safeAlternatives和reviewCondition。
 得到不代表满意、初次不适不等于终生不适。无获得后观察satisfactionGap只能未知。''',
       AnalysisStage.learning =>
         '''S8：使用真实经历及反例生成0–3个insight、0–2个manifestation、0–3个principle；无可靠证据允许全部为空。
 主动搜索可比反例并核查角色/知识/任务/身体技能/资源/机会/自主/时间差。两件经历不自动独立；单次只tentative；没有真实选择机会/被迫行为不能证明自愿欲求。
 不硬统一所有人生经历，一个行动可多动机、不同经历可独立。新兴趣缺历史不构成反证。
 原则必须可观察thenAction、具体ifCondition、例外、支持反证、适用contexts、风险、失效条件及下次验证；最多3个，未认可不能义务化。
+fieldCue可选，为本人可修改的现场短提醒，中文最多75字；完整条件与例外仍保留。遇到已有needs_review或contradicted版本，先对照counterIds与reviewReason，若修订必须revisionOf当前版；没有足够证据可维持待复核或不输出，不能强行恢复成熟度。
 Top5分数、原则被打开和被认可不能作为原则有效性证据。实际应用与结果、满意分别分析。可给有真实任务能力出处的strengthMatch，不做天赋/道德排名。
 如果已有principle/insight被新反例推翻，返回修订新版本revisionOf旧ID，并解释条件改变；不默默保留旧结论。''',
       AnalysisStage.reappraise =>

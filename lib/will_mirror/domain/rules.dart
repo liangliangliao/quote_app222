@@ -110,6 +110,7 @@ class EvidenceRules {
         'observationIds': NodeKind.observation,
         'attemptId': NodeKind.attempt,
         'attemptIds': NodeKind.attempt,
+        'preparationIds': NodeKind.interventionExecution,
         'interventionId': NodeKind.intervention,
         'interventionIds': NodeKind.intervention,
         'decisionId': NodeKind.decision,
@@ -254,6 +255,10 @@ class EvidenceRules {
         }
       }
       if ({NodeKind.insight, NodeKind.principle}.contains(node.kind)) {
+        if (node.kind == NodeKind.principle &&
+            node.text('fieldCue').runes.length > 75) {
+          throw const MirrorProblem('现场提醒请保留在 75 字以内，完整条件与出处仍可展开');
+        }
         final roots = actualRoots(node, all);
         if (roots.isEmpty)
           throw const MirrorProblem('个人经验结论必须有真实证据，排名和假设不能循环自证');
@@ -293,10 +298,99 @@ class EvidenceRules {
           }
         }
       }
-      if (node.kind == NodeKind.changeability &&
-          node.text('classification') == 'hard_limit_for_task' &&
-          node.evidenceIds.isEmpty) {
-        throw const MirrorProblem('没有证据，不能宣布永久或硬性限制');
+      if (node.kind == NodeKind.strengthMatch) {
+        final route = all[node.text('routeId')]!;
+        final superseded =
+            all.values.map((n) => n.revisionOf).whereType<String>().toSet();
+        final requirements =
+            node.strings('requirementIds').map((id) => all[id]!);
+        final capabilities =
+            node.strings('capabilityIds').map((id) => all[id]!);
+        if (requirements.any((n) => n.text('routeId') != route.id) ||
+            node
+                .strings('supportVariantIds')
+                .any((id) => all[id]!.text('routeId') != route.id)) {
+          throw const MirrorProblem('能力机会必须对应这项任务自己的要求与支持方式');
+        }
+        if (node.text('state') != 'unknown' &&
+            (requirements.isEmpty ||
+                capabilities.isEmpty ||
+                requirements.any((n) => actualRoots(n, all).isEmpty) ||
+                capabilities.any((n) =>
+                    !{'reported', 'observed', 'verified'}
+                        .contains(n.text('status')) ||
+                    (!n.isFact && actualRoots(n, all).isEmpty)))) {
+          throw const MirrorProblem('任务能力判断需要具体任务要求与真实能力出处；资料不足请保留未知');
+        }
+        if (node.text('riskGate') == 'clear' &&
+            (route.text('safety') != 'clear' ||
+                all.values.any((n) =>
+                    n.usable &&
+                    !superseded.contains(n.id) &&
+                    n.kind == NodeKind.routeFit &&
+                    n.text('routeId') == route.id &&
+                    n.text('hardSafetyGate') == 'blocked'))) {
+          throw const MirrorProblem('已有优势不能覆盖任务的安全或资格限制');
+        }
+      }
+      if (node.kind == NodeKind.changeability) {
+        final fact = all[node.text('factId')];
+        const factKinds = {
+          NodeKind.evidence,
+          NodeKind.obstacle,
+          NodeKind.taskRequirement,
+          NodeKind.capability,
+          NodeKind.attempt,
+          NodeKind.observation,
+          NodeKind.interventionExecution,
+          NodeKind.acquisition,
+          NodeKind.experience
+        };
+        if (fact == null || !factKinds.contains(fact.kind)) {
+          throw const MirrorProblem('可改变性只能针对具体事实、任务条件或障碍，不能针对人格或推荐分数');
+        }
+        if (node.text('classification') != 'uncertain' &&
+            actualRoots(node, all).isEmpty) {
+          throw const MirrorProblem('没有真实来源，暂时只能保留未知并安排核实');
+        }
+        if (node.strings('safeAlternatives').isEmpty) {
+          throw const MirrorProblem('请给出一个可选择的核实、补救或安全替代步骤');
+        }
+        if (node.text('classification') == 'hard_limit_for_task' &&
+            (node.body['routeId'] == null ||
+                !node.dependencies.any((id) {
+                  final source = all[id]!;
+                  return source.kind == NodeKind.taskRequirement &&
+                      source.text('routeId') == node.text('routeId') &&
+                      source.text('status') == 'verified' &&
+                      (parseTime(source.body['validUntil']) == null ||
+                          !parseTime(source.body['validUntil'])!
+                              .isBefore(node.recordedAt)) &&
+                      actualRoots(source, all).isNotEmpty;
+                }))) {
+          throw const MirrorProblem('任务硬限制需要该任务已核实的具体要求，不能由一次受阻推断');
+        }
+        if (node.text('classification') == 'irreversible_past' &&
+            !(fact.isFact &&
+                !(fact.kind == NodeKind.evidence &&
+                    {'belief', 'wish'}.contains(fact.text('category'))) &&
+                (fact.phase == TimePhase.t2 ||
+                    fact.phase == TimePhase.t3 ||
+                    (fact.happenedAt != null &&
+                        !fact.happenedAt!.isAfter(node.recordedAt))))) {
+          throw const MirrorProblem('只有已发生的事实才能标为不可重写的过去；未来与解释仍需核实');
+        }
+      }
+      if (node.kind == NodeKind.boundaryReview &&
+          node.strings('verifiedObligations').isNotEmpty &&
+          !node.evidenceIds.any((id) {
+            final source = all[id]!;
+            return source.origin == EvidenceOrigin.authorizedObservation ||
+                (source.kind == NodeKind.taskRequirement &&
+                    source.text('status') == 'verified' &&
+                    actualRoots(source, all).isNotEmpty);
+          })) {
+        throw const MirrorProblem('他人的法定或契约义务需要核实出处；否则请放在待核实义务中');
       }
       if (node.kind == NodeKind.principleApplication) {
         final principle = all[node.text('principleId')];
@@ -312,17 +406,22 @@ class EvidenceRules {
         if (actualApplication) {
           final observed = [
             ...node.strings('attemptIds'),
-            ...node.strings('observationIds')
+            ...node.strings('observationIds'),
+            ...node.strings('preparationIds')
           ].map((id) => all[id]).any((n) =>
               n != null &&
               n.usable &&
               n.isFact &&
               n.caseId == file.id &&
               n.episodeId == file.episodeId &&
-              (n.kind == NodeKind.attempt
-                  ? !{'unknown', 'not_started'}.contains(n.text('stage'))
-                  : n.kind == NodeKind.observation &&
-                      n.text('actionState') != 'unknown'));
+              ((n.kind == NodeKind.attempt &&
+                      !{'unknown', 'not_started'}.contains(n.text('stage'))) ||
+                  (n.kind == NodeKind.observation &&
+                      {'completed', 'partial', 'changed', 'blocked'}
+                          .contains(n.text('actionState'))) ||
+                  (n.kind == NodeKind.interventionExecution &&
+                      {'executed', 'partly_executed'}
+                          .contains(n.text('state')))));
           if (node.phase.index < TimePhase.t2.index ||
               node.text('detail').trim().isEmpty ||
               !observed) {
@@ -373,9 +472,10 @@ class EvidenceRules {
     }
     if (principle.dependencies.any((id) => all[id]?.usable != true))
       return false;
-    final matches = file
-        .current(NodeKind.principleMatch)
-        .where((n) => n.text('principleId') == principle.id);
+    final matches = file.current(NodeKind.principleMatch).where((n) =>
+        n.text('principleId') == principle.id &&
+        (file.selectedRouteId == null ||
+            n.strings('routeIds').contains(file.selectedRouteId)));
     final contextVersion = matches.lastOrNull?.id ?? principle.id;
     final reviewedAt = file.nodes.indexWhere((n) => n.id == contextVersion);
     if (file.current(NodeKind.evidence).any((n) =>
@@ -583,6 +683,48 @@ class CaseCommands {
         stage: stage,
         step: step,
         now: clock());
+  }
+
+  /// Keep the original claim and the version used at T0/T1 intact. A counter
+  /// example is evidence to review, rather than a verdict about the person.
+  CaseFile addCounterEvidence(CaseFile file, String targetId, String text) {
+    final target = file.node(targetId);
+    if (target == null ||
+        !target.usable ||
+        !{NodeKind.principle, NodeKind.insight}.contains(target.kind) ||
+        !file
+            .current(target.kind, allEpisodes: true)
+            .any((n) => n.id == targetId)) {
+      throw const MirrorProblem('这项经验已有更新，请对照当前版本补充反例');
+    }
+    if (text.trim().isEmpty) throw const MirrorProblem('请记录具体发生的不同经历');
+    final evidence = record(
+        file,
+        NodeKind.evidence,
+        {
+          'text': text.trim(),
+          'category': 'counter',
+          'source': 'self_report',
+          'sensitive': false,
+          'scope': 'case_only',
+        },
+        knownAt: clock().toUtc());
+    final revision = record(
+        file,
+        target.kind,
+        {
+          ...target.body,
+          'maturity': target.kind == NodeKind.principle
+              ? 'needs_review'
+              : 'contradicted',
+          'reviewReason': '补充了不同经历。先对照情境和反例，再决定修改、保留条件或归档。',
+        },
+        evidenceIds: target.evidenceIds,
+        counterIds: {...target.counterIds, evidence.id}.toList(),
+        links: [target.id],
+        status: NodeStatus.draft,
+        revisionOf: target.id);
+    return append(file, [evidence, revision]);
   }
 
   CaseFile feedback(CaseFile file, String targetId, String action,

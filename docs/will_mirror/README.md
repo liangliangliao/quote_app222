@@ -60,6 +60,7 @@ flutter build apk --release --target-platform android-arm64
 
 ## 验收资料
 
+- [2026-10-29 主分支核查、补齐与 92.5% 实现覆盖口径](AUDIT_2026_10_29.md)
 - [本轮真机修复、原则开发与 P0 完成/待验收矩阵](CONTINUATION.md)
 - [覆盖安装首次打开问题及真机复测](DEVICE_STARTUP_FIX.md)
 - [T1–T366 对应表](ACCEPTANCE.md)及 [逐条原文/文件/状态](acceptance.json)

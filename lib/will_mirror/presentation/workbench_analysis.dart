@@ -480,8 +480,17 @@ extension _AnalysisViews on _CaseWorkbenchState {
       if (f.current(NodeKind.resourceConflict).isNotEmpty)
         TextButton(onPressed: _tradeoff, child: const Text('记录我选择的聚焦、并行或暂缓')),
       _nodeList(NodeKind.consequence, title: '时间中的后果与恢复条件'),
-      _nodeList(NodeKind.strengthMatch, title: '已有能力可以用在哪里'),
-      _nodeList(NodeKind.boundaryReview, title: '自己能做的事与他人的自主'),
+      for (final match in f.current(NodeKind.strengthMatch))
+        StrengthOpportunityCard(
+            node: match,
+            resolve: c.resolve,
+            onDetails: () => _details(match),
+            onRecord: () => _evidence(category: 'capability')),
+      for (final boundary in f.current(NodeKind.boundaryReview))
+        InterpersonalBoundaryCard(
+            node: boundary,
+            onDetails: () => _details(boundary),
+            onRecord: _evidence),
       const SizedBox(height: 10),
       TextButton.icon(
           onPressed: _busy ? null : () => _analyze(AnalysisStage.options),

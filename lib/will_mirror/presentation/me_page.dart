@@ -186,19 +186,29 @@ class _MirrorMePageState extends State<MirrorMePage> {
         ]),
       ])));
   Widget _principle(MirrorNode n) {
+    final versions = <MirrorNode>[n];
+    var previous = c.resolve(n.revisionOf ?? '');
+    final seen = {n.id};
+    while (previous != null && seen.add(previous.id)) {
+      versions.add(previous);
+      previous = c.resolve(previous.revisionOf ?? '');
+    }
+    final lineage = versions.map((v) => v.id).toSet();
     final applications = c.files
-        .expand((f) => f.nodes)
-        .where((a) =>
-            a.kind == NodeKind.principleApplication &&
-            a.text('principleId') == n.id &&
-            a.usable)
+        .expand(
+            (f) => f.current(NodeKind.principleApplication, allEpisodes: true))
+        .where((a) => lineage.contains(a.text('principleId')))
         .toList();
+    final needsReview = n.text('maturity') == 'needs_review';
     return Padding(
         padding: const EdgeInsets.only(bottom: 14),
         child: MirrorCard(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          MirrorTag(statusLabel(n.status)),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            MirrorTag(statusLabel(n.status)),
+            MirrorTag(needsReview ? '需要对照反例' : humanValue(n.text('maturity'))),
+          ]),
           const SizedBox(height: 12),
           Text(n.text('summary'),
               style: Theme.of(context).textTheme.titleMedium),
@@ -207,8 +217,14 @@ class _MirrorMePageState extends State<MirrorMePage> {
           const SizedBox(height: 10),
           Text('例外：${n.text('exceptionRule')}'),
           Text('仍需检验：${n.text('nextTest')}'),
+          Text(
+              '支持 ${n.evidenceIds.length} 条 · 反例 ${n.counterIds.length} 条；认可不代表已证实有效。'),
+          if (n.text('reviewReason').isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(n.text('reviewReason')),
+          ],
           Wrap(spacing: 6, children: [
-            if (n.status != NodeStatus.accepted)
+            if (n.status != NodeStatus.accepted && !needsReview)
               TextButton(
                   onPressed: () => _feedback(n, 'accept'),
                   child: const Text('认可这条原则')),
@@ -229,6 +245,19 @@ class _MirrorMePageState extends State<MirrorMePage> {
                     title: const Text('原始证据、反证和版本'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _details(n)),
+                if (versions.length > 1)
+                  ExpansionTile(
+                    title: Text('${versions.length} 个版本 · 保留当时的认识'),
+                    children: [
+                      for (final version in versions)
+                        ListTile(
+                          title: Text(version.text('summary')),
+                          subtitle: Text(
+                              '${phaseLabel(version.phase)} · ${humanValue(version.text('maturity'))}'),
+                          onTap: () => _details(version),
+                        ),
+                    ],
+                  ),
                 for (final a in applications)
                   ListTile(
                       title: Text(
@@ -255,8 +284,8 @@ class _MirrorMePageState extends State<MirrorMePage> {
       const TextQuestion('text', '什么情境下，发生了什么不同的事？', required: true, lines: 3)
     ]);
     if (value != null && mounted)
-      await runUiAction(context,
-          () => c.addEvidence(n.caseId, value['text']!, category: 'counter'));
+      await runUiAction(
+          context, () => c.addCounterEvidence(n.caseId, n.id, value['text']!));
   }
 
   Future<void> _edit(MirrorNode n) async {
@@ -268,7 +297,15 @@ class _MirrorMePageState extends State<MirrorMePage> {
       TextQuestion('exceptionRule', '什么时候不适用？',
           initial: n.text('exceptionRule'), required: true),
       TextQuestion('falsifier', '什么证据会使你重新考虑？',
-          initial: n.text('falsifier'), required: true)
+          initial: n.text('falsifier'), required: true),
+      TextQuestion('fieldCue', '现场只提醒这一句（75 字以内）',
+          maxLength: 75,
+          initial: n.text('fieldCue').isNotEmpty
+              ? n.text('fieldCue')
+              : n.text('thenAction').runes.length <= 75
+                  ? n.text('thenAction')
+                  : '',
+          required: true),
     ]);
     if (value != null && mounted)
       await runUiAction(
@@ -280,7 +317,8 @@ class _MirrorMePageState extends State<MirrorMePage> {
                 ...n.body,
                 ...value,
                 'summary': '${value['ifCondition']}时，${value['thenAction']}',
-                'maturity': 'tentative'
+                'maturity': 'tentative',
+                'reviewReason': '本人调整了条件与做法，仍需下一次真实经历检验。',
               },
               evidenceIds: n.evidenceIds,
               counterIds: n.counterIds,

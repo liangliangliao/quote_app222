@@ -13,6 +13,7 @@ import 'sheets.dart';
 import 'tide.dart';
 import 'visuals.dart';
 import 'journey_views.dart';
+import 'experience_cards.dart';
 
 part 'workbench_analysis.dart';
 part 'workbench_action.dart';
@@ -38,6 +39,7 @@ class CaseWorkbench extends StatefulWidget {
 
 class _CaseWorkbenchState extends State<CaseWorkbench> {
   String? _focusedReframeId;
+  String? _focusedPrincipleId;
   bool _expandedIssue = false;
   final _stepKeys = List.generate(7, (_) => GlobalKey());
   final _scroll = ScrollController();
@@ -96,6 +98,7 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
   Future<void> _act(Future<void> Function() action) =>
       runUiAction(context, action);
   void _focusReframe(String id) => setState(() => _focusedReframeId = id);
+  void _focusPrinciple(String id) => setState(() => _focusedPrincipleId = id);
   Future<void> _go(int step) async {
     await _act(() => c.advance(widget.caseId, step));
     if (!mounted) return;

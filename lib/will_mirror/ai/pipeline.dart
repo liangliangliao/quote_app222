@@ -246,7 +246,12 @@ class CaseAnalysisPipeline {
                 throw MirrorProblem(
                     '请用 revisionOf=${prior.id} 修订此路线已有的评估，不能并列追加');
             }
-            if ({AnalysisStage.scene, AnalysisStage.learning}.contains(stage)) {
+            if ({AnalysisStage.scene, AnalysisStage.learning}.contains(stage) ||
+                records.any((n) => {
+                      NodeKind.changeability,
+                      NodeKind.strengthMatch,
+                      NodeKind.boundaryReview
+                    }.contains(n.kind))) {
               await _qualityReview(stage, records, visible, cancel);
             }
             summary = result['summary'] as String;
@@ -469,14 +474,14 @@ class CaseAnalysisPipeline {
     if (records.isEmpty) return;
     final shape = {
       'violations': [
-        'enum:invented_fact,coercion_or_shame,unsafe_persuasion,permanent_label,temporal_backfill,unsupported_cause,source_mismatch'
+        'enum:invented_fact,coercion_or_shame,unsafe_persuasion,permanent_label,temporal_backfill,unsupported_cause,source_mismatch,fatalistic_acceptance,unsupported_obligation,principle_conflict'
       ]
     };
     final result = await model.complete(
         stage: stage,
         system: systemProtocol,
         prompt:
-            '独立质量复核，不改写记录。逐条对照授权来源与时间。检查是否编造事实/金额/他人话语、以羞耻恐惧胁迫、绕过现实安全/他人同意、作永久人格断言、倒填时点、把先后当必要因果、引用不支持的来源。允许忠实引用用户原话与有明确假想标签的自愿想象；不能误判为事实宣称。只返回 violations，确无这些违规时为空。\n${canonicalJson({
+            '独立质量复核，不改写记录。逐条对照授权来源与时间。检查是否编造事实/金额/他人话语、以羞耻恐惧胁迫、绕过现实安全/他人同意、作永久人格断言、倒填时点、把先后当必要因果、引用不支持的来源。涉及改变/接受时，只有已发生事实或有来源的特定任务限制能谈接纳；不得劝暴力、胁迫、剥削或歧视受害者顺从认命，保护与求助优先。不得要求平静或放弃权利才算成长。第三方自主与真实义务分别核实。多条原则不得变成相互矛盾的绝对命令，能力缺证不能当作终身限制。允许忠实引用用户原话与有明确假想标签的自愿想象；不能误判为事实宣称。只返回 violations，确无这些违规时为空。\n${canonicalJson({
               'proposed': records.map((n) => n.toJson()).toList(),
               'sources': sources.map((n) => n.toJson()).toList()
             })}',
@@ -485,7 +490,7 @@ class CaseAnalysisPipeline {
     cancel.check();
     validateShape(result, shape);
     if (stringList(result['violations']).isNotEmpty)
-      throw MirrorProblem('内容未通过事实与自主性复核，未进入预演或个人原则。需要重新检查事实、时间、因果和个人自主。',
+      throw MirrorProblem('内容未通过事实与自主性复核，未进入工作台建议。需要重新检查事实、时间、因果和个人自主。',
           code: 'quality_rejected');
   }
 
