@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
+import android.os.UserManager
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -28,10 +29,21 @@ object VoiceAlarmScheduler {
   private fun credentialProtectedPrefs(context: Context): SharedPreferences =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-  private fun persistedPrefs(context: Context): List<SharedPreferences> = listOf(
-    deviceProtectedPrefs(context),
-    credentialProtectedPrefs(context),
-  )
+  private fun persistedPrefs(context: Context): List<SharedPreferences> {
+    val device = deviceProtectedPrefs(context)
+    // Credential-protected preferences throw before first unlock. Never let that
+    // prevent a LOCKED_BOOT_COMPLETED alarm from being restored.
+    if (Build.VERSION.SDK_INT >= 24 &&
+      (context.getSystemService(Context.USER_SERVICE) as? UserManager)?.isUserUnlocked != true) return listOf(device)
+    return listOf(device, credentialProtectedPrefs(context)).distinct()
+  }
+
+  private fun readablePrefs(context: Context): List<SharedPreferences> {
+    val stores = persistedPrefs(context)
+    // Once migrated, device storage is authoritative. An older credential copy
+    // must not resurrect a deleted alarm or overwrite a snooze after unlock.
+    return if (stores.first().contains(KEY_IDS)) stores.take(1) else stores
+  }
 
   private fun persistedRequestKey(payload: String): String {
     val id = alarmId(payload)
@@ -61,8 +73,7 @@ object VoiceAlarmScheduler {
   }
 
   private fun clearPersistedAlarms(context: Context) {
-    deviceProtectedPrefs(context).edit().clear().apply()
-    credentialProtectedPrefs(context).edit().clear().apply()
+    for (prefs in persistedPrefs(context)) prefs.edit().clear().putString(KEY_IDS, "[]").apply()
   }
 
   private fun alarmId(payload: String): Int {
@@ -124,23 +135,23 @@ object VoiceAlarmScheduler {
   }
 
 
-  private fun scheduleBestEffortInexact(alarmManager: AlarmManager, atMs: Long, operation: PendingIntent) {
-    try {
+  private fun scheduleBestEffortInexact(alarmManager: AlarmManager, atMs: Long, operation: PendingIntent): Boolean {
+    return try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, operation)
-      } else {
-        alarmManager.set(AlarmManager.RTC_WAKEUP, atMs, operation)
-      }
+      } else alarmManager.set(AlarmManager.RTC_WAKEUP, atMs, operation)
+      true
     } catch (_: Throwable) {
-      try { alarmManager.set(AlarmManager.RTC_WAKEUP, atMs, operation) } catch (_: Throwable) {}
+      try { alarmManager.set(AlarmManager.RTC_WAKEUP, atMs, operation); true } catch (_: Throwable) { false }
     }
   }
 
   @JvmStatic
+  @Synchronized
   fun schedule(context: Context, atMs: Long, payload: String, persist: Boolean = true) {
     val app = context.applicationContext
     val id = alarmId(payload)
-    val mode = if (id == NIGHT_ALARM_ID) "night" else "morning"
+    val mode = if (JSONObject(payload).optString("mode") == "night") "night" else "morning"
     val alarmManager = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     // Do not use an Activity PendingIntent as the alarm delivery endpoint.
     // Cold-start/background Activity launches are exactly where many OEM ROMs
@@ -162,13 +173,9 @@ object VoiceAlarmScheduler {
       },
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
-    try {
+    var scheduled = try {
       alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(atMs, showIntent), operation)
-    } catch (se: SecurityException) {
-      // Android 12+ can revoke exact-alarm privileges. Keep a best-effort
-      // inexact wakeup instead of throwing out of schedule(), otherwise the
-      // Flutter page may report “saved” failure and no persisted alarm remains.
-      scheduleBestEffortInexact(alarmManager, atMs, operation)
+      true
     } catch (_: Throwable) {
       scheduleBestEffortInexact(alarmManager, atMs, operation)
     }
@@ -191,10 +198,12 @@ object VoiceAlarmScheduler {
       if (canUseExact) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
           alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, fallbackOperation)
+          scheduled = true
           alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs + 1500L, serviceFallbackOperation)
           alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs + 3000L, activityFallbackOperation)
         } else {
           alarmManager.setExact(AlarmManager.RTC_WAKEUP, atMs, fallbackOperation)
+          scheduled = true
           alarmManager.setExact(AlarmManager.RTC_WAKEUP, atMs + 1500L, serviceFallbackOperation)
           alarmManager.setExact(AlarmManager.RTC_WAKEUP, atMs + 3000L, activityFallbackOperation)
         }
@@ -202,16 +211,17 @@ object VoiceAlarmScheduler {
         // Best-effort non-exact fallback for devices where the user has not yet
         // granted the special exact-alarm access.  It may be delayed by Doze, but
         // it avoids the silent "nothing was scheduled" failure mode.
-        scheduleBestEffortInexact(alarmManager, atMs, fallbackOperation)
-        scheduleBestEffortInexact(alarmManager, atMs + 1500L, serviceFallbackOperation)
-        scheduleBestEffortInexact(alarmManager, atMs + 3000L, activityFallbackOperation)
+        scheduleBestEffortInexact(alarmManager, atMs, fallbackOperation).also { scheduled = scheduled || it }
+        scheduleBestEffortInexact(alarmManager, atMs + 1500L, serviceFallbackOperation).also { scheduled = scheduled || it }
+        scheduleBestEffortInexact(alarmManager, atMs + 3000L, activityFallbackOperation).also { scheduled = scheduled || it }
       }
     } catch (_: Throwable) {
-      scheduleBestEffortInexact(alarmManager, atMs, fallbackOperation)
-      scheduleBestEffortInexact(alarmManager, atMs + 1500L, serviceFallbackOperation)
-      scheduleBestEffortInexact(alarmManager, atMs + 3000L, activityFallbackOperation)
+      scheduleBestEffortInexact(alarmManager, atMs, fallbackOperation).also { scheduled = scheduled || it }
+      scheduleBestEffortInexact(alarmManager, atMs + 1500L, serviceFallbackOperation).also { scheduled = scheduled || it }
+      scheduleBestEffortInexact(alarmManager, atMs + 3000L, activityFallbackOperation).also { scheduled = scheduled || it }
     }
 
+    check(scheduled) { "系统未能登记闹钟，请检查闹钟权限后重试" }
     if (persist) {
       persistAlarm(app, mode, payload, atMs)
     }
@@ -274,6 +284,7 @@ object VoiceAlarmScheduler {
   }
 
   @JvmStatic
+  @Synchronized
   fun cancel(context: Context, alarmKey: String? = null) {
     val app = context.applicationContext
     if (!alarmKey.isNullOrBlank()) {
@@ -298,6 +309,7 @@ object VoiceAlarmScheduler {
   // 彻底删除某个闹钟：取消所有触发通道 + 清掉 id 键副本 + 从 ids 列表移除 +
   // 清掉指向同一闹钟的 morning/night 模式副本（否则 rescheduleAll 会把它复活）。
   @JvmStatic
+  @Synchronized
   fun cancelById(context: Context, id: Int) {
     val app = context.applicationContext
     cancelRequestCode(app, id)
@@ -326,6 +338,7 @@ object VoiceAlarmScheduler {
 
   // 列出所有已持久化的闹钟（按 id 去重），供前端界面展示、删除、开关。
   @JvmStatic
+  @Synchronized
   fun listPersistedAlarms(context: Context): String {
     val app = context.applicationContext
     val entries = LinkedHashMap<Int, JSONObject>()
@@ -344,11 +357,11 @@ object VoiceAlarmScheduler {
         .put("weekdays", obj.optJSONArray("weekdays") ?: JSONArray())
         .put("atMs", atMs)
         .put("fallbackKey", fallbackKey)
-      // id 已存在时，保留 atMs 更大的（更完整/更新的）。
+      // 优先保留权威存储的 id 记录，不让旧的模式副本覆盖它。
       val prev = entries[id]
-      if (prev == null || atMs >= prev.optLong("atMs", 0L)) entries[id] = info
+      if (prev == null) entries[id] = info
     }
-    for (prefs: SharedPreferences in persistedPrefs(app)) {
+    for (prefs: SharedPreferences in readablePrefs(app)) {
       val raw = prefs.getString(KEY_IDS, "[]") ?: "[]"
       try {
         val arr = JSONArray(raw)
@@ -367,11 +380,13 @@ object VoiceAlarmScheduler {
   }
 
   @JvmStatic
+  @Synchronized
   fun snooze(context: Context, payload: String, minutes: Int = 5) {
     schedule(context, System.currentTimeMillis() + minutes.coerceAtLeast(1) * 60_000L, payload, true)
   }
 
   @JvmStatic
+  @Synchronized
   fun scheduleNextDaily(context: Context, payload: String) {
     val obj = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
     val allowed = mutableSetOf<Int>()
@@ -394,53 +409,24 @@ object VoiceAlarmScheduler {
   }
 
   @JvmStatic
-  fun restore(context: Context) {
-    val entries = LinkedHashMap<String, String>()
-    val devicePrefs = deviceProtectedPrefs(context)
-    val credentialPrefs = credentialProtectedPrefs(context)
-    for (prefs in listOf(devicePrefs, credentialPrefs)) {
-      val raw = prefs.getString(KEY_IDS, "[]") ?: "[]"
-      try {
-        val arr = JSONArray(raw)
-        for (i in 0 until arr.length()) {
-          val key = arr.optString(i)
-          val payload = prefs.getString("${KEY_PAYLOAD}_$key", null)
-          if (!payload.isNullOrBlank()) entries[key] = payload
-        }
-      } catch (_: Throwable) {}
-    }
-    for (mode in arrayOf("morning", "night")) {
-      val payload = devicePrefs.getString("${KEY_PAYLOAD}_$mode", null)
-        ?: credentialPrefs.getString("${KEY_PAYLOAD}_$mode", null)
-      if (!payload.isNullOrBlank()) entries[mode] = payload
-    }
-    for ((key, payload) in entries) {
-      var at = devicePrefs.getLong("${KEY_AT}_$key", 0L).takeIf { it > 0L }
-        ?: credentialPrefs.getLong("${KEY_AT}_$key", 0L)
-      if (at <= System.currentTimeMillis()) {
-        val obj = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
-        val hour = obj.optInt("hour", 8)
-        val minute = obj.optInt("minute", 0)
-        val now = java.util.Calendar.getInstance()
-        val next = java.util.Calendar.getInstance().apply {
-          set(java.util.Calendar.HOUR_OF_DAY, hour)
-          set(java.util.Calendar.MINUTE, minute)
-          set(java.util.Calendar.SECOND, 0)
-          set(java.util.Calendar.MILLISECOND, 0)
-          if (timeInMillis <= now.timeInMillis) add(java.util.Calendar.DAY_OF_YEAR, 1)
-          val allowed = mutableSetOf<Int>()
-          val rawDays = obj.optJSONArray("weekdays")
-          if (rawDays != null) for (i in 0 until rawDays.length()) allowed.add(rawDays.optInt(i))
-          if (allowed.isEmpty()) allowed.addAll(1..7)
-          var guard = 0
-          while (!allowed.contains(if (get(java.util.Calendar.DAY_OF_WEEK) == java.util.Calendar.SUNDAY) 7 else get(java.util.Calendar.DAY_OF_WEEK) - 1) && guard < 8) {
-            add(java.util.Calendar.DAY_OF_YEAR, 1)
-            guard++
-          }
-        }
-        at = next.timeInMillis
+  @Synchronized
+  fun restore(context: Context, resetClock: Boolean = false) {
+    val entries = LinkedHashMap<Int, Pair<String, Long>>()
+    for (prefs in readablePrefs(context)) {
+      fun add(key: String) {
+        val payload = prefs.getString("${KEY_PAYLOAD}_$key", null) ?: return
+        if (payload.isBlank()) return
+        val id = alarmId(payload)
+        if (!entries.containsKey(id)) entries[id] = payload to prefs.getLong("${KEY_AT}_$key", 0L)
       }
-      schedule(context, at, payload, true)
+      val ids = try { JSONArray(prefs.getString(KEY_IDS, "[]")) } catch (_: Throwable) { JSONArray() }
+      for (i in 0 until ids.length()) add(ids.optString(i))
+      for (mode in arrayOf("morning", "night")) add(mode)
+    }
+    for ((_, entry) in entries) {
+      val (payload, at) = entry
+      if (resetClock || at <= System.currentTimeMillis()) scheduleNextDaily(context, payload)
+      else schedule(context, at, payload, true)
     }
   }
 

@@ -65,7 +65,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   String _sttProvider = 'microsoft';
   String _sttMode = 'realtime';
   bool _batchAutoSubmit = true;
-  double _batchAutoSubmitSilenceMs = 5000;
+  double _batchAutoSubmitSilenceMs = 1200;
   double _batchMaxRecordMs = 60000;
   bool _batchAutoCorrect = false;
   String? _customMusic;
@@ -105,8 +105,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   List<Map<String, dynamic>> _scheduledAlarms = <Map<String, dynamic>>[];
   bool _showAdvanced = false;
   String _speechPreset = 'balanced';
-  double _speechCompleteSilenceMs = 2400;
-  double _speechPossiblyCompleteSilenceMs = 1600;
+  double _speechCompleteSilenceMs = 1400;
+  double _speechPossiblyCompleteSilenceMs = 1000;
   double _speechMinUtteranceMs = 1400;
   double _speechFinalCommitDelayMs = 2800;
   double _speechPartialFallbackDelayMs = 5200;
@@ -257,6 +257,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     if (!mounted) return;
     setState(() {
       _voiceProfiles = profiles;
+      _generatedVoice = data['voicePath']?.toString();
       _text.text = (data['text'] ?? (mode == 'morning' ? _morningDefault : _nightDefault)).toString();
       _provider = (data['provider'] ?? 'microsoft').toString();
       final loadedSttProvider = (data['sttProvider'] ?? 'microsoft').toString();
@@ -265,7 +266,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _sttMode = ['realtime', 'batch'].contains(loadedSttMode) ? loadedSttMode : 'realtime';
       final batchStt = data['batchStt'] is Map ? Map<String, dynamic>.from(data['batchStt'] as Map) : <String, dynamic>{};
       _batchAutoSubmit = batchStt['autoSubmit'] as bool? ?? true;
-      _batchAutoSubmitSilenceMs = (batchStt['autoSubmitSilenceMs'] as num?)?.toDouble() ?? 5000;
+      _batchAutoSubmitSilenceMs = (batchStt['autoSubmitSilenceMs'] as num?)?.toDouble() ?? 1200;
       _batchMaxRecordMs = (batchStt['maxRecordMs'] as num?)?.toDouble() ?? 60000;
       _batchAutoCorrect = batchStt['autoCorrect'] as bool? ?? false;
       final recommendations = _recommendedVoices(_provider, mode);
@@ -284,8 +285,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _replayIntervalSeconds = (data['replayIntervalSeconds'] as num?)?.toInt() ?? 60;
       final endpointing = data['voiceEndpointing'] is Map ? Map<String, dynamic>.from(data['voiceEndpointing'] as Map) : <String, dynamic>{};
       _speechPreset = ['fast', 'balanced', 'complete', 'long'].contains((endpointing['preset'] ?? 'balanced').toString()) ? (endpointing['preset'] ?? 'balanced').toString() : 'balanced';
-      _speechCompleteSilenceMs = (endpointing['completeSilenceMs'] as num?)?.toDouble() ?? 2400;
-      _speechPossiblyCompleteSilenceMs = (endpointing['possiblyCompleteSilenceMs'] as num?)?.toDouble() ?? 1600;
+      _speechCompleteSilenceMs = (endpointing['completeSilenceMs'] as num?)?.toDouble() ?? 1400;
+      _speechPossiblyCompleteSilenceMs = (endpointing['possiblyCompleteSilenceMs'] as num?)?.toDouble() ?? 1000;
       _speechMinUtteranceMs = (endpointing['minUtteranceMs'] as num?)?.toDouble() ?? 1400;
       _speechFinalCommitDelayMs = (endpointing['finalCommitDelayMs'] as num?)?.toDouble() ?? 2800;
       _speechPartialFallbackDelayMs = (endpointing['partialFallbackDelayMs'] as num?)?.toDouble() ?? 5200;
@@ -618,6 +619,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   }
 
   Future<void> _schedule() async {
+    if (_saving || _loading) return;
     if (_text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
       return;
@@ -626,14 +628,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _toast('请至少选择一个重复日期，否则闹钟没有可触发的日期');
       return;
     }
-    final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
-      context,
-      featureName: '语音闹钟',
-      explanation: '起床/睡觉闹钟需要在熄屏、锁屏或 App 未运行时仍按设定时刻响起。',
-    );
-    if (!exactGranted || !mounted) return;
     setState(() => _saving = true);
     try {
+      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+        context,
+        featureName: '语音闹钟',
+        explanation: '起床/睡觉闹钟需要在熄屏、锁屏或 App 未运行时仍按设定时刻响起。',
+      );
+      if (!exactGranted || !mounted) return;
       final canFullScreen = await _native.invokeMethod<bool>('canUseFullScreenIntent') ?? true;
       if (!canFullScreen) {
         await _native.invokeMethod<bool>('requestFullScreenIntentPermission');
@@ -672,6 +674,11 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       // 用“模式+时间”作为闹钟 id（不再追加时间戳），这样对同一时间点重复保存会“更新”而不是
       // 不断新增重复闹钟；不同时间自然是不同闹钟。
       final alarmId = '$_mode-${_time.hour.toString().padLeft(2, '0')}${_time.minute.toString().padLeft(2, '0')}';
+      final payload = _payload(alarmId: alarmId);
+      await _native.invokeMethod<void>('schedule', {
+        'atMs': when.millisecondsSinceEpoch,
+        'payload': payload,
+      });
       await _kv.setString('voice_alarm.time', when.toIso8601String());
       await _kv.setString('voice_alarm.text', _text.text.trim());
       await _kv.setString('voice_alarm.provider', _provider);
@@ -687,14 +694,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       await _kv.setString(_configKey, jsonEncode(config));
       _textHistory = <String>[text, ..._textHistory.where((item) => item != text)].take(20).toList();
       await _kv.setString(_historyKey, jsonEncode(_textHistory));
-      final payload = _payload(alarmId: alarmId);
-      await _native.invokeMethod<void>('schedule', {
-        'atMs': when.millisecondsSinceEpoch,
-        'payload': payload,
-      });
       _toast('已添加 ${_mode == 'morning' ? '起床' : '睡觉'}闹钟 ${_time.format(context)}；当前模块共 ${_alarmEntries.length} 组');
       await _loadScheduledAlarms();
-      setState(() {});
+      if (mounted) setState(() {});
     } catch (e) {
       _toast('设置失败：$e');
     } finally {
@@ -786,20 +788,21 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   // 保存语音/铃声等共享参数：持久化为模板，并把最新设置同步到“当前模式下已排期的闹钟”
   // （沿用每个闹钟各自的时间与重复规则，只更新语音、音乐、音量等设置）。
   Future<void> _saveSettings() async {
+    if (_saving || _loading) return;
     if (_text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
       return;
     }
-    if (_scheduledAlarms.any((a) => (a['mode'] ?? 'morning').toString() == _mode)) {
-      final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
-        context,
-        featureName: '语音闹钟',
-        explanation: '保存共享设置时会重新登记当前模式下已有闹钟。',
-      );
-      if (!exactGranted || !mounted) return;
-    }
     setState(() => _saving = true);
     try {
+      if (_scheduledAlarms.any((a) => (a['mode'] ?? 'morning').toString() == _mode)) {
+        final exactGranted = await ExactAlarmPermissionCoordinator.ensureGranted(
+          context,
+          featureName: '语音闹钟',
+          explanation: '保存共享设置时会重新登记当前模式下已有闹钟。',
+        );
+        if (!exactGranted || !mounted) return;
+      }
       await _refreshAlarmAiConfig();
       try {
         _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
@@ -814,6 +817,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       final savedFreq = _frequency;
       final savedDays = <int>{..._weekdays};
       var synced = 0;
+      var failed = 0;
       for (final a in targets) {
         try {
           final h = (a['hour'] as num?)?.toInt() ?? savedTime.hour;
@@ -827,23 +831,27 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
           }
           // 优先沿用该闹钟原有的 alarmId，确保是“更新”这条闹钟而不是新建一条重复的。
           final existingId = (a['alarmId'] ?? '').toString();
-          final alarmId = existingId.isNotEmpty ? existingId : '$_mode-${h.toString().padLeft(2, '0')}${m.toString().padLeft(2, '0')}';
+          final alarmId = existingId; // Preserve legacy native identity when updating.
           final when = _nextTime();
           await _native.invokeMethod<void>('schedule', {
             'atMs': when.millisecondsSinceEpoch,
             'payload': _payload(alarmId: alarmId),
           });
           synced++;
-        } catch (_) {}
+        } catch (_) {
+          failed++;
+        }
       }
       _time = savedTime;
       _frequency = savedFreq;
       _weekdays = savedDays;
-      _toast(synced > 0
-          ? '已保存设置，并同步更新 $synced 个${_mode == 'morning' ? '起床' : '睡觉'}闹钟'
-          : '已保存设置（当前模式暂无已排期闹钟，将用于新建的闹钟）');
+      _toast(failed > 0
+          ? '已保存模板；更新成功 $synced 个，失败 $failed 个闹钟，请重试同步。'
+          : synced > 0
+              ? '已保存设置，并同步更新 $synced 个${_mode == 'morning' ? '起床' : '睡觉'}闹钟'
+              : '已保存设置（当前模式暂无已排期闹钟，将用于新建的闹钟）');
       await _loadScheduledAlarms();
-      setState(() {});
+      if (mounted) setState(() {});
     } catch (e) {
       _toast('保存设置失败：$e');
     } finally {
@@ -948,6 +956,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   }
 
   Future<void> _ring() async {
+    if (_saving || _loading) return;
     setState(() => _saving = true);
     try {
       if (!await _ensureVoiceInteractionReady()) return;
@@ -1022,6 +1031,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   }
 
   Future<void> _generateAiText() async {
+    if (_saving || _loading) return;
     setState(() => _saving = true);
     try {
       final template = await _aiSettings.getVoiceAlarmContentPrompt();
@@ -1036,13 +1046,17 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     }
   }
 
-  void _toast(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  void _toast(String message) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('语音闹钟')),
-      body: _loading
+      body: AbsorbPointer(
+        absorbing: _saving,
+        child: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
         padding: const EdgeInsets.all(16),
@@ -1452,7 +1466,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
           const SizedBox(height: 8),
           OutlinedButton.icon(onPressed: _saving ? null : _showAddAlarmSheet, icon: const Icon(Icons.add_alarm), label: const Text('新增一个闹钟')),
           const SizedBox(height: 8),
-          OutlinedButton.icon(onPressed: _ring, icon: const Icon(Icons.play_arrow), label: const Text('立即测试闹钟与稍后提醒')),
+          OutlinedButton.icon(onPressed: _saving ? null : _ring, icon: const Icon(Icons.play_arrow), label: const Text('立即测试闹钟与稍后提醒')),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -1478,6 +1492,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
             ],
           ),
         ],
+      ),
       ),
     );
   }

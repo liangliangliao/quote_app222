@@ -1,0 +1,30 @@
+name: Voice alarm regression
+on:
+  pull_request:
+    paths:
+      - 'android/app/src/main/kotlin/com/example/quote_app/VoiceAlarm*'
+      - 'tool/tests/VoiceAlarmSpeechTest.kt'
+      - 'tool/voice_alarm_regression.sh'
+      - '.github/workflows/voice_alarm_ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  speech-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install pinned Kotlin compiler
+        run: |
+          curl --fail --location --retry 3 https://github.com/JetBrains/kotlin/releases/download/v2.2.0/kotlin-compiler-2.2.0.zip -o /tmp/kotlin.zip
+          echo '1adb6f1a5845ba0aa5a59e412e44c8e405236b957de1a9683619f1dca3b16932  /tmp/kotlin.zip' | sha256sum --check
+          unzip -q /tmp/kotlin.zip -d /tmp/voice-kotlin
+      - name: Verify speech and playback lifecycle regressions
+        env:
+          KOTLINC: /tmp/voice-kotlin/kotlinc/bin/kotlinc
+        run: bash tool/voice_alarm_regression.sh
