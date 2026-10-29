@@ -15,6 +15,7 @@ import 'package:quote_app/services/quote_frame_ai_service.dart';
 import 'package:quote_app/services/quote_calligraphy_settings.dart';
 import 'package:quote_app/services/notification_service.dart';
 import 'package:quote_app/services/quote_ai_service.dart';
+import '../models/quote_insight.dart';
 import '../data/dao.dart';
 import '../utils/debug_logger.dart';
 import 'package:quote_app/services/native_guard.dart';
@@ -682,6 +683,8 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
           // 将 author 字段设置为包含署名和出处的组合文本
           'author': authorLine,
           'source': source,
+          'quoteAuthor': authorName,
+          'quoteUid': (latest['quote_uid'] ?? '').toString(),
           'note': (latest['explanation'] ?? latest['note'] ?? '').toString(),
           'avatarUrl': avatarUrl,
         };
@@ -1385,6 +1388,8 @@ ImageProvider _imageFrom(String? any) {
       'source': source,
       'note': note,
       'avatarUrl': avatarUrl,
+      'quoteAuthor': authorName,
+      'quoteUid': (row['quote_uid'] ?? row['fixed_uid'] ?? '').toString(),
     };
     if (!mounted) return;
     setState(() {
@@ -1474,6 +1479,7 @@ ImageProvider _imageFrom(String? any) {
                                 quote: '${content?['quote'] ?? ''}',
                                 author: '${content?['author'] ?? ''}',
                                 note: '${content?['note'] ?? ''}',
+                                quoteReference: QuoteReference.fromPosterPayload(content),
                                 avatar: '${content?['avatar'] ?? content?['avatarUrl'] ?? ''}',
                                 woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
                                 aiFramePath: _frameImagePath,

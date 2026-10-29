@@ -11,6 +11,7 @@ on:
         default: false
   push:
     paths:
+      - ".github/workflows/android_build_source_repo.yml"
       - "lib/**"
       - "android/**"
       - "ios/**"
@@ -34,6 +35,7 @@ on:
       - "**/*.java"
   pull_request:
     paths:
+      - ".github/workflows/android_build_source_repo.yml"
       - "lib/**"
       - "android/**"
       - "ios/**"
@@ -86,7 +88,7 @@ jobs:
           fi
 
           printf '%s\n' "$changed_files"
-          if printf '%s\n' "$changed_files" | grep -Eq '^(lib/|android/|ios/|assets/|test/|tools/zhixing_tree/|pubspec\.yaml$|pubspec\.lock$|analysis_options\.yaml$|gradle/|gradlew$|settings\.gradle(\.kts)?$|build\.gradle(\.kts)?$|.*\.(dart|gradle|xml|kt|java)$)'; then
+          if printf '%s\n' "$changed_files" | grep -Eq '^(\.github/workflows/android_build_source_repo\.yml$|lib/|android/|ios/|assets/|test/|tools/zhixing_tree/|pubspec\.yaml$|pubspec\.lock$|analysis_options\.yaml$|gradle/|gradlew$|settings\.gradle(\.kts)?$|build\.gradle(\.kts)?$|.*\.(dart|gradle|xml|kt|java)$)'; then
             echo "run_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_build=false" >> "$GITHUB_OUTPUT"
@@ -237,19 +239,36 @@ jobs:
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter build apk --release --build-name 0.1.3 --build-number 7 -t lib/main.dart
 
-      - name: Give corrected APK a unique filename
+      - name: Package APK with source identity
+        id: apk_package
         if: steps.detect.outputs.project_type == 'flutter'
         working-directory: ${{ steps.detect.outputs.project_dir }}
-        run: >-
-          mv build/app/outputs/flutter-apk/app-release.apk
-          build/app/outputs/flutter-apk/quote_app_fixed_portrait_v0.1.3_build7.apk
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          package_name="quote-app-${SOURCE_SHA:0:12}-run${GITHUB_RUN_NUMBER}"
+          mkdir -p build/apk-delivery
+          cp build/app/outputs/flutter-apk/app-release.apk "build/apk-delivery/${package_name}.apk"
+          jq -n \
+            --arg source_sha "$SOURCE_SHA" \
+            --arg build_sha "$(git rev-parse HEAD)" \
+            --arg ref "$SOURCE_REF" \
+            --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{source_sha: $source_sha, build_sha: $build_sha, ref: $ref, run_url: $run_url}' \
+            > build/apk-delivery/build-info.json
+          (cd build/apk-delivery && sha256sum "${package_name}.apk" > SHA256SUMS)
+          cp docs/quote_epistemic_p0_implementation.md build/apk-delivery/READING-AND-COMPARISON.md
+          echo "name=$package_name" >> "$GITHUB_OUTPUT"
+          echo "APK source: $SOURCE_REF / $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK - Flutter
         if: steps.detect.outputs.project_type == 'flutter'
         uses: actions/upload-artifact@v4
         with:
-          name: quote_app-fixed-portrait-v0.1.3-build7
-          path: ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/quote_app_fixed_portrait_v0.1.3_build7.apk
+          name: ${{ steps.apk_package.outputs.name }}
+          path: ${{ steps.detect.outputs.project_dir }}/build/apk-delivery/
           if-no-files-found: error
 
       # ---------- Gradle path fallback ----------

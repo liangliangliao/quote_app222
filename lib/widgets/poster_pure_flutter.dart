@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/quote_calligraphy_settings.dart';
+import '../models/quote_insight.dart';
+import 'quote_reading_insights.dart';
 import 'quote_adaptive_frame.dart';
 import 'quote_calligraphy_text.dart';
 import 'quote_portrait_cutout.dart';
@@ -28,12 +30,14 @@ class PosterPureFlutter extends StatelessWidget {
     this.animateCalligraphy = false,
     this.calligraphyStyle = QuoteCalligraphyStyle.xingshu,
     this.englishFontStyle = QuoteEnglishFontStyle.baskerville,
+    this.quoteReference,
   });
   final String topic, quote, author, note, avatar, woodBgAsset;
   final String? aiFramePath;
   final bool animateCalligraphy;
   final QuoteCalligraphyStyle calligraphyStyle;
   final QuoteEnglishFontStyle englishFontStyle;
+  final QuoteReference? quoteReference;
 
   void _openReading(BuildContext context) {
     final readingQuoteStyle = quotePrefersLiteraryEnglish(quote)
@@ -70,8 +74,11 @@ class PosterPureFlutter extends StatelessWidget {
               ],
               if (note.trim().isNotEmpty) ...[
                 const SizedBox(height: 26),
+                const Text('解读 · 一种理解', style: TextStyle(fontSize: 13, color: Colors.black54)),
+                const SizedBox(height: 8),
                 Text(note, style: const TextStyle(fontSize: 17, height: 1.7)),
               ],
+              QuoteReadingInsights(quote: quoteReference ?? QuoteReference(id: '', content: quote)),
             ],
           )),
         ),

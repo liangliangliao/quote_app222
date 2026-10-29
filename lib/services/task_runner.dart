@@ -1,6 +1,8 @@
 import 'dart:ui' as ui;
 
 import '../data/dao.dart';
+import '../data/quote_insight_store.dart';
+import '../models/quote_insight.dart';
 import '../services/notification_service.dart';
 import '../services/quote_ai_service.dart';
 import '../platform/native_notify.dart';
@@ -68,6 +70,15 @@ class TaskRunner {
           taskType: 'auto',
           insertedAt: insertedAt,
         );
+        // Optional annotations must never turn a successful original save into
+        // a failed scheduled run. The quote remains readable if this fails.
+        try {
+          await QuoteInsightStore().saveAddon(
+            QuoteReference(id: quoteUid, content: generated.content,
+              author: generated.author, source: generated.source),
+            generated.readingAddon,
+          );
+        } catch (_) {}
       }
 
       // A monotonically increasing cursor gives deterministic ordered cycling
