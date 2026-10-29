@@ -1,0 +1,98 @@
+name: Quote Reading and Comparison CI
+
+on:
+  pull_request:
+    paths:
+      - 'lib/models/quote_insight.dart'
+      - 'lib/data/quote_insight_store.dart'
+      - 'lib/data/dao.dart'
+      - 'lib/data/db.dart'
+      - 'lib/pages/home_page.dart'
+      - 'lib/pages/history_page.dart'
+      - 'lib/widgets/poster_pure_flutter.dart'
+      - 'lib/widgets/quote_reading_insights.dart'
+      - 'lib/widgets/quote_comparison_sheet.dart'
+      - 'lib/services/quote_*service.dart'
+      - 'lib/services/quote_insight_settings.dart'
+      - 'lib/services/task_runner.dart'
+      - 'lib/services/unified_ai_service.dart'
+      - 'test/quote_*test.dart'
+      - 'pubspec.*'
+      - '.github/workflows/quote_insight_ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'lib/models/quote_insight.dart'
+      - 'lib/data/quote_insight_store.dart'
+      - 'lib/data/dao.dart'
+      - 'lib/data/db.dart'
+      - 'lib/pages/home_page.dart'
+      - 'lib/pages/history_page.dart'
+      - 'lib/widgets/poster_pure_flutter.dart'
+      - 'lib/widgets/quote_reading_insights.dart'
+      - 'lib/widgets/quote_comparison_sheet.dart'
+      - 'lib/services/quote_*service.dart'
+      - 'lib/services/quote_insight_settings.dart'
+      - 'lib/services/task_runner.dart'
+      - 'lib/services/unified_ai_service.dart'
+      - 'test/quote_*test.dart'
+      - 'pubspec.*'
+      - '.github/workflows/quote_insight_ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quote-insight-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+      - name: Prepare SQLite and Chinese preview font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+          curl --fail --location --retry 3 \
+            https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf \
+            -o /tmp/quote-preview-cjk.otf
+      - run: flutter pub get
+      - name: Analyze reading and comparison modules
+        run: >-
+          flutter analyze --no-pub
+          lib/models/quote_insight.dart lib/data/quote_insight_store.dart
+          lib/services/quote_comparison_service.dart lib/services/quote_insight_settings.dart
+          lib/widgets/quote_reading_insights.dart lib/widgets/quote_comparison_sheet.dart
+          test/quote_insight_test.dart test/quote_comparison_test.dart
+          test/quote_insight_store_test.dart test/quote_insight_widgets_test.dart
+          test/quote_insight_flags_test.dart test/quote_insight_delivery_test.dart
+      - name: Test P0 behavior and existing quote layout
+        run: >-
+          flutter test --no-pub --reporter expanded
+          test/quote_insight_test.dart test/quote_comparison_test.dart
+          test/quote_insight_store_test.dart test/quote_insight_widgets_test.dart
+          test/quote_insight_flags_test.dart test/quote_insight_delivery_test.dart
+          test/quote_ai_service_test.dart test/quote_paper_layout_test.dart
+          test/quote_history_avatar_test.dart test/quote_ai_integration_compile_test.dart
+      - name: Test disabled feature flags
+        run: >-
+          flutter test --no-pub --reporter expanded
+          --dart-define=QUOTE_READING_INSIGHTS=false
+          --dart-define=QUOTE_COMPARISON_ENABLED=false
+          test/quote_insight_flags_test.dart
+      - name: Upload rendered entry previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quote-reading-comparison-previews-${{ github.event.pull_request.head.sha || github.sha }}
+          path: build/quote-insight-preview/
+          if-no-files-found: warn
