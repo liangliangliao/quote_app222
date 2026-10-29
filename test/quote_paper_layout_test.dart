@@ -129,41 +129,43 @@ void main() {
         final rect = tester.getRect(line);
         expect(rect.top, greaterThanOrEqualTo(paper.top - .5));
         expect(rect.bottom, lessThanOrEqualTo(signature.top));
-        expect(rect.left, greaterThanOrEqualTo(paper.left - .5));
-        expect(rect.right, lessThanOrEqualTo(paper.right + .5));
+        expect(rect.left, greaterThanOrEqualTo(paper.left + 11.5));
+        expect(rect.right, lessThanOrEqualTo(paper.right - 11.5));
         expect(rect.overlaps(viewport), isFalse);
         expect(
           tester.renderObject<RenderParagraph>(line).didExceedMaxLines,
           isFalse,
         );
       }
-      expect(signature.bottom, lessThanOrEqualTo(paper.bottom - 28));
+      expect(signature.bottom, lessThanOrEqualTo(paper.bottom - 26));
+      expect(signature.right, lessThanOrEqualTo(paper.right - 11.5));
       expect(find.byType(SingleChildScrollView), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
 
-  testWidgets('short, long and English quotes retain the same 32 point ink', (
-    tester,
-  ) async {
-    for (final text in [
-      '知行合一，止于至善。',
-      quote,
-      List.filled(6, quote).join(),
-      'No man is an island, entire of itself.',
-    ]) {
-      await mount(tester, 360, text: text);
-      expect(bodyLines(), findsWidgets);
-      for (final line in tester.widgetList<Text>(bodyLines())) {
-        for (final span in spans(line.textSpan! as TextSpan)) {
-          expect(span.style!.fontSize, 32);
-          expect(span.style!.fontWeight, QuoteArtworkTypography.weight);
-          expect(span.style!.color, QuoteArtworkTypography.ink);
+  testWidgets(
+    'short, long and English quotes retain the same restrained 25 point ink',
+    (tester) async {
+      for (final text in [
+        '知行合一，止于至善。',
+        quote,
+        List.filled(6, quote).join(),
+        'No man is an island, entire of itself.',
+      ]) {
+        await mount(tester, 360, text: text);
+        expect(bodyLines(), findsWidgets);
+        for (final line in tester.widgetList<Text>(bodyLines())) {
+          for (final span in spans(line.textSpan! as TextSpan)) {
+            expect(span.style!.fontSize, 25);
+            expect(span.style!.fontWeight, QuoteArtworkTypography.weight);
+            expect(span.style!.color, QuoteArtworkTypography.ink);
+          }
         }
+        expect(tester.takeException(), isNull);
       }
-      expect(tester.takeException(), isNull);
-    }
-  });
+    },
+  );
 
   testWidgets(
     'only the original-language dark signature appears on the artwork',
@@ -226,58 +228,97 @@ void main() {
   });
 
   testWidgets(
-    'pagination shows every character without shrinking or ellipses',
+    'long artwork uses a restrained excerpt without page numbers or swiping',
     (tester) async {
-      await mount(tester, 320, text: List.filled(3, quote).join());
-      final pages = tester.widget<PageView>(
-        find.byKey(const ValueKey('quote-art-pages')),
+      final complete = List.filled(3, quote).join();
+      await mount(tester, 360, text: complete, portrait: true);
+      expect(find.byType(PageView), findsNothing);
+      expect(find.byKey(const ValueKey('quote-page-count')), findsNothing);
+      final visible = tester
+          .widgetList<Text>(bodyLines())
+          .map((line) => line.textSpan!.toPlainText())
+          .join();
+      expect(visible.endsWith('…'), isTrue);
+      expect(
+        complete.startsWith(visible.substring(0, visible.length - 1)),
+        isTrue,
       );
-      final count = pages.childrenDelegate.estimatedChildCount!;
-      expect(count, greaterThan(1));
-      final rendered = StringBuffer();
-      for (var i = 0; i < count; i++) {
-        if (i > 0) {
-          await tester.drag(
-            find.byKey(const ValueKey('quote-art-pages')),
-            const Offset(-300, 0),
-          );
-          await tester.pumpAndSettle();
-        }
-        final text = tester
-            .widgetList<Text>(bodyLines())
-            .map((line) => line.textSpan!.toPlainText())
-            .join();
-        rendered.write(text);
-        expect(text, isNot(contains('…')));
-        expect(find.textContaining('${i + 1} / $count'), findsOneWidget);
-      }
-      expect(rendered.toString(), List.filled(3, quote).join());
+      expect(visible.length, greaterThan(30));
+      await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('quote-reader-body')))
+            .data,
+        complete,
+      );
       expect(tester.takeException(), isNull);
     },
   );
 
   testWidgets(
-    'new quotes restart on page one while rebuilds preserve the sheet',
+    'the excerpt stays still across rebuilds and a new quote appears immediately',
     (tester) async {
       final long = List.filled(3, quote).join();
       await mount(tester, 360, text: long);
-      await tester.drag(
-        find.byKey(const ValueKey('quote-art-pages')),
-        const Offset(-300, 0),
-      );
-      await tester.pumpAndSettle();
-      expect(find.textContaining('2 /'), findsOneWidget);
+      final before = tester
+          .widgetList<Text>(bodyLines())
+          .map((line) => line.textSpan!.toPlainText())
+          .join();
       await mount(tester, 360, text: long, originalAuthor: 'Tal Ben-Shahar');
-      expect(find.textContaining('2 /'), findsOneWidget);
-      await mount(tester, 360, text: '知行合一。', settle: false);
-      expect(find.byKey(const ValueKey('quote-page-count')), findsNothing);
       expect(
         tester
             .widgetList<Text>(bodyLines())
-            .map((t) => t.textSpan!.toPlainText())
+            .map((line) => line.textSpan!.toPlainText())
+            .join(),
+        before,
+      );
+      await mount(tester, 360, text: '知行合一。', settle: false);
+      expect(
+        tester
+            .widgetList<Text>(bodyLines())
+            .map((line) => line.textSpan!.toPlainText())
             .join(),
         '知行合一。',
       );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'the signature has a leading rule and moves with its composition',
+    (tester) async {
+      await mount(tester, 400, text: '看见此刻。', originalAuthor: 'Sigmund Freud');
+      final short = tester.getRect(
+        find.byKey(const ValueKey('quote-author-region')),
+      );
+      expect(
+        find.byKey(const ValueKey('quote-signature-rule')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('quote-signature-rule')))
+            .width,
+        20,
+      );
+      await mount(
+        tester,
+        400,
+        text: List.filled(3, quote).join(),
+        originalAuthor: 'Sigmund Freud',
+      );
+      final long = tester.getRect(
+        find.byKey(const ValueKey('quote-author-region')),
+      );
+      expect(short.top, isNot(closeTo(long.top, 1)));
+      expect(short.left, isNot(closeTo(long.left, 1)));
+      final frame = tester.getRect(find.byType(QuoteAdaptiveFrame));
+      final paper = QuoteAdaptiveFrame.scaleRect(
+        QuoteAdaptiveFrame.textSafeRect,
+        frame.size,
+      ).shift(frame.topLeft);
+      expect(long.right, lessThanOrEqualTo(paper.right - 12));
       expect(tester.takeException(), isNull);
     },
   );
@@ -301,7 +342,7 @@ void main() {
       for (final line in tester.widgetList<CalligraphyWritingText>(
         find.byType(CalligraphyWritingText),
       )) {
-        expect(line.style.fontSize, 32);
+        expect(line.style.fontSize, 25);
         expect(line.overflow, TextOverflow.visible);
       }
       expect(tester.takeException(), isNull);

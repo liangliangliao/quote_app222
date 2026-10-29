@@ -119,7 +119,7 @@ void main() {
   );
 
   testWidgets(
-    'an asynchronous original signature keeps the quote and current sheet still',
+    'an asynchronous original signature keeps the quote excerpt and spacing still',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -163,12 +163,6 @@ void main() {
             .signaturePending,
         isTrue,
       );
-      await tester.drag(
-        find.byKey(const ValueKey('quote-art-pages')),
-        const Offset(-300, 0),
-      );
-      await tester.pumpAndSettle();
-      expect(find.textContaining('2 /'), findsOneWidget);
       final before = tester.getRect(find.byKey(const ValueKey('quote-body')));
       final beforeLines = find.descendant(
         of: find.byKey(const ValueKey('quote-body')),
@@ -183,7 +177,7 @@ void main() {
       expect(poster.originalAuthor, 'Simone Weil');
       expect(poster.quote, text);
       expect(poster.signaturePending, isFalse);
-      expect(find.textContaining('2 /'), findsOneWidget);
+      expect(find.byType(PageView), findsNothing);
       expect(tester.getRect(find.byKey(const ValueKey('quote-body'))), before);
       expect(tester.getRect(beforeLines.first), firstLine);
       expect(tester.takeException(), isNull);

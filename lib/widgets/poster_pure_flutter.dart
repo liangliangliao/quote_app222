@@ -218,16 +218,8 @@ class _PaperComposition extends StatefulWidget {
 }
 
 class _PaperCompositionState extends State<_PaperComposition> {
-  final _controller = PageController();
-  int _page = 0;
   Object? _layoutKey;
   QuoteArtLayout? _cachedLayout;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -240,20 +232,31 @@ class _PaperCompositionState extends State<_PaperComposition> {
         color: QuoteArtworkTypography.ink,
         height: 1.25,
       );
-      final authorSpan = quoteAuthorSignatureSpan(
-        widget.author,
-        signatureStyle,
+      const ruleWidth = QuoteArtworkTypography.signatureRuleWidth;
+      const ruleGap = QuoteArtworkTypography.signatureRuleGap;
+      final signatureInset = (bounds.maxWidth * .105).clamp(12.0, 28.0);
+      final nameAvailable = math.max(
+        1.0,
+        bounds.maxWidth - signatureInset * 2 - ruleWidth - ruleGap,
       );
       final authorPainter = TextPainter(
-        text: authorSpan,
+        text: quoteAuthorSignatureSpan(
+          widget.author.isEmpty ? 'Ag' : widget.author,
+          signatureStyle,
+        ),
         textDirection: direction,
         textScaler: TextScaler.noScaling,
         maxLines: 3,
-      )..layout(maxWidth: bounds.maxWidth);
-      final authorHeight = widget.author.isEmpty ? 0.0 : authorPainter.height;
-      // Reserve the signature band before an asynchronous name lookup finishes,
-      // so the body and current sheet stay still when the name arrives.
-      final signatureBand = math.max(64.0, authorHeight);
+      )..layout(maxWidth: nameAvailable);
+      final signatureSize = Size(
+        math.min(
+              nameAvailable,
+              authorPainter.maxIntrinsicWidth.ceilToDouble() + 2,
+            ) +
+            ruleWidth +
+            ruleGap,
+        authorPainter.height,
+      );
       authorPainter.dispose();
       TextStyle bodyStyle(double spacing) => TextStyle(
         fontSize: QuoteArtworkTypography.bodySize,
@@ -271,7 +274,7 @@ class _PaperCompositionState extends State<_PaperComposition> {
       final layoutKey = (
         widget.quote,
         bounds.biggest,
-        authorHeight,
+        signatureSize,
         image != null,
         direction,
         widget.calligraphyStyle,
@@ -284,153 +287,114 @@ class _PaperCompositionState extends State<_PaperComposition> {
               size: bounds.biggest,
               span: bodySpan,
               direction: direction,
-              signatureHeight: signatureBand,
+              signatureSize: signatureSize,
               hasPortrait: image != null,
             );
       _layoutKey = layoutKey;
       _cachedLayout = layout;
-      final activePage = math.min(_page, layout.pages.length - 1);
-      if (_page != activePage) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _controller.hasClients)
-            _controller.jumpToPage(activePage);
-        });
-      }
       return MediaQuery(
         data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
+            if (layout.portrait != null)
+              Positioned.fromRect(
+                rect: layout.portrait!,
+                child: ExcludeSemantics(
+                  child: QuotePortraitCutout(
+                    image: image!,
+                    width: layout.portrait!.width,
+                    height: layout.portrait!.height,
+                  ),
+                ),
+              ),
             Positioned.fill(
-              bottom: layout.footerHeight,
-              child: PageView.builder(
-                key: const ValueKey('quote-art-pages'),
-                controller: _controller,
-                itemCount: layout.pages.length,
-                onPageChanged: (page) => setState(() => _page = page),
-                itemBuilder: (context, index) {
-                  final page = layout.pages[index];
-                  final active = index == activePage;
-                  return Stack(
-                    clipBehavior: Clip.hardEdge,
-                    children: [
-                      if (page.portrait != null)
-                        Positioned.fromRect(
-                          rect: page.portrait!,
-                          child: ExcludeSemantics(
-                            child: QuotePortraitCutout(
-                              image: image!,
-                              width: page.portrait!.width,
-                              height: page.portrait!.height,
-                            ),
-                          ),
-                        ),
-                      Positioned.fill(
-                        key: ValueKey(
-                          active ? 'quote-body' : 'quote-body-page-$index',
-                        ),
-                        child: Semantics(
-                          label: page.lines.map((line) => line.text).join('\n'),
-                          excludeSemantics: true,
-                          child: Stack(
-                            children: [
-                              for (
-                                var line = 0;
-                                line < page.lines.length;
-                                line++
+              key: const ValueKey('quote-body'),
+              child: Semantics(
+                label: layout.lines.map((line) => line.text).join('\n'),
+                excludeSemantics: true,
+                child: Stack(
+                  children: [
+                    for (var line = 0; line < layout.lines.length; line++)
+                      Positioned.fromRect(
+                        rect: layout.lines[line].rect,
+                        child: widget.animateCalligraphy
+                            ? CalligraphyWritingText(
+                                key: ValueKey('quote-line-$line'),
+                                text: layout.lines[line].text,
+                                style: bodyStyle(layout.letterSpacing),
+                                calligraphyStyle: widget.calligraphyStyle,
+                                englishFontStyle: widget.englishFontStyle,
+                                textAlign: layout.lines[line].align,
+                                maxLines: 1,
                               )
-                                Positioned.fromRect(
-                                  rect: page.lines[line].rect,
-                                  child: widget.animateCalligraphy && active
-                                      ? CalligraphyWritingText(
-                                          key: ValueKey(
-                                            'quote-line-$index-$line',
-                                          ),
-                                          text: page.lines[line].text,
-                                          style: bodyStyle(
-                                            layout.letterSpacing,
-                                          ),
-                                          calligraphyStyle:
-                                              widget.calligraphyStyle,
-                                          englishFontStyle:
-                                              widget.englishFontStyle,
-                                          textAlign: page.lines[line].align,
-                                          maxLines: 1,
-                                        )
-                                      : Text.rich(
-                                          bodySpan(
-                                            page.lines[line].text,
-                                            layout.letterSpacing,
-                                          ),
-                                          key: ValueKey(
-                                            'quote-line-$index-$line',
-                                          ),
-                                          textAlign: page.lines[line].align,
-                                          maxLines: 1,
-                                          softWrap: false,
-                                        ),
+                            : Text.rich(
+                                bodySpan(
+                                  layout.lines[line].text,
+                                  layout.letterSpacing,
                                 ),
-                            ],
-                          ),
-                        ),
+                                key: ValueKey('quote-line-$line'),
+                                textAlign: layout.lines[line].align,
+                                maxLines: 1,
+                                softWrap: false,
+                              ),
                       ),
-                      if (widget.author.isNotEmpty)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top:
-                              layout.signatureTop +
-                              signatureBand -
-                              authorHeight,
-                          child: QuoteAuthorSignature(
-                            widget.author,
-                            key: ValueKey(
-                              active
-                                  ? 'quote-author'
-                                  : 'quote-author-page-$index',
-                            ),
-                            style: signatureStyle,
-                            maxLines: 3,
-                          ),
-                        ),
-                    ],
-                  );
-                },
+                  ],
+                ),
               ),
             ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: layout.footerHeight,
-              child: Row(
-                key: const ValueKey('quote-read-more-region'),
-                children: [
-                  if (layout.pages.length > 1)
-                    Text(
-                      '${activePage + 1} / ${layout.pages.length}${bounds.maxWidth >= 310 ? '  ·  左右翻页' : ''}',
-                      key: const ValueKey('quote-page-count'),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Color(0xff716a5f),
+            if (widget.author.isNotEmpty)
+              Positioned.fromRect(
+                rect: layout.signatureRect,
+                child: Stack(
+                  key: const ValueKey('quote-author-region'),
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: 0,
+                      top: QuoteArtworkTypography.signatureSize * .61,
+                      child: Container(
+                        key: const ValueKey('quote-signature-rule'),
+                        width: ruleWidth,
+                        height: 1.1,
+                        color: QuoteArtworkTypography.ink,
                       ),
                     ),
-                  const Spacer(),
-                  InkWell(
-                    key: const ValueKey('quote-read-more'),
-                    onTap: widget.onRead,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 5),
-                      child: Text(
-                        bounds.maxWidth < 210 ? '全文与解读 ›' : '阅读全文与解读 ›',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xff625c55),
-                        ),
+                    Positioned(
+                      left: ruleWidth + ruleGap,
+                      right: 0,
+                      top: 0,
+                      child: QuoteAuthorSignature(
+                        widget.author,
+                        key: const ValueKey('quote-author'),
+                        style: signatureStyle,
+                        textAlign: TextAlign.left,
+                        maxLines: 3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Positioned.fromRect(
+              rect: layout.footerRect,
+              child: Align(
+                key: const ValueKey('quote-read-more-region'),
+                alignment: Alignment.centerRight,
+                child: InkWell(
+                  key: const ValueKey('quote-read-more'),
+                  onTap: widget.onRead,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Text(
+                      layout.footerRect.width < 180 ? '全文与解读 ›' : '阅读全文与解读 ›',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xff625c55),
+                        fontFamilyFallback: [quoteLiterarySerifFont],
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ],
