@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../utils/debug_logger.dart';
+import 'quote_author_signature_service.dart';
 import 'unified_ai_service.dart';
 
 /// Built-in representatives are intentionally grouped by field so the task
@@ -285,6 +286,7 @@ class QuotePracticeActivity {
 class GeneratedQuote {
   final String content;
   final String author;
+  final String originalAuthorName;
   final String source;
   final String theme;
   final String coreMatch;
@@ -303,6 +305,7 @@ class GeneratedQuote {
   const GeneratedQuote({
     required this.content,
     required this.author,
+    this.originalAuthorName = '',
     required this.source,
     required this.theme,
     required this.coreMatch,
@@ -350,6 +353,7 @@ class GeneratedQuote {
     return GeneratedQuote(
       content: content,
       author: author,
+      originalAuthorName: originalAuthorName,
       source: source,
       theme: theme,
       coreMatch: coreMatch,
@@ -372,11 +376,14 @@ class GeneratedQuote {
 class QuoteAiService {
   final UnifiedAiService _ai;
   final QuoteAvatarDownloader _avatarDownloader;
+  final QuoteAuthorSignatureService _signatures;
 
   QuoteAiService({
     UnifiedAiService? ai,
     QuoteAvatarDownloader? avatarDownloader,
+    QuoteAuthorSignatureService? signatures,
   })  : _ai = ai ?? UnifiedAiService(),
+        _signatures = signatures ?? QuoteAuthorSignatureService.shared,
         _avatarDownloader = avatarDownloader ?? QuoteAvatarDownloader();
 
   Future<GeneratedQuote> generate(Map<String, dynamic> task) async {
@@ -413,6 +420,14 @@ class QuoteAiService {
       fallbackTheme: config.theme,
       nextCursor: cursor + 1,
     );
+
+    // Cache the name from this same response. A scheduled quote still makes
+    // exactly one model request, and cache errors cannot prevent its reminder.
+    if (result.originalAuthorName.isNotEmpty) {
+      try {
+        await _signatures.remember(result.author, result.originalAuthorName);
+      } catch (_) { /* The foreground can resolve it again when needed. */ }
+    }
 
     if (config.downloadAvatar) {
       try {
@@ -486,11 +501,13 @@ class QuoteAiService {
 9. 活动应让用户在感受、选择、行动及结果中理解概念，而不是要求用户证明名言必然正确。活动必须低风险、尊重本人和他人同意，不得包含违法、危险、自伤、羞辱、强迫公开隐私、冒充医疗治疗或故意诱发创伤的内容；用户应可随时暂停。
 10. avatar_search_query 返回适合在维基百科检索人物肖像的名称（优先通行中文名，可附原文名）。avatar_url 只有在确信是 Wikimedia/Wikipedia 的人物肖像直链时才填写，否则留空。
 11. 只返回 JSON，不要 Markdown、代码围栏或额外说明。
+12. author_original_name 返回作者本人在其作品中常用的原文姓名或笔名（例如 Sigmund Freud、Jean-Paul Sartre、莫言），不将外国作者译成中文，保留原文拼写/变音符号/原文字母。这里只要姓名，不要破折号、书名、国籍、译名对照或手写签名图；不能确定时留空。author 字段仍按规则 2 原样返回，两个字段用途不同。
 
 JSON 字段必须完整：
 {
   "quote": "名言正文",
   "author": "署名",
+  "author_original_name": "作者原文姓名或空字符串",
   "source": "出处或出处待考",
   "theme": "主题",
   "core_match": "它与用户描述核心思想的匹配依据",
@@ -578,6 +595,10 @@ JSON 字段必须完整：
     return GeneratedQuote(
       content: content,
       author: author,
+      originalAuthorName: QuoteAuthorSignatureService.knownName(author) ??
+          QuoteAuthorSignatureService.cleanOriginalName(_readString(map, const [
+            'author_original_name', 'original_author_name', 'original_name',
+          ])) ?? '',
       source: source,
       theme: theme,
       coreMatch: _readString(map, const <String>[

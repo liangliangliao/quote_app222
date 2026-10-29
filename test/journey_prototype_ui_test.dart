@@ -17,7 +17,9 @@ Widget _scene({VoidCallback? next}) => QuoteHomeScene(
   poster: const PosterPureFlutter(
     topic: '不可战胜的夏天',
     quote: '在隆冬之中，我终于在自己内心发现了一个不可战胜的夏天。',
-    author: '—— 阿尔贝·加缪《重返提帕萨》',
+    author: '阿尔贝·加缪',
+    originalAuthor: 'Albert Camus',
+    source: '重返提帕萨',
     note: '在承认困难之后，仍然选择热爱、行动与承担。',
     avatar: 'assets/avatars/Albert_Camus_1945_(cropped).jpg',
   ),
@@ -28,12 +30,10 @@ Widget _scene({VoidCallback? next}) => QuoteHomeScene(
   ),
   onMenu: () {},
   onSearch: () {},
-  onPin: () {},
   onNext: next ?? () {},
   onFavorite: () {},
   onCategories: () {},
   onShare: () {},
-  onPinnedQuotes: () {},
   onHistory: (_) {},
 );
 
@@ -163,7 +163,6 @@ void main() {
         for (final action in [
           'menu',
           'search',
-          'pin',
           'next',
           'favorite',
           'categories',

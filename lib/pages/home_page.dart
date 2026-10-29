@@ -13,6 +13,7 @@ import 'package:quote_app/services/quote_frame_ai_service.dart';
 import 'package:quote_app/services/quote_calligraphy_settings.dart';
 import 'package:quote_app/services/notification_service.dart';
 import 'package:quote_app/services/quote_ai_service.dart';
+import '../services/quote_author_signature_service.dart';
 import '../data/dao.dart';
 import '../widgets/quote_home_scene.dart';
 import '../widgets/quote_library_sheet.dart';
@@ -23,26 +24,12 @@ import 'package:quote_app/services/native_guard.dart';
 
 
 
-String _buildAuthorLine(String authorName, String source) {
-  authorName = (authorName).trim();
-  source = (source).trim();
-  if (authorName.isEmpty && source.isEmpty) return '';
-  final s = StringBuffer('——');
-  if (authorName.isNotEmpty) {
-    s.write(authorName);
-    if (source.isNotEmpty) s.write('《' + source + '》');
-  } else if (source.isNotEmpty) {
-    s.write('《' + source + '》');
-  }
-  return s.toString();
-}
-
-
   bool isShortTopic(String s) {
     try { return s.runes.length < 15; } catch (_) { return s.length < 15; }
   }
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.signatures});
+  final QuoteAuthorSignatureService? signatures;
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -74,6 +61,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _sessionPrompted = false;
 
   Map<String, dynamic>? _todayData;
+  late final _signatures = widget.signatures ?? QuoteAuthorSignatureService.shared;
+  String _signatureAuthor = '', _originalAuthorName = '';
+  int _signatureRevision = 0;
+
+  Future<void> _resolveOriginalAuthor(Map<String, dynamic> payload) async {
+    final author = QuoteAuthorSignatureService.authorName((payload['author'] ?? '').toString());
+    final supplied = (payload['author_original_name'] ?? '').toString();
+    final revision = ++_signatureRevision;
+    final immediate = _signatures.displayName(author, originalName: supplied) ?? '';
+    if (mounted && (_signatureAuthor != author || _originalAuthorName != immediate)) {
+      setState(() { _signatureAuthor = author; _originalAuthorName = immediate; });
+    }
+    final name = await _signatures.resolve(author, originalName: supplied);
+    if (!mounted || revision != _signatureRevision || name == null ||
+        _todayData == null || QuoteLibraryStore.identity(_todayData!) != QuoteLibraryStore.identity(payload)) return;
+    if (_originalAuthorName != name) {
+      setState(() => _originalAuthorName = name);
+    }
+    _todayData!['author_original_name'] = name;
+    for (final row in _readingHistory) {
+      if (QuoteLibraryStore.identity(row) == QuoteLibraryStore.identity(payload)) row['author_original_name'] = name;
+    }
+  }
 
   final QuoteFrameAiService _frameAi = QuoteFrameAiService();
   final QuoteCalligraphySettings _calligraphySettings =
@@ -125,6 +135,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _activateFrame(Map<String, dynamic> payload) async {
+    unawaited(_resolveOriginalAuthor(payload));
     unawaited(_loadFavoriteFor(payload));
     final topic = (payload['topic'] ?? '').toString();
     final quote = (payload['quote'] ?? '').toString();
@@ -358,38 +369,13 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
   bool _homeReloadQueued = false;
   bool _fav = false;
   final _library = QuoteLibraryStore();
-  bool _favoriteBusy = false, _nextBusy = false, _pinnedGalleryOpen = false;
+  bool _favoriteBusy = false, _nextBusy = false;
   int _favoriteGeneration = 0, _readingIndex = 0;
   final _readingHistory = <Map<String, dynamic>>[];
-  final _pinnedCollectionTick = ValueNotifier<int>(0);
 
   bool _liked = false;
   bool _notifAsked = false;
   final Set<String> _avatarRepairAttempted = <String>{};
-
-  // Pinned (fixed) quotes state.  These lists store the loaded fixed quotes for
-  // the bottom grey area.  `_pinnedQuotes` holds the current batch of
-  // records, `_pinnedHasMore` indicates whether more can be loaded from the
-  // database, and `_loadingPinned` prevents concurrent loads.  A dedicated
-  // scroll controller listens for horizontal scrolls to trigger loading
-  // additional pages.  `_pinnedActive` tracks whether the currently
-  // displayed large quote is pinned.
-  List<Map<String, dynamic>> _pinnedQuotes = [];
-  int _pinnedTotal = 0;
-  int _pinnedJumpRevision = 0;
-  bool _pinnedHasMore = false;
-  bool _loadingPinned = false;
-  final ScrollController _pinnedController = ScrollController();
-  bool _pinnedActive = false;
-  bool _showPinnedJumpToStart = false;
-  bool _showPinnedJumpToEnd = false;
-  bool _pinnedEndToastShown = false;
-
-  // UI animation helpers for pinned small frames
-  int? _animInsertPinnedId; // id of newly inserted pinned card (leftmost)
-  int? _animRemovePinnedId; // id of pinned card being removed
-  static const double _pinnedCardWidth = 200;
-  static const double _pinnedCardGap = 0;
 
   void _openLeftDrawer() {
     try {
@@ -400,9 +386,6 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
 
   void _handleTopBarMenu(String value) async {
     switch (value) {
-      case 'pinned_quotes':
-        await _showPinnedGallery();
-        break;
       case 'favorite_quotes':
         await _openLibrary(favoritesOnly: true);
         break;
@@ -452,9 +435,6 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
         .addListener(_onCalligraphyPreferenceChanged);
     unawaited(_loadCalligraphyPreference());
     _load();
-    _pinnedController.addListener(_handlePinnedScroll);
-    // Load pinned quotes immediately on first build
-    _loadPinned(reset: true);
 
     // 每次从冷启动进入首页时，尝试弹出心情卡片
   }
@@ -468,10 +448,6 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
     SimpleBus.homeTick.removeListener(_onBus);
     QuoteCalligraphySettings.changeTick
         .removeListener(_onCalligraphyPreferenceChanged);
-    _pinnedController.removeListener(_handlePinnedScroll);
-    // Dispose the pinned scroll controller to free resources
-    _pinnedController.dispose();
-    _pinnedCollectionTick.dispose();
     super.dispose();
   }
 
@@ -666,7 +642,8 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
             () => _todayData = <String, dynamic>{
               'topic': '每日名言',
               'quote': '千里之行，始于足下。',
-              'author': '——《道德经》',
+              'author': '老子',
+              'source': '道德经',
               'note': '从眼前的一小步开始。',
             },
           );
@@ -694,16 +671,14 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         }
         // 没有今日有效记录时，保留刚刚即时显示的默认名言，不让首页回到空白。
         await DLog.i('HOME', '今日未检索到有效记录：显示默认名言');
-        await _checkPinnedState();
         _requestNotifAfterFirstFrame();
       } else if (mapEquals(previousRow, latest) && _todayData != null) {
-        // Keep the current poster (including a user-selected pinned quote)
+        // Keep the current poster selected from the library
         // when a tab switch or duplicate event carries no new database row.
-        await _checkPinnedState();
+        unawaited(_resolveOriginalAuthor(_todayData!));
         _requestNotifAfterFirstFrame();
       } else {
         _latestRow = latest;
-        // 根据署名和出处组装 author 字段。若存在署名或出处则前缀“——”，否则为空
         final String authorName =
             (latest['author_name'] ?? latest['author'] ?? '').toString().trim();
         final String source = (latest['source_from'] ?? latest['source'] ?? '')
@@ -726,24 +701,11 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         if (!storedAvatarVerified || avatarUrl.isEmpty) {
           unawaited(_repairQuoteAvatar(latest, authorName));
         }
-        String authorLine = '';
-        if (authorName.isNotEmpty || source.isNotEmpty) {
-          // 如果署名不为空，使用“——署名 出处”，否则仅加前缀
-          authorLine = '——';
-          if (authorName.isNotEmpty) {
-            authorLine += authorName;
-            if (source.isNotEmpty) {
-              authorLine += '《' + source + '》';
-            }
-          } else {
-            authorLine += (source.isNotEmpty ? ('《' + source + '》') : '');
-          }
-        }
         final payload = <String, dynamic>{
           'topic': (latest['theme'] ?? latest['topic'] ?? '').toString(),
           'quote': (latest['content'] ?? latest['quote'] ?? '').toString(),
-          // 将 author 字段设置为包含署名和出处的组合文本
-          'author': authorLine,
+          'author': authorName,
+          'author_original_name': (latest['author_original_name'] ?? '').toString(),
           'source': source,
           'note': (latest['explanation'] ?? latest['note'] ?? '').toString(),
           'avatarUrl': avatarUrl,
@@ -755,395 +717,31 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
             _todayData = payload;
           });
         if (mounted) unawaited(_activateFrame(payload));
-        // Update pinned state after injecting DB content
-        await _checkPinnedState();
         _requestNotifAfterFirstFrame();
       }
     } catch (e) {
       _latestRow = previousRow;
       await DLog.e('HOME', '查询异常：注入兜底内容；err=$e');
       // 异常也不擦掉已显示的随包兜底名言。
-      // Update pinned state after error fallback
-      await _checkPinnedState();
       _requestNotifAfterFirstFrame();
     }
   }
 
   Future<void> _copyLatest() async {
     final quote = (_todayData?['quote'] ?? '').toString().trim();
-    final author = (_todayData?['author'] ?? '').toString().trim();
-    final text = [quote, author].where((value) => value.isNotEmpty).join('\n\n');
+    final originalAuthor = (_todayData?['author_original_name'] ?? '').toString().trim();
+    final author = originalAuthor.isNotEmpty
+        ? originalAuthor : (_todayData?['author'] ?? '').toString().trim();
+    final source = (_todayData?['source'] ?? '').toString().trim();
+    final text = [quote, author, if (source.isNotEmpty) '《$source》']
+        .where((value) => value.isNotEmpty).join('\n\n');
     if (text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('名言已复制，可粘贴分享'), behavior: SnackBarBehavior.floating, margin: const EdgeInsets.fromLTRB(18, 0, 18, 145)));
   }
 
-  /// Load fixed quotes from the database.  When [reset] is true, clear the
-  /// existing list and start from offset 0.  Otherwise, append the next
-  /// page of results.  Each page fetches up to 20 records.  Updates
-  /// [_pinnedQuotes], [_pinnedHasMore] and [_loadingPinned] accordingly.
-  Future<void> _loadPinned({bool reset = false}) async {
-    if (_loadingPinned) return;
-    _loadingPinned = true;
-    try {
-      final dao = QuoteFixedDao();
-      final offset = reset ? 0 : _pinnedQuotes.length;
-      final rows = await dao.all(limit: 20, offset: offset);
-      final total = await dao.count();
-      final hydratedRows = rows.map((row) {
-        final avatar = (row['avatar'] ?? '').toString().trim();
-        final author = (row['author_name'] ?? row['author'] ?? '').toString();
-        if (_isIdentityVerifiedAvatar(row, author, avatar)) return row;
-        final asset = QuoteAvatarAssetResolver.forAuthor(author);
-        return <String, dynamic>{...row, 'avatar': asset};
-      }).toList();
-      if (!mounted) return;
-      setState(() {
-        _pinnedTotal = total;
-        if (reset) {
-          _pinnedQuotes = List<Map<String, dynamic>>.from(hydratedRows);
-          _pinnedEndToastShown = false;
-        } else {
-          _pinnedQuotes.addAll(hydratedRows);
-        }
-        _pinnedHasMore = rows.length == 20;
-        _loadingPinned = false;
-      });
-      _pinnedCollectionTick.value++;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (reset && _pinnedController.hasClients) {
-          _pinnedController.jumpTo(0);
-        }
-        _updatePinnedJumpButtons();
-        if (!_pinnedHasMore && !_pinnedEndToastShown && _pinnedQuotes.length > 20) {
-          _pinnedEndToastShown = true;
-          final messenger = ScaffoldMessenger.maybeOf(context);
-          messenger?.hideCurrentSnackBar();
-          messenger?.showSnackBar(
-            const SnackBar(
-              content: Text('已经到底了'),
-              behavior: SnackBarBehavior.floating, margin: const EdgeInsets.fromLTRB(18, 0, 18, 145),
-              duration: Duration(milliseconds: 900),
-            ),
-          );
-        }
-      });
-    } catch (_) {
-      _loadingPinned = false;
-    }
-  }
-
-  void _handlePinnedScroll() {
-    if (!_pinnedController.hasClients) {
-      return;
-    }
-    _updatePinnedJumpButtons();
-    final position = _pinnedController.position;
-    if (!_loadingPinned && _pinnedHasMore && position.extentAfter < 320) {
-      _loadPinned(reset: false);
-    }
-  }
-
-  void _updatePinnedJumpButtons() {
-    if (!_pinnedController.hasClients || _pinnedQuotes.length <= 1) {
-      if (_showPinnedJumpToStart || _showPinnedJumpToEnd) {
-        setState(() {
-          _showPinnedJumpToStart = false;
-          _showPinnedJumpToEnd = false;
-        });
-        if (_pinnedGalleryOpen) _pinnedCollectionTick.value++;
-      }
-      return;
-    }
-    final position = _pinnedController.position;
-    final bool showStart = position.pixels > 24;
-    final bool showEnd = position.pixels < (position.maxScrollExtent - 24);
-    if (showStart != _showPinnedJumpToStart || showEnd != _showPinnedJumpToEnd) {
-      setState(() {
-        _showPinnedJumpToStart = showStart;
-        _showPinnedJumpToEnd = showEnd;
-      });
-      if (_pinnedGalleryOpen) _pinnedCollectionTick.value++;
-    }
-  }
-
-  Future<void> _jumpPinnedToEdge({required bool toStart}) async {
-    final revision = ++_pinnedJumpRevision;
-    bool current() => mounted && revision == _pinnedJumpRevision && _pinnedController.hasClients;
-    if (!current()) return;
-    if (!toStart) {
-      while (_pinnedHasMore && current()) {
-        await _loadPinned(reset: false);
-        await WidgetsBinding.instance.endOfFrame;
-      }
-    }
-    var previousTarget = -1.0;
-    while (current()) {
-      final position = _pinnedController.position;
-      final target = toStart ? 0.0 : position.maxScrollExtent;
-      if (!toStart && target <= previousTarget + .5) return;
-      previousTarget = target;
-      await position.animateTo(target, duration: const Duration(milliseconds: 280), curve: Curves.easeOutCubic);
-      if (!current()) return;
-      await WidgetsBinding.instance.endOfFrame;
-      if (!current() || toStart) return;
-      final settled = _pinnedController.position;
-      // Appending cards can extend the modal's scroll bounds during animation.
-      // Continue only if the old endpoint was reached; a user drag cancels it.
-      if (settled.extentAfter < .5 || (settled.pixels - target).abs() > 1) return;
-    }
-  }
-
-  /// Build a single fixed quote card using the same default wooden-frame photo
-  /// as the main home poster.
-  Widget _buildFixedCard(Map<String, dynamic> row) => Semantics(
-    button: true,
-    label: '阅读固定名言：${row['theme'] ?? ''}',
-    child: GestureDetector(
-      key: ValueKey('pinned-quote-${row['id'] ?? row['fixed_uid']}'),
-      onTap: () {
-        unawaited(_switchToPinned(row));
-        if (_pinnedGalleryOpen) Navigator.of(context).pop();
-      },
-      child: PosterPureFlutter(
-        topic: (row['theme'] ?? '').toString(),
-        quote: (row['content'] ?? '').toString(),
-        author: _buildAuthorLine(
-          (row['author_name'] ?? '').toString(),
-          (row['source_from'] ?? '').toString(),
-        ),
-        note: (row['explanation'] ?? '').toString(),
-        avatar: (row['avatar'] ?? '').toString(),
-        calligraphyStyle: _quoteCalligraphyStyle,
-        englishFontStyle: _quoteEnglishFontStyle,
-      ),
-    ),
-  );
-
-  /// Build the grey area widget that displays pinned quotes.  When the list is
-  /// empty, returns an empty widget.  When there is one item, centers it.
-  /// Otherwise, lays out cards horizontally with lazy loading and a trailing
-  /// message when all data has loaded.
-  Widget _buildPinnedContent() {
-    if (_pinnedQuotes.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    final double bottomInset = MediaQuery.of(context).padding.bottom;
-    const double cardHeight = 230;
-    final double viewportHeight = cardHeight + bottomInset + 12;
-    final EdgeInsets listPadding = EdgeInsets.fromLTRB(6, 0, 6, bottomInset + 6);
-
-    Widget buildItemCard(Map<String, dynamic> row) {
-      final int? id = row['id'] is int ? row['id'] as int : null;
-      Widget card = SizedBox(
-        width: _pinnedCardWidth,
-        height: cardHeight,
-        child: _buildFixedCard(row),
-      );
-      if (id != null && id == _animInsertPinnedId) {
-        card = TweenAnimationBuilder<Offset>(
-          tween: Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero),
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          child: card,
-          builder: (context, offset, child) =>
-              FractionalTranslation(translation: offset, child: child),
-        );
-      } else if (id != null && id == _animRemovePinnedId) {
-        card = TweenAnimationBuilder<Offset>(
-          tween: Tween<Offset>(begin: Offset.zero, end: const Offset(0, -1)),
-          duration: const Duration(milliseconds: 240),
-          curve: Curves.easeInCubic,
-          child: card,
-          builder: (context, offset, child) =>
-              FractionalTranslation(translation: offset, child: child),
-        );
-      }
-      return card;
-    }
-
-    final Widget listView = ListView.builder(
-      controller: _pinnedController,
-      scrollDirection: Axis.horizontal,
-      itemExtent: _pinnedCardWidth + _pinnedCardGap,
-      physics: const ClampingScrollPhysics(),
-      padding: listPadding,
-      itemCount: _pinnedQuotes.length + (_pinnedHasMore ? 0 : 1),
-      itemBuilder: (context, idx) {
-        if (idx < _pinnedQuotes.length) {
-          return buildItemCard(_pinnedQuotes[idx]);
-        }
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              '已经到底了',
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
-            ),
-          ),
-        );
-      },
-    );
-
-    return Container(
-      height: viewportHeight,
-      width: double.infinity,
-      color: const Color(0xFFF5F5F5),
-      child: Stack(
-        children: [
-          if (_pinnedQuotes.length == 1)
-            Padding(
-              padding: listPadding,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: buildItemCard(_pinnedQuotes.first),
-              ),
-            )
-          else
-            listView,
-          if (_showPinnedJumpToStart)
-            Positioned(
-              left: 6,
-              top: 84,
-              child: _buildPinnedJumpButton(
-                icon: Icons.chevron_left,
-                tooltip: '跳到最新固定的名言',
-                onTap: () => _jumpPinnedToEdge(toStart: true),
-              ),
-            ),
-          if (_showPinnedJumpToEnd)
-            Positioned(
-              right: 6,
-              top: 84,
-              child: _buildPinnedJumpButton(
-                icon: Icons.chevron_right,
-                tooltip: '跳到最早固定的名言',
-                onTap: () => _jumpPinnedToEdge(toStart: false),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPinnedJumpButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
-    return Tooltip(message: tooltip, child: Material(
-      color: Colors.white.withOpacity(0.96),
-      elevation: 4,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, color: Colors.black87, size: 26),
-        ),
-      ),
-    ));
-  }
-
-  /// Check whether the currently displayed quote is already pinned.  Updates
-  /// the [_pinnedActive] flag accordingly.  Invoked whenever [_todayData]
-  /// changes.
-  Future<void> _checkPinnedState() async {
-    final content = (_todayData?['quote'] ?? '').toString();
-    final theme = (_todayData?['topic'] ?? '').toString();
-    if (content.trim().isEmpty) {
-      if (mounted) setState(() { _pinnedActive = false; });
-      return;
-    }
-    final dao = QuoteFixedDao();
-    final row = await dao.findByContentAndTheme(content, theme);
-    if (!mounted) return;
-    setState(() { _pinnedActive = row != null; });
-  }
-
-  /// Toggle the pin state for the current large quote.  If the quote is
-  /// already pinned, this will remove it; otherwise, it attempts to insert
-  /// it into the fixed table.  Displays feedback via SnackBar.
-  Future<void> _togglePin() async {
-    final content = (_todayData?['quote'] ?? '').toString();
-    final theme = (_todayData?['topic'] ?? '').toString();
-    if (content.trim().isEmpty) return;
-    final fixedDao = QuoteFixedDao();
-    final existing = await fixedDao.findByContentAndTheme(content, theme);
-    if (existing != null) {
-      // Unpin with slide-up + list shift animation
-      final int? removingId = existing['id'] is int ? existing['id'] as int : null;
-      if (mounted && removingId != null) {
-        setState(() { _animRemovePinnedId = removingId; });
-      }
-      await fixedDao.deleteByContentAndTheme(content, theme);
-      if (mounted) {
-        setState(() { _pinnedActive = false; });
-      }
-      // allow the card to slide up before removing from list
-      await Future.delayed(const Duration(milliseconds: 260));
-      await _loadPinned(reset: true);
-      if (mounted) {
-        setState(() { _animRemovePinnedId = null; });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('已取消固定名言'),
-            behavior: SnackBarBehavior.floating, margin: const EdgeInsets.fromLTRB(18, 0, 18, 145),
-          ),
-        );
-      }
-      return;
-    }
-    // Not pinned; search in quotes table
-    final quoteDao = QuoteDao();
-    final row = await quoteDao.findByContentAndTheme(content, theme)
-        ?? QuoteLibraryStore.normalize(_todayData ?? {});
-    final int? quoteId = row['id'] is int ? row['id'] as int : null;
-    await fixedDao.insert(
-      content: content,
-      theme: theme,
-      authorName: (row['author_name'] ?? row['author'] ?? '').toString(),
-      sourceFrom: (row['source_from'] ?? row['source'] ?? '').toString(),
-      explanation: (row['explanation'] ?? row['note'] ?? '').toString(),
-      avatar: () {
-        final saved = (row['avatar'] ?? row['avatarUrl'] ?? '').toString();
-        if (saved.trim().isNotEmpty) return saved;
-        return QuoteAvatarAssetResolver.forAuthor(
-          (row['author_name'] ?? row['author'] ?? '').toString(),
-        );
-      }(),
-      quoteId: quoteId,
-    );
-    if (mounted) {
-      setState(() { _pinnedActive = true; });
-    }
-    await Future.delayed(const Duration(milliseconds: 260));
-    await _loadPinned(reset: true);
-    // mark the new leftmost card to slide down from top
-    if (mounted && _pinnedQuotes.isNotEmpty) {
-      final int? newId = _pinnedQuotes.first['id'] is int ? _pinnedQuotes.first['id'] as int : null;
-      setState(() { _animInsertPinnedId = newId; });
-      Future.delayed(const Duration(milliseconds: 360), () {
-        if (mounted) setState(() { _animInsertPinnedId = null; });
-      });
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('名言已固定在底部'),
-          behavior: SnackBarBehavior.floating, margin: const EdgeInsets.fromLTRB(18, 0, 18, 145),
-        ),
-      );
-    }
-  }
-
-  /// Switch the large poster to display a pinned quote.  Builds the
-  /// corresponding payload and updates [_todayData], then refreshes the
-  /// pinned state.
-  Future<void> _switchToPinned(Map<String, dynamic> row) async {
+  Future<void> _displayLibraryQuote(Map<String, dynamic> row) async {
     final authorName = (row['author_name'] ?? '').toString().trim();
     final savedAvatar = (row['avatar'] ?? '').toString();
     var avatarUrl = _isIdentityVerifiedAvatar(row, authorName, savedAvatar)
@@ -1156,22 +754,11 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
     final String quote = (row['content'] ?? '').toString();
     final String source = (row['source_from'] ?? '').toString().trim();
     final String note = (row['explanation'] ?? '').toString();
-    String authorLine = '';
-    if (authorName.isNotEmpty || source.isNotEmpty) {
-      authorLine = '——';
-      if (authorName.isNotEmpty) {
-        authorLine += authorName;
-        if (source.isNotEmpty) {
-          authorLine += '《' + source + '》';
-        }
-      } else {
-        authorLine += (source.isNotEmpty ? ('《' + source + '》') : '');
-      }
-    }
     final payload = <String, dynamic>{
       'topic': theme,
       'quote': quote,
-      'author': authorLine,
+      'author': authorName,
+      'author_original_name': (row['author_original_name'] ?? '').toString(),
       'source': source,
       'note': note,
       'avatarUrl': avatarUrl,
@@ -1181,8 +768,6 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
       _todayData = payload;
     });
     unawaited(_activateFrame(payload));
-    // After switching, update pinned state
-    await _checkPinnedState();
   }
 
   @override
@@ -1265,7 +850,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
       } catch (_) {}
       row ??= QuoteLibraryStore.normalize(await _loadNextFallbackQuote());
       if (mounted && (row['content'] ?? '').toString().trim().isNotEmpty)
-        await _switchToPinned(row);
+        await _displayLibraryQuote(row);
     } catch (_) {
       if (mounted)
         ScaffoldMessenger.of(
@@ -1288,69 +873,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
       builder: (_) =>
           QuoteLibrarySheet(autofocus: search, favoritesOnly: favoritesOnly),
     );
-    if (mounted && row != null) await _switchToPinned(row);
-  }
-
-  Future<void> _showPinnedGallery() async {
-    _pinnedGalleryOpen = true;
-    try {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        backgroundColor: journeyPaper,
-        builder: (_) => SafeArea(
-          top: false,
-          child: ValueListenableBuilder<int>(
-            valueListenable: _pinnedCollectionTick,
-            builder: (context, _, __) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted && _pinnedGalleryOpen) _updatePinnedJumpButtons();
-              });
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(24, 0, 24, 7),
-                    child: Text(
-                      '固定的好思想',
-                      style: TextStyle(
-                        fontFamily: 'QuoteKaiShu',
-                        fontSize: 24,
-                        color: journeyInk,
-                      ),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
-                    child: Text(
-                      '左右滑动，轻点一幅，再读一次。',
-                      style: TextStyle(fontSize: 12, color: journeyMuted),
-                    ),
-                  ),
-                  _pinnedQuotes.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(30),
-                          child: Center(
-                            child: Text(
-                              '用画面右上角的图钉，把喜欢的名言留在这里。',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: journeyMuted),
-                            ),
-                          ),
-                        )
-                      : _buildPinnedContent(),
-                  const SizedBox(height: 12),
-                ],
-              );
-            },
-          ),
-        ),
-      );
-    } finally {
-      _pinnedGalleryOpen = false;
-    }
+    if (mounted && row != null) await _displayLibraryQuote(row);
   }
 
   void _readHistoryAt(int index) {
@@ -1358,7 +881,6 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
     final payload = _readingHistory[index];
     setState(() => _todayData = payload);
     unawaited(_activateFrame(payload));
-    unawaited(_checkPinnedState());
   }
 
   Widget _buildScaffold(BuildContext context) {
@@ -1370,6 +892,11 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
           'author': '',
           'note': '',
         };
+    final authorName = QuoteAuthorSignatureService.authorName('${content['author'] ?? ''}');
+    final originalAuthor = _signatureAuthor == authorName
+        ? _originalAuthorName
+        : (_signatures.displayName(authorName,
+            originalName: '${content['author_original_name'] ?? ''}') ?? '');
     return Scaffold(
       backgroundColor: const Color(0xfff7f4ed),
       body: QuoteHomeScene(
@@ -1377,6 +904,9 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
           topic: '${content['topic'] ?? ''}',
           quote: '${content['quote'] ?? ''}',
           author: '${content['author'] ?? ''}',
+          originalAuthor: originalAuthor,
+          signaturePending: originalAuthor.isEmpty && authorName.isNotEmpty,
+          source: '${content['source'] ?? ''}',
           note: '${content['note'] ?? ''}',
           avatar: '${content['avatar'] ?? content['avatarUrl'] ?? ''}',
           woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
@@ -1388,16 +918,12 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         moreMenu: _buildMoreMenu(),
         onMenu: _openLeftDrawer,
         onSearch: () => _openLibrary(search: true),
-        onPin: _togglePin,
         onNext: _nextQuote,
         onFavorite: _toggleFavorite,
         onCategories: _openLibrary,
         onShare: _copyLatest,
-        onPinnedQuotes: _showPinnedGallery,
         favorite: _fav,
-        pinned: _pinnedActive,
         nextBusy: _nextBusy,
-        pinnedCount: _pinnedTotal,
         historyCount: _readingHistory.isEmpty ? 1 : _readingHistory.length,
         historyIndex: _readingIndex,
         onHistory: _readHistoryAt,
@@ -1413,10 +939,6 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
     icon: const Icon(Icons.more_vert, color: Colors.black87),
     onSelected: _handleTopBarMenu,
     itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-      const PopupMenuItem<String>(
-        value: 'pinned_quotes',
-        child: Text('固定的名言集'),
-      ),
       const PopupMenuItem<String>(
         value: 'favorite_quotes',
         child: Text('我收藏的名言'),

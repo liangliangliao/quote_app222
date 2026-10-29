@@ -34,7 +34,13 @@ object SysChannel {
           // main thread will cause ANR and freeze Flutter loading spinners.
           Thread {
             try {
-              val ak = try { readBaiduAk(appContext) } catch (_: Throwable) { "oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh" }
+              val ak = try { readBaiduAk(appContext) } catch (_: Throwable) { "" }
+              if (ak.isBlank()) {
+                Handler(Looper.getMainLooper()).post {
+                  result.error("BAIDU_AK_MISSING", "请在设置中配置百度 Android SDK AK", null)
+                }
+                return@Thread
+              }
               // Accept <= 31m (inclusive) per product requirement.
               val loc = obtainBaiduLocation(appContext, ak, 40.0, 12_000L)
               Handler(Looper.getMainLooper()).post {
@@ -119,42 +125,25 @@ object SysChannel {
   }
 
   private fun readBaiduAk(ctx: Context): String {
-    val defAndroid = "oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh"
-    val defWeb = "kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2"
+    // Only the user-configured Android SDK key is valid here. A Web API key
+    // belongs to a different Baidu product and must never be reused for the SDK.
     return try {
-      val cc = com.example.quote_app.data.DbInspector.loadOrLightScan(ctx)
-      val path = cc?.dbPath
-      if (path.isNullOrEmpty()) return defAndroid
-      val db = android.database.sqlite.SQLiteDatabase.openDatabase(path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY)
+      val path = com.example.quote_app.data.DbInspector.loadOrLightScan(ctx)?.dbPath
+      if (path.isNullOrEmpty()) return ""
+      val file = java.io.File(path)
+      if (!file.exists() || !file.isFile) return ""
+      val db = android.database.sqlite.SQLiteDatabase.openDatabase(
+        path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY)
       try {
-        var v: String? = null
-        try {
-          db.rawQuery("SELECT baidu_ak_android FROM configs LIMIT 1", null).use { c ->
-            if (c.moveToFirst()) v = c.getString(0)
-          }
-        } catch (_: Throwable) { /* 表/列不存在时忽略 */ }
-
-        if (v == null || v!!.trim().isEmpty()) {
-          // 兼容旧列：只有当旧列不是默认 Web AK 时才沿用（避免误用 Web AK 触发 505）
-          var oldV: String? = null
-          try {
-            db.rawQuery("SELECT baidu_ak FROM configs LIMIT 1", null).use { c ->
-              if (c.moveToFirst()) oldV = c.getString(0)
-            }
-          } catch (_: Throwable) {}
-          if (oldV != null) {
-            val vv = oldV!!.trim()
-            if (vv.isNotEmpty() && vv != defWeb) v = vv
-          }
+        db.rawQuery("SELECT baidu_ak_android FROM configs ORDER BY id DESC LIMIT 1", null).use { cursor ->
+          if (cursor.moveToFirst()) cursor.getString(0)?.trim().orEmpty() else ""
         }
-
-        val out = v?.trim() ?: ""
-        if (out.isEmpty()) defAndroid else out
-      } finally { try { db.close() } catch (_: Throwable) {} }
-    } catch (_: Throwable) {
-      defAndroid
-    }
+      } finally {
+        try { db.close() } catch (_: Throwable) {}
+      }
+    } catch (_: Throwable) { "" }
   }
+
   private fun obtainFusedHighAcc(ctx: Context, targetAccMeters: Double, timeoutMs: Long): Location? {
     return try {
       val client = LocationServices.getFusedLocationProviderClient(ctx)

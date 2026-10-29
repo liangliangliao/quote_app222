@@ -593,7 +593,8 @@ static Future<Position?> _baiduSdkLocationOnce() async {
       // Web 逆地理：使用 Web AK
       String ak = '';
       try { ak = await ConfigDao().getBaiduAk(); } catch (_) { ak = ''; }
-      final effectiveAk = ak.trim().isNotEmpty ? ak.trim() : 'kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2';
+      final effectiveAk = ak.trim();
+      if (effectiveAk.isEmpty) return;
       final url = Uri.parse(
         'https://api.map.baidu.com/reverse_geocoding/v3/?ak=${Uri.encodeComponent(effectiveAk)}&coordtype=wgs84ll&extensions_poi=1&radius=600&location=${pos.latitude},${pos.longitude}'
       );

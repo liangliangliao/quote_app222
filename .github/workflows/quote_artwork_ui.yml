@@ -1,0 +1,96 @@
+name: Quote Artwork UI
+
+on:
+  push:
+    paths:
+      - 'lib/widgets/quote_art_layout.dart'
+      - 'lib/widgets/poster_pure_flutter.dart'
+      - 'lib/widgets/quote_calligraphy_text.dart'
+      - 'lib/widgets/quote_home_scene.dart'
+      - 'lib/pages/home_page.dart'
+      - 'lib/services/quote_library_store.dart'
+      - 'lib/services/quote_author_signature_service.dart'
+      - 'lib/services/quote_ai_service.dart'
+      - 'test/quote_author_signature_test.dart'
+      - 'test/baidu_credential_settings_test.dart'
+      - 'test/quote_art_layout_test.dart'
+      - 'test/quote_paper_layout_test.dart'
+      - 'test/quote_home_controls_test.dart'
+      - '.github/workflows/quote_artwork_ui.yml'
+  pull_request:
+    paths:
+      - 'test/baidu_credential_settings_test.dart'
+      - 'lib/services/quote_author_signature_service.dart'
+      - 'lib/services/quote_ai_service.dart'
+      - 'test/quote_author_signature_test.dart'
+      - 'lib/widgets/quote_art_layout.dart'
+      - 'lib/widgets/poster_pure_flutter.dart'
+      - 'lib/widgets/quote_calligraphy_text.dart'
+      - 'lib/widgets/quote_home_scene.dart'
+      - 'lib/pages/home_page.dart'
+      - 'test/quote_art_layout_test.dart'
+      - 'test/quote_paper_layout_test.dart'
+      - '.github/workflows/quote_artwork_ui.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quote-artwork-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+      - name: Prepare SQLite
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+      - run: flutter pub get
+      - name: Analyze artwork and controls
+        run: >-
+          flutter analyze --no-pub
+          lib/widgets/quote_art_layout.dart
+          lib/widgets/poster_pure_flutter.dart
+          lib/widgets/quote_calligraphy_text.dart
+          lib/widgets/quote_home_scene.dart
+          lib/pages/home_page.dart
+          lib/services/quote_author_signature_service.dart
+          lib/services/quote_ai_service.dart
+          test/quote_art_layout_test.dart
+          test/quote_author_signature_test.dart
+          test/baidu_credential_settings_test.dart
+          test/quote_paper_layout_test.dart
+          test/quote_home_controls_test.dart
+          test/journey_prototype_ui_test.dart
+      - name: Verify typography, pagination, collections and refresh
+        run: >-
+          flutter test --no-pub --reporter expanded
+          --dart-define=QUOTE_ART_PREVIEW=true
+          test/quote_art_layout_test.dart
+          test/quote_author_signature_test.dart
+          test/baidu_credential_settings_test.dart
+          test/quote_ai_service_test.dart
+          test/quote_paper_layout_test.dart
+          test/quote_calligraphy_test.dart
+          test/quote_home_controls_test.dart
+          test/quote_home_refresh_test.dart
+          test/quote_journey_refresh_test.dart
+          test/quote_task_editor_flow_test.dart
+          test/journey_prototype_ui_test.dart
+      - name: Upload rendered artwork
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quote-artwork-preview
+          path: build/quote-frame-preview/
+          if-no-files-found: ignore

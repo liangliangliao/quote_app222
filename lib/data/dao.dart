@@ -607,7 +607,7 @@ class ConfigDao {
 
   Future<String> getBaiduAk() async {
     // Web AK: used by Baidu Web APIs (reverse-geocoding/place/IP etc.)
-    const def = 'kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2';
+    const def = '';
     try {
       final db = await AppDatabase.instance();
       // 1) 优先读 configs.baidu_ak
@@ -634,7 +634,7 @@ class ConfigDao {
 
   Future<void> setBaiduAk(String ak) async {
     // Web AK
-    const def = 'kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2';
+    const def = '';
     try {
       final db = await AppDatabase.instance();
       final rows = await db.query('configs', orderBy: 'id DESC', limit: 1);
@@ -664,19 +664,19 @@ class ConfigDao {
 
   /// Android AK: used by Baidu Location/Map/Search SDK (requires package + SHA1 binding).
   Future<String> getBaiduAndroidAk() async {
-    const def = 'oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh';
+    const def = '';
     try {
       final db = await AppDatabase.instance();
       final rows = await db.query('configs', orderBy: 'id DESC', limit: 1);
       if (rows.isEmpty) return def;
       final v = (rows.first['baidu_ak_android'] ?? '').toString().trim();
-      // 兼容老版本：如果新列为空，则仍返回默认 Android AK（避免误用 Web AK）
-      return v.isEmpty ? def : v;
+      // Only explicitly saved Android SDK credentials are returned here.
+      return v;
     } catch (_){ return def; }
   }
 
   Future<void> setBaiduAndroidAk(String ak) async {
-    const def = 'oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh';
+    const def = '';
     try {
       final db = await AppDatabase.instance();
       final rows = await db.query('configs', orderBy: 'id DESC', limit: 1);
@@ -1458,80 +1458,6 @@ Future<bool> updateLatestForTask(String taskUid, String content) async {
     return next;
   }
 
-}
-
-/// DAO for the quotes_fixed table (名人名言固定表).  Provides operations to
-/// query, insert and delete fixed quotes.  Each fixed record stores a
-/// snapshot of a quote's data (content, theme, author_name, source_from,
-/// explanation, avatar) and a link back to the original quote via quote_id.
-class QuoteFixedDao {
-  /// Return a list of fixed quotes ordered by descending id.  Supports
-  /// pagination via limit and offset.  By default returns up to 20 items.
-  Future<List<Map<String, dynamic>>> all({int limit = 20, int offset = 0}) async {
-    final db = await AppDatabase.instance();
-    return await db.query('quotes_fixed', orderBy: 'id DESC', limit: limit, offset: offset);
-  }
-
-  /// Find a fixed quote by exact content and theme.  Returns null if none exist.
-  Future<Map<String, dynamic>?> findByContentAndTheme(String content, String theme) async {
-    final db = await AppDatabase.instance();
-    final rows = await db.query(
-      'quotes_fixed',
-      where: 'content = ? AND theme = ?',
-      whereArgs: [content, theme],
-      limit: 1,
-    );
-    return rows.isNotEmpty ? rows.first : null;
-  }
-
-  /// Insert a new fixed quote.  [content] and [theme] are required.
-  /// Optionally pass authorName, sourceFrom, explanation, avatar and quoteId.
-  /// Returns the inserted record id on success.
-  Future<int> insert({
-    required String content,
-    required String theme,
-    String? authorName,
-    String? sourceFrom,
-    String? explanation,
-    String? avatar,
-    int? quoteId,
-  }) async {
-    final db = await AppDatabase.instance();
-    final fixedUid = _uid('fixed');
-    return await db.insert(
-      'quotes_fixed',
-      {
-        'fixed_uid': fixedUid,
-        'quote_id': quoteId,
-        'content': content,
-        'theme': theme,
-        'author_name': authorName ?? '',
-        'source_from': sourceFrom ?? '',
-        'explanation': explanation ?? '',
-        'avatar': avatar ?? '',
-      },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
-  }
-
-  /// Delete a fixed quote by content and theme.  Returns the number of rows removed.
-  Future<int> deleteByContentAndTheme(String content, String theme) async {
-    final db = await AppDatabase.instance();
-    return await db.delete('quotes_fixed', where: 'content = ? AND theme = ?', whereArgs: [content, theme]);
-  }
-
-  /// Return count of all fixed quotes.
-  Future<int> count() async {
-    final db = await AppDatabase.instance();
-    final List<Map<String, Object?>> result =
-        await db.rawQuery('SELECT COUNT(*) AS c FROM quotes_fixed');
-    if (result.isNotEmpty) {
-      final dynamic v = result.first['c'];
-      if (v is int) return v;
-      if (v is String) return int.tryParse(v) ?? 0;
-    }
-    return 0;
-  }
 }
 
 class LogDao {

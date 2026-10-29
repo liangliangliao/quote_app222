@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../data/db.dart';
 import '../data/kv_dao.dart';
 
-/// A collection is separate from pinning: pinning continues to use quote_fixed.
+/// Complete quotation snapshots keep the collection available after edits.
 /// Store the complete quotation so bundled/offline quotations can be collected.
 class QuoteLibraryStore {
   static const favoritePrefix = 'quote_library.favorite.';

@@ -1,237 +1,370 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image/image.dart' as img;
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_adaptive_frame.dart';
-import 'package:quote_app/widgets/quote_portrait_cutout.dart';
+import 'package:quote_app/widgets/quote_art_layout.dart';
 import 'package:quote_app/widgets/quote_calligraphy_text.dart';
+import 'package:quote_app/widgets/quote_portrait_cutout.dart';
 import 'package:quote_app/services/quote_calligraphy_settings.dart';
 
-const quote = '你的大脑分不清现实和想象的区别，因此你可以先在内心模拟自己想成为的样子。当你在脑海中一遍遍练习变得轻松、冷静和包容，你就更容易在现实中真的那样去做。';
-const author = '— Tal Ben-Shahar, Harvard Positive Psychology (Happiness) Course';
-const note = '这段话强调的是心理排练的力量：在脑海中练习如何面对现实中的困难，观察自己的身体、情绪与行动，再在现实中检验这些想象。想象本身不能保证结果，也不能取代现实行动。';
+const quote =
+    '你的大脑分不清现实和想象的区别，因此你可以先在内心模拟自己想成为的样子。当你在脑海中一遍遍练习变得轻松、冷静和包容，你就更容易在现实中真的那样去做。';
+const author =
+    '— Tal Ben-Shahar, Harvard Positive Psychology (Happiness) Course';
+const note = '在脑海中练习如何面对困难，观察自己的身体、情绪与行动，再在现实中检验这些想象。想象不能取代现实行动。';
+const export = bool.fromEnvironment('QUOTE_ART_PREVIEW');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'original author suffix punctuation is preserved independently of legacy citations',
+    () {
+      expect(
+        quoteFrameAuthor('马丁·路德·金', originalAuthor: 'Martin Luther King, Jr.'),
+        'Martin Luther King, Jr.',
+      );
+      expect(quoteFrameAuthor(author), 'Tal Ben-Shahar');
+    },
+  );
   setUpAll(() async {
-    final font = File('/tmp/quote-preview-cjk.otf');
-    if (font.existsSync()) {
-      final loader = FontLoader('QuotePreviewCJK')
-        ..addFont(Future.value(ByteData.sublistView(font.readAsBytesSync())));
+    // Real typefaces also exercise the line fitter with proportional metrics.
+    for (final face in {
+      'QuoteXingShu': 'assets/fonts/ZhiMangXing-Regular.ttf',
+      'QuoteKaiShu': 'assets/fonts/MaShanZheng-Regular.ttf',
+      'QuoteCaoShu': 'assets/fonts/LiuJianMaoCao-Regular.ttf',
+      'QuoteSignatureLatin': 'assets/fonts/Allura-Regular.ttf',
+      'QuoteLiterarySerif': 'assets/fonts/LibreBaskerville-Variable.ttf',
+      'QuotePlayfairDisplay': 'assets/fonts/PlayfairDisplay-Variable.ttf',
+    }.entries) {
+      final loader = FontLoader(face.key)
+        ..addFont(
+          Future.value(
+            ByteData.sublistView(File(face.value).readAsBytesSync()),
+          ),
+        );
       await loader.load();
     }
   });
-  Future<void> mount(WidgetTester tester, double width, {
-    String text = quote, String explanation = note, bool portrait = false,
+
+  Future<void> mount(
+    WidgetTester tester,
+    double width, {
+    String text = quote,
+    String explanation = note,
+    bool portrait = false,
     double scale = 1,
-    QuoteEnglishFontStyle englishFontStyle =
-        QuoteEnglishFontStyle.baskerville,
+    bool animate = false,
+    bool settle = true,
+    String originalAuthor = '',
+    String source = '',
+    QuoteEnglishFontStyle englishFontStyle = QuoteEnglishFontStyle.baskerville,
   }) async {
     await tester.binding.setSurfaceSize(Size(width, width * 1.5));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(MaterialApp(
-      theme: ThemeData(fontFamily: 'QuotePreviewCJK'),
-      home: MediaQuery(
-        data: MediaQueryData(size: Size(width, width * 1.5),
-          textScaler: TextScaler.linear(scale)),
-        child: Scaffold(backgroundColor: Colors.white,
-          body: RepaintBoundary(key: const ValueKey('preview-boundary'),
-            child: ColoredBox(color: Colors.white, child: PosterPureFlutter(
-              topic: '成为那样的人', quote: text, author: author,
-              note: explanation,
-              avatar: portrait ? 'assets/avatars/talbenshahar .jpeg' : '',
-              englishFontStyle: englishFontStyle,
-            ))),
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(fontFamily: export ? 'QuoteKaiShu' : null),
+        home: MediaQuery(
+          data: MediaQueryData(
+            size: Size(width, width * 1.5),
+            textScaler: TextScaler.linear(scale),
+          ),
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: RepaintBoundary(
+              key: const ValueKey('preview-boundary'),
+              child: PosterPureFlutter(
+                topic: '成为那样的人',
+                quote: text,
+                author: author,
+                originalAuthor: originalAuthor,
+                source: source,
+                note: explanation,
+                animateCalligraphy: animate,
+                avatar: portrait ? 'assets/avatars/talbenshahar .jpeg' : '',
+                englishFontStyle: englishFontStyle,
+              ),
+            ),
+          ),
         ),
       ),
-    ));
-    await tester.pump();
+    );
+    if (settle) await tester.pumpAndSettle();
+  }
+
+  Finder bodyLines() => find.descendant(
+    of: find.byKey(const ValueKey('quote-body')),
+    matching: find.byType(Text),
+  );
+  Iterable<TextSpan> spans(TextSpan span) sync* {
+    yield span;
+    for (final child in span.children ?? <InlineSpan>[]) {
+      if (child is TextSpan) yield* spans(child);
+    }
   }
 
   for (final width in [240.0, 320.0, 360.0, 412.0, 620.0]) {
-    testWidgets('complete lines stay inside paper at width $width', (tester) async {
-      await mount(tester, width);
+    testWidgets('large complete lines stay inside paper at width $width', (
+      tester,
+    ) async {
+      await mount(tester, width, portrait: true);
       final frame = tester.getRect(find.byType(QuoteAdaptiveFrame));
       final paper = QuoteAdaptiveFrame.scaleRect(
-        QuoteAdaptiveFrame.textSafeRect, frame.size).shift(frame.topLeft);
-      for (final name in ['quote-topic', 'quote-body', 'quote-author', 'quote-note']) {
-        final finder = find.byKey(ValueKey(name));
-        if (finder.evaluate().isEmpty) continue;
-        final rect = tester.getRect(finder);
+        QuoteAdaptiveFrame.textSafeRect,
+        frame.size,
+      ).shift(frame.topLeft);
+      final signature = tester.getRect(
+        find.byKey(const ValueKey('quote-author')),
+      );
+      final viewport = tester.getRect(
+        find.byKey(const ValueKey('quote-portrait-viewport')),
+      );
+      for (final element in bodyLines().evaluate()) {
+        final line = find.byWidget(element.widget);
+        final rect = tester.getRect(line);
         expect(rect.top, greaterThanOrEqualTo(paper.top - .5));
-        expect(rect.bottom, lessThanOrEqualTo(paper.bottom + .5));
+        expect(rect.bottom, lessThanOrEqualTo(signature.top));
+        expect(rect.left, greaterThanOrEqualTo(paper.left - .5));
+        expect(rect.right, lessThanOrEqualTo(paper.right + .5));
+        expect(rect.overlaps(viewport), isFalse);
+        expect(
+          tester.renderObject<RenderParagraph>(line).didExceedMaxLines,
+          isFalse,
+        );
       }
+      expect(signature.bottom, lessThanOrEqualTo(paper.bottom - 28));
       expect(find.byType(SingleChildScrollView), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
 
-  testWidgets('topic and explanation stay out of the framed artwork',
-      (tester) async {
-    await mount(tester, 360, text: '知行合一，止于至善。');
-
-    expect(find.text('成为那样的人'), findsNothing);
-    expect(find.text(note), findsNothing);
-    expect(find.byKey(const ValueKey('quote-topic')), findsNothing);
-    expect(find.byKey(const ValueKey('quote-note')), findsNothing);
-
-    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
-    await tester.pumpAndSettle();
-
-    final reader = find.byKey(const ValueKey('quote-full-reading'));
-    expect(find.descendant(of: reader, matching: find.text('成为那样的人')),
-        findsOneWidget);
-    expect(find.descendant(of: reader, matching: find.text(note)),
-        findsOneWidget);
-  });
-
-  testWidgets('full reader keeps the original non-calligraphy typography',
-      (tester) async {
-    const mixedQuote =
-        '真理发生于一个观念，它因事件而成为真理。 Truth happens to an idea.';
-    await mount(tester, 360, text: mixedQuote);
-
-    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
-    await tester.pumpAndSettle();
-
-    final reader = find.byKey(const ValueKey('quote-full-reading'));
-    final quoteFinder = find.descendant(
-      of: reader,
-      matching: find.text(mixedQuote),
-    );
-    expect(quoteFinder, findsOneWidget);
-    final quoteWidget = tester.widget<Text>(quoteFinder);
-    expect(quoteWidget.data, mixedQuote);
-    expect(quoteWidget.textSpan, isNull);
-    expect(quoteWidget.style?.fontFamily, isNull);
-  });
-
-  testWidgets('selected English font is applied to the home artwork',
-      (tester) async {
-    const englishQuote = 'No man is an island, entire of itself.';
-    await mount(
-      tester,
-      360,
-      text: englishQuote,
-      englishFontStyle: QuoteEnglishFontStyle.playfairDisplay,
-    );
-
-    final body = tester.widget<Text>(
-      find.byKey(const ValueKey('quote-body')),
-    );
-    final families = (body.textSpan! as TextSpan).children!
-        .whereType<TextSpan>()
-        .map((span) => span.style?.fontFamily)
-        .toSet();
-    expect(families, contains(quotePlayfairDisplayFont));
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('short quotation and attribution are vertically balanced',
-      (tester) async {
-    await mount(tester, 360, text: '知行合一，止于至善。');
-
-    final frame = tester.getRect(find.byType(QuoteAdaptiveFrame));
-    final paper = QuoteAdaptiveFrame.scaleRect(
-      QuoteAdaptiveFrame.textSafeRect,
-      frame.size,
-    ).shift(frame.topLeft);
-    final footer = tester.getRect(
-      find.byKey(const ValueKey('quote-read-more-region')),
-    );
-    final body = tester.getRect(find.byKey(const ValueKey('quote-body')));
-    final attribution =
-        tester.getRect(find.byKey(const ValueKey('quote-author')));
-    final contentMidpoint = (paper.top + footer.top) / 2;
-    final artworkMidpoint = (body.top + attribution.bottom) / 2;
-
-    expect(artworkMidpoint, closeTo(contentMidpoint, 1.5));
-    expect(body.top, greaterThanOrEqualTo(paper.top));
-    expect(attribution.bottom, lessThanOrEqualTo(footer.top));
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('long content remains available in a scalable complete reader', (tester) async {
-    final longQuote = List.filled(8, quote).join();
-    final longNote = List.filled(10, note).join();
-    await mount(tester, 320, text: longQuote, explanation: longNote, scale: 2);
-    expect(tester.takeException(), isNull);
-    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
-    await tester.pumpAndSettle();
-    final reader = find.byKey(const ValueKey('quote-full-reading'));
-    expect(reader, findsOneWidget);
-    expect(find.descendant(of: reader, matching: find.text(longQuote)), findsOneWidget);
-    expect(find.descendant(of: reader, matching: find.text(longNote)), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('portrait composition and white wall render without clipping', (tester) async {
-    await mount(tester, 400, portrait: true);
-    // Pump between native stages: provider resolve, pixel readback, isolate
-    // matting and PNG encoding each completes on a different event turn.
-    for (var attempt = 0; attempt < 40; attempt++) {
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pump();
-      if (find.byKey(const ValueKey('quote-portrait-composited')).evaluate().isNotEmpty) {
-        break;
+  testWidgets('short, long and English quotes retain the same 32 point ink', (
+    tester,
+  ) async {
+    for (final text in [
+      '知行合一，止于至善。',
+      quote,
+      List.filled(6, quote).join(),
+      'No man is an island, entire of itself.',
+    ]) {
+      await mount(tester, 360, text: text);
+      expect(bodyLines(), findsWidgets);
+      for (final line in tester.widgetList<Text>(bodyLines())) {
+        for (final span in spans(line.textSpan! as TextSpan)) {
+          expect(span.style!.fontSize, 32);
+          expect(span.style!.fontWeight, QuoteArtworkTypography.weight);
+          expect(span.style!.color, QuoteArtworkTypography.ink);
+        }
       }
+      expect(tester.takeException(), isNull);
     }
-    await tester.pumpAndSettle();
-    final composited = find.byKey(const ValueKey('quote-portrait-composited'));
-    expect(composited, findsOneWidget);
-    final portrait = tester.widget<Image>(composited);
-    await tester.runAsync(() => precacheImage(portrait.image, tester.element(composited)));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    final viewport = tester.getRect(
-      find.byKey(const ValueKey('quote-portrait-viewport')));
-    expect(viewport.width, greaterThanOrEqualTo(68));
-    expect(viewport.width / viewport.height, closeTo(.78, .001));
-    expect(tester.getRect(composited), viewport,
-      reason: 'The source image must fill exactly the clipped safe viewport');
-    expect(find.descendant(
-      of: find.byKey(const ValueKey('quote-portrait-viewport')),
-      matching: find.byType(ClipRect)),
-      findsOneWidget,
-      reason: 'The clip must contain the image and both edge-blend shaders');
-    final body = tester.renderObject<RenderParagraph>(
-      find.byKey(const ValueKey('quote-body')));
-    expect(body.didExceedMaxLines, isFalse, reason: 'The screenshot quote must fit in full');
-    await tester.runAsync(() async {
-    final boundary = tester.renderObject<RenderRepaintBoundary>(
-      find.byKey(const ValueKey('preview-boundary')));
-    final image = await boundary.toImage(pixelRatio: 1);
-    final png = await image.toByteData(format: ui.ImageByteFormat.png);
-    final raw = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    expect(raw, isNotNull);
-    // The photographed perimeter must merge into the actual white page.
-    for (final point in [const Offset(1, 250), const Offset(398, 250),
-        const Offset(200, 1), const Offset(200, 598)]) {
-      final index = (point.dy.toInt() * image.width + point.dx.toInt()) * 4;
-      expect(raw!.getUint8(index), greaterThan(240));
-      expect(raw.getUint8(index + 1), greaterThan(240));
-      expect(raw.getUint8(index + 2), greaterThan(240));
-    }
-    final bytes = png!.buffer.asUint8List();
-    final dir = Directory('build/quote-frame-preview')..createSync(recursive: true);
-    File('${dir.path}/white-wall-build7.png').writeAsBytesSync(bytes);
-    final preview = img.encodeJpg(img.decodeImage(bytes)!, quality: 86);
-    // The CI log offers a compact, directly inspectable render for this fix.
-    print('QUOTE_PREVIEW_BASE64:${base64Encode(preview)}');
-    image.dispose();
-    });
   });
 
-  testWidgets('all portrait sources use one fixed clipped window', (tester) async {
+  testWidgets(
+    'only the original-language dark signature appears on the artwork',
+    (tester) async {
+      await mount(
+        tester,
+        360,
+        text: '知行合一，止于至善。',
+        originalAuthor: 'Sigmund Freud',
+        source: '文明及其不满',
+      );
+      final signature = tester.widget<QuoteAuthorSignature>(
+        find.byKey(const ValueKey('quote-author')),
+      );
+      expect(signature.text, 'Sigmund Freud');
+      expect(signature.style.color, QuoteArtworkTypography.ink);
+      expect(signature.style.fontWeight, QuoteArtworkTypography.weight);
+      final nativeSpan = quoteAuthorSignatureSpan(
+        signature.text,
+        signature.style,
+      );
+      expect(
+        nativeSpan.children!.whereType<TextSpan>().every(
+          (span) => span.style!.fontWeight == QuoteArtworkTypography.weight,
+        ),
+        isTrue,
+      );
+      expect(find.textContaining('文明及其不满'), findsNothing);
+      expect(find.text(note), findsNothing);
+      final bodyBottom = bodyLines()
+          .evaluate()
+          .map((e) => tester.getRect(find.byWidget(e.widget)).bottom)
+          .reduce((a, b) => a > b ? a : b);
+      expect(
+        tester.getRect(find.byKey(const ValueKey('quote-author'))).top,
+        greaterThan(bodyBottom),
+      );
+      await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+      await tester.pumpAndSettle();
+      expect(find.text('出处：文明及其不满'), findsOneWidget);
+      expect(find.text(note), findsOneWidget);
+    },
+  );
+
+  testWidgets('legacy combined attribution keeps its source only in reading', (
+    tester,
+  ) async {
+    await mount(tester, 360, text: '千里之行，始于足下。');
+    final signature = tester.widget<QuoteAuthorSignature>(
+      find.byKey(const ValueKey('quote-author')),
+    );
+    expect(signature.text, 'Tal Ben-Shahar');
+    expect(find.textContaining('Harvard'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('出处：Harvard Positive Psychology'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'pagination shows every character without shrinking or ellipses',
+    (tester) async {
+      await mount(tester, 320, text: List.filled(3, quote).join());
+      final pages = tester.widget<PageView>(
+        find.byKey(const ValueKey('quote-art-pages')),
+      );
+      final count = pages.childrenDelegate.estimatedChildCount!;
+      expect(count, greaterThan(1));
+      final rendered = StringBuffer();
+      for (var i = 0; i < count; i++) {
+        if (i > 0) {
+          await tester.drag(
+            find.byKey(const ValueKey('quote-art-pages')),
+            const Offset(-300, 0),
+          );
+          await tester.pumpAndSettle();
+        }
+        final text = tester
+            .widgetList<Text>(bodyLines())
+            .map((line) => line.textSpan!.toPlainText())
+            .join();
+        rendered.write(text);
+        expect(text, isNot(contains('…')));
+        expect(find.textContaining('${i + 1} / $count'), findsOneWidget);
+      }
+      expect(rendered.toString(), List.filled(3, quote).join());
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'new quotes restart on page one while rebuilds preserve the sheet',
+    (tester) async {
+      final long = List.filled(3, quote).join();
+      await mount(tester, 360, text: long);
+      await tester.drag(
+        find.byKey(const ValueKey('quote-art-pages')),
+        const Offset(-300, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('2 /'), findsOneWidget);
+      await mount(tester, 360, text: long, originalAuthor: 'Tal Ben-Shahar');
+      expect(find.textContaining('2 /'), findsOneWidget);
+      await mount(tester, 360, text: '知行合一。', settle: false);
+      expect(find.byKey(const ValueKey('quote-page-count')), findsNothing);
+      expect(
+        tester
+            .widgetList<Text>(bodyLines())
+            .map((t) => t.textSpan!.toPlainText())
+            .join(),
+        '知行合一。',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'selected English face and ink writing keep the fixed type size',
+    (tester) async {
+      await mount(
+        tester,
+        360,
+        text: 'No man is an island, entire of itself.',
+        englishFontStyle: QuoteEnglishFontStyle.playfairDisplay,
+      );
+      final families = tester
+          .widgetList<Text>(bodyLines())
+          .expand((line) => spans(line.textSpan! as TextSpan))
+          .map((span) => span.style?.fontFamily)
+          .toSet();
+      expect(families, contains(quotePlayfairDisplayFont));
+      await mount(tester, 360, animate: true);
+      for (final line in tester.widgetList<CalligraphyWritingText>(
+        find.byType(CalligraphyWritingText),
+      )) {
+        expect(line.style.fontSize, 32);
+        expect(line.overflow, TextOverflow.visible);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'full reader keeps complete text and accessible non-calligraphy typography',
+    (tester) async {
+      final longQuote = List.filled(8, quote).join();
+      final longNote = List.filled(10, note).join();
+      await mount(
+        tester,
+        320,
+        text: longQuote,
+        explanation: longNote,
+        scale: 2,
+      );
+      await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+      await tester.pumpAndSettle();
+      final body = tester.widget<Text>(
+        find.byKey(const ValueKey('quote-reader-body')),
+      );
+      expect(body.data, longQuote);
+      expect(body.textSpan, isNull);
+      expect(body.style?.fontFamily, isNull);
+      expect(find.text(longNote), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  if (export) {
+    for (final entry in {
+      'short': '知行合一，止于至善。',
+      'medium': '在隆冬之中，我终于在自己内心发现了一个不可战胜的夏天。',
+      'long': quote,
+    }.entries) {
+      testWidgets('export ${entry.key} artwork', (tester) async {
+        await mount(tester, 400, text: entry.value, portrait: true);
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        });
+        await tester.pumpAndSettle();
+        await tester.runAsync(() async {
+          final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(const ValueKey('preview-boundary')),
+          );
+          final image = await boundary.toImage(pixelRatio: 2);
+          final png = await image.toByteData(format: ui.ImageByteFormat.png);
+          final dir = Directory('build/quote-frame-preview')
+            ..createSync(recursive: true);
+          File(
+            '${dir.path}/${entry.key}.png',
+          ).writeAsBytesSync(png!.buffer.asUint8List());
+          image.dispose();
+        });
+      });
+    }
+  }
+
+  testWidgets('all portraits retain the same clipped proportions', (
+    tester,
+  ) async {
     const sources = [
       'assets/avatars/talbenshahar .jpeg',
       'assets/avatars/Albert_Camus_1945_(cropped).jpg',
@@ -240,13 +373,10 @@ void main() {
     ];
     await tester.binding.setSurfaceSize(const Size(420, 260));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(MaterialApp(home: Scaffold(
-      backgroundColor: Colors.white,
-      body: RepaintBoundary(
-        key: const ValueKey('portrait-grid-boundary'),
-        child: ColoredBox(
-          color: Colors.white,
-          child: Row(
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               for (final source in sources)
@@ -259,34 +389,17 @@ void main() {
           ),
         ),
       ),
-    )));
-    await tester.pump();
-    final portraitContext = tester.element(find.byType(QuotePortraitCutout).first);
-    await tester.runAsync(() async {
-      for (final source in sources) {
-        await precacheImage(AssetImage(source), portraitContext);
-      }
-    });
+    );
     await tester.pumpAndSettle();
     final viewports = find.byKey(const ValueKey('quote-portrait-viewport'));
     expect(viewports, findsNWidgets(4));
     for (var i = 0; i < 4; i++) {
       expect(tester.getSize(viewports.at(i)), const Size(78, 100));
     }
-    final clips = find.descendant(of: viewports, matching: find.byType(ClipRect));
-    expect(clips, findsNWidgets(4));
+    expect(
+      find.descendant(of: viewports, matching: find.byType(ClipRect)),
+      findsNWidgets(4),
+    );
     expect(tester.takeException(), isNull);
-
-    await tester.runAsync(() async {
-      final boundary = tester.renderObject<RenderRepaintBoundary>(
-        find.byKey(const ValueKey('portrait-grid-boundary')));
-      final image = await boundary.toImage(pixelRatio: 2);
-      final png = await image.toByteData(format: ui.ImageByteFormat.png);
-      final dir = Directory('build/quote-frame-preview')
-        ..createSync(recursive: true);
-      File('${dir.path}/fixed-portrait-grid-build7.png')
-        .writeAsBytesSync(png!.buffer.asUint8List());
-      image.dispose();
-    });
   });
 }

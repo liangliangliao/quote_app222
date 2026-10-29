@@ -13,17 +13,13 @@ class QuoteHomeScene extends StatelessWidget {
     required this.moreMenu,
     required this.onMenu,
     required this.onSearch,
-    required this.onPin,
     required this.onNext,
     required this.onFavorite,
     required this.onCategories,
     required this.onShare,
-    required this.onPinnedQuotes,
     required this.onHistory,
     this.favorite = false,
-    this.pinned = false,
     this.nextBusy = false,
-    this.pinnedCount = 0,
     this.historyCount = 1,
     this.historyIndex = 0,
     this.date,
@@ -31,15 +27,13 @@ class QuoteHomeScene extends StatelessWidget {
   final Widget poster, moreMenu;
   final VoidCallback onMenu,
       onSearch,
-      onPin,
       onNext,
       onFavorite,
       onCategories,
-      onShare,
-      onPinnedQuotes;
+      onShare;
   final ValueChanged<int> onHistory;
-  final bool favorite, pinned, nextBusy;
-  final int pinnedCount, historyCount, historyIndex;
+  final bool favorite, nextBusy;
+  final int historyCount, historyIndex;
   final DateTime? date;
 
   @override
@@ -109,13 +103,6 @@ class QuoteHomeScene extends StatelessWidget {
                     onSearch,
                   ),
                   const SizedBox(width: 10),
-                  _roundButton(
-                    'home-pin',
-                    pinned ? '取消固定' : '固定名言',
-                    pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                    onPin,
-                  ),
-                  const SizedBox(width: 10),
                   _buttonSurface(
                     SizedBox(width: 39, height: 39, child: moreMenu),
                   ),
@@ -169,38 +156,6 @@ class QuoteHomeScene extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (pinnedCount > 0) ...[
-                    const SizedBox(width: 8),
-                    InkWell(
-                      key: const ValueKey('home-pinned-collection'),
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: onPinnedQuotes,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 5,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.push_pin_outlined,
-                              size: 12,
-                              color: Color(0xff777e68),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '固定集 · $pinnedCount',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Color(0xff777e68),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

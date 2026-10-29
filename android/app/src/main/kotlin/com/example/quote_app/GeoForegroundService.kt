@@ -141,7 +141,9 @@ class GeoForegroundService : Service() {
 
     if (loc == null) {
       val ak = getBaiduAk(ctx)
-      loc = runCatching { obtainBaiduLocation(ctx, ak, 60.0, 8_000L) }.getOrNull()
+      if (ak.isNotBlank()) {
+        loc = runCatching { obtainBaiduLocation(ctx, ak, 60.0, 8_000L) }.getOrNull()
+      }
       if (loc != null) {
         try { logWithTime(ctx, "【前台服务-地点规则】百度SDK定位成功 acc=${loc.accuracy}") } catch (_: Throwable) {}
       }
@@ -183,42 +185,25 @@ class GeoForegroundService : Service() {
   }
 
   private fun getBaiduAk(ctx: Context): String {
-    val defAndroid = "oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh"
-    val defWeb = "kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2"
+    // Only the user-configured Android SDK key is valid here. A Web API key
+    // belongs to a different Baidu product and must never be reused for the SDK.
     return try {
-      val cc = com.example.quote_app.data.DbInspector.loadOrLightScan(ctx) ?: return defAndroid
-      val db = android.database.sqlite.SQLiteDatabase.openDatabase(cc.dbPath, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY)
+      val path = com.example.quote_app.data.DbInspector.loadOrLightScan(ctx)?.dbPath
+      if (path.isNullOrEmpty()) return ""
+      val file = java.io.File(path)
+      if (!file.exists() || !file.isFile) return ""
+      val db = android.database.sqlite.SQLiteDatabase.openDatabase(
+        path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY)
       try {
-        var v: String? = null
-        try {
-          db.rawQuery("SELECT baidu_ak_android FROM configs LIMIT 1", null).use { c ->
-            if (c.moveToFirst()) v = c.getString(0)
-          }
-        } catch (_: Throwable) {}
-
-        if (v == null || v!!.trim().isEmpty()) {
-          // 兼容旧列：仅当旧列不是默认 Web AK 才沿用
-          var oldV: String? = null
-          try {
-            db.rawQuery("SELECT baidu_ak FROM configs LIMIT 1", null).use { c ->
-              if (c.moveToFirst()) oldV = c.getString(0)
-            }
-          } catch (_: Throwable) {}
-          if (oldV != null) {
-            val vv = oldV!!.trim()
-            if (vv.isNotEmpty() && vv != defWeb) v = vv
-          }
+        db.rawQuery("SELECT baidu_ak_android FROM configs ORDER BY id DESC LIMIT 1", null).use { cursor ->
+          if (cursor.moveToFirst()) cursor.getString(0)?.trim().orEmpty() else ""
         }
-
-        val out = v?.trim() ?: ""
-        if (out.isEmpty()) defAndroid else out
-      } finally { try { db.close() } catch (_: Throwable) {} }
-    } catch (_: Throwable) { defAndroid }
+      } finally {
+        try { db.close() } catch (_: Throwable) {}
+      }
+    } catch (_: Throwable) { "" }
   }
 
-  // obtainBaiduLocation 仍保留作为兜底：通过反射调用百度定位（若依赖不可用将直接返回 null）
-
-  // 通过反射调用百度定位（若依赖不可用将直接返回 null）
   private fun obtainBaiduLocation(ctx: Context, ak: String, targetAccMeters: Double, timeoutMs: Long): Location? {
     // 与 SysChannel.obtainBaiduLocation 保持一致：一次定位 + latest + latch 等待（无 Thread.sleep 轮询）
     return try {

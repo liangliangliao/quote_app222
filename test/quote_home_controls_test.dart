@@ -106,7 +106,7 @@ void main() {
   });
 
   testWidgets(
-    'bundled quotations can be pinned, collected and shared before any task exists',
+    'bundled quotations can be collected and shared before any task exists',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -127,23 +127,8 @@ void main() {
         final collection = await QuoteLibraryStore().favorites();
         expect(collection.any((row) => row['content'] == quote), isTrue);
       });
-      await tester.tap(action('pin'));
-      await until(
-        tester,
-        () => action('pinned-collection').evaluate().isNotEmpty,
-      );
-      await tester.runAsync(() async {
-        expect(
-          (await QuoteFixedDao().all()).any((row) => row['content'] == quote),
-          isTrue,
-        );
-        expect(await TaskDao().all(), isEmpty);
-      });
-      await tester.tap(action('pinned-collection'));
-      await tester.pumpAndSettle();
-      expect(find.text('固定的好思想'), findsOneWidget);
-      Navigator.of(tester.element(find.text('固定的好思想'))).pop();
-      await tester.pumpAndSettle();
+      expect(action('pin'), findsNothing);
+      await tester.runAsync(() async => expect(await TaskDao().all(), isEmpty));
       await tester.tap(action('favorite'));
       await until(tester, () => find.text('已收藏').evaluate().isEmpty);
       await tester.runAsync(
@@ -259,7 +244,8 @@ void main() {
     );
     await tester.tap(find.byTooltip('更多操作'));
     await tester.pumpAndSettle();
-    expect(find.text('固定的名言集'), findsOneWidget);
+    expect(find.text('固定的名言集'), findsNothing);
+    expect(find.text('我收藏的名言'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('我收藏的名言'));
     await tester.pump();
@@ -270,45 +256,6 @@ void main() {
     expect(find.text('名言书房'), findsOneWidget);
     Navigator.of(tester.element(find.byType(QuoteLibrarySheet))).pop();
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('fixed gallery retains pagination, jump controls and selection', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    late List<Map<String, dynamic>> fixed;
-    await tester.runAsync(() async {
-      for (var i = 0; i < 25; i++) {
-        await QuoteFixedDao().insert(content: '固定的第 $i 条思想', theme: '分页测试');
-      }
-      fixed = await QuoteFixedDao().all(limit: 100);
-    });
-    await tester.pumpWidget(const MaterialApp(home: HomePage()));
-    await until(
-      tester,
-      () => action('pinned-collection').evaluate().isNotEmpty,
-    );
-    expect(find.text('固定集 · ${fixed.length}'), findsOneWidget);
-    await tester.tap(action('pinned-collection'));
-    await tester.pumpAndSettle();
-    final jump = find.byTooltip('跳到最早固定的名言');
-    expect(jump, findsOneWidget);
-    await tester.tap(jump);
-    final oldest = find.byKey(ValueKey('pinned-quote-${fixed.last['id']}'));
-    await until(tester, () => oldest.evaluate().isNotEmpty);
-    await tester.ensureVisible(oldest);
-    await tester.pumpAndSettle();
-    await tester.tap(oldest);
-    await until(
-      tester,
-      () =>
-          find.text('固定的好思想').evaluate().isEmpty &&
-          find.byType(PosterPureFlutter).evaluate().length == 1 &&
-          displayed(tester) == fixed.last['content'],
-    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

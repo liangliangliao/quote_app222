@@ -259,8 +259,8 @@ if (!colsConfigs.contains('overview_threshold')) await db.execute("ALTER TABLE c
 if (!colsConfigs.contains('ema_enabled'))     await db.execute("ALTER TABLE configs ADD COLUMN ema_enabled INTEGER DEFAULT 0");
 if (!colsConfigs.contains('esteem_scale'))   await db.execute("ALTER TABLE configs ADD COLUMN esteem_scale INTEGER DEFAULT 100");
 if (!colsConfigs.contains('sses_index'))     await db.execute("ALTER TABLE configs ADD COLUMN sses_index INTEGER DEFAULT 0");
-if (!colsConfigs.contains('baidu_ak'))       await db.execute("ALTER TABLE configs ADD COLUMN baidu_ak TEXT DEFAULT 'kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2'");
-if (!colsConfigs.contains('baidu_ak_android')) await db.execute("ALTER TABLE configs ADD COLUMN baidu_ak_android TEXT DEFAULT 'oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh'");
+if (!colsConfigs.contains('baidu_ak'))       await db.execute("ALTER TABLE configs ADD COLUMN baidu_ak TEXT DEFAULT ''");
+if (!colsConfigs.contains('baidu_ak_android')) await db.execute("ALTER TABLE configs ADD COLUMN baidu_ak_android TEXT DEFAULT ''");
 if (!colsConfigs.contains('sport_running_bg')) await db.execute("ALTER TABLE configs ADD COLUMN sport_running_bg TEXT");
 if (!colsConfigs.contains('sport_start_sound')) await db.execute("ALTER TABLE configs ADD COLUMN sport_start_sound TEXT");
 if (!colsConfigs.contains('sport_music_playlist')) await db.execute("ALTER TABLE configs ADD COLUMN sport_music_playlist TEXT");
@@ -315,9 +315,9 @@ if (!colsEmotions.contains('type'))           await db.execute("ALTER TABLE emot
         -- SSES 轮换问卷索引（0-5），默认 0
         sses_index INTEGER DEFAULT 0,
         -- 百度 Web API AK（用于 Web 逆地理 / Place / IP 等）
-        baidu_ak TEXT DEFAULT 'kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2',
+        baidu_ak TEXT DEFAULT '',
         -- 百度 Android SDK AK（用于定位/搜索 SDK，依赖包名+SHA1）
-        baidu_ak_android TEXT DEFAULT 'oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh',
+        baidu_ak_android TEXT DEFAULT '',
         -- 地点规则开关：是否启用地点规则提醒（0=关闭，1=开启）
         location_rules_enabled INTEGER DEFAULT 0,
         -- TMDb Read Access Token，用于电影榜单与收藏功能
@@ -520,28 +520,6 @@ if (!colsEmotions.contains('type'))           await db.execute("ALTER TABLE emot
         FOREIGN KEY(task_uid) REFERENCES tasks(task_uid) ON DELETE CASCADE
       )
     ''' );
-
-    // Table for fixed quotes.  Each record stores a snapshot of quote data
-    // for the "名人名言固定表" feature.  This table references the quotes
-    // table via quote_id (nullable, on delete set null) and enforces
-    // uniqueness on content to prevent duplicate pins.  Fields mirror the
-    // primary quote fields (theme/topic, author_name, source_from, explanation,
-    // avatar) so that pinned items remain intact even if the original quote
-    // record is edited.  A separate fixed_uid is used as a stable primary key.
-    await db.execute('''
-      CREATE TABLE quotes_fixed (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fixed_uid TEXT UNIQUE,
-        quote_id INTEGER,
-        content TEXT UNIQUE,
-        theme TEXT,
-        author_name TEXT,
-        source_from TEXT,
-        explanation TEXT,
-        avatar TEXT,
-        FOREIGN KEY(quote_id) REFERENCES quotes(id) ON DELETE SET NULL
-      )
-    ''');
 
     // Logs table.  Using IF NOT EXISTS here makes creation idempotent in
     // case the table already exists when onCreate is triggered.  Without
@@ -1331,8 +1309,8 @@ await _addColumnIfMissing(db, 'configs', 'recent_hours', 'INTEGER DEFAULT 2');
     // 地点规则开关列
     await _addColumnIfMissing(db, 'configs', 'location_rules_enabled', 'INTEGER DEFAULT 0');
     // 百度 AK（Web & Android）
-    await _addColumnIfMissing(db, 'configs', 'baidu_ak', "TEXT DEFAULT 'kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2'");
-    await _addColumnIfMissing(db, 'configs', 'baidu_ak_android', "TEXT DEFAULT 'oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh'");
+    await _addColumnIfMissing(db, 'configs', 'baidu_ak', "TEXT DEFAULT ''");
+    await _addColumnIfMissing(db, 'configs', 'baidu_ak_android', "TEXT DEFAULT ''");
 
     // Movie token column for TMDb integration
     await _addColumnIfMissing(db, 'configs', 'movie_token', 'TEXT');
@@ -1565,27 +1543,6 @@ await _addColumnIfMissing(db, 'tasks', 'cursor', 'INTEGER DEFAULT 0');
 await _addColumnIfMissing(db, 'tasks', 'carousel_order', "TEXT DEFAULT 'desc'");
 
 
-    // Ensure the quotes_fixed table exists.  On upgrades from versions prior
-    // to 9, the fixed quotes table may not yet exist.  Using IF NOT EXISTS
-    // makes this operation idempotent and safe to call repeatedly.
-    try {
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS quotes_fixed (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          fixed_uid TEXT UNIQUE,
-          quote_id INTEGER,
-          content TEXT UNIQUE,
-          theme TEXT,
-          author_name TEXT,
-          source_from TEXT,
-          explanation TEXT,
-          avatar TEXT,
-          FOREIGN KEY(quote_id) REFERENCES quotes(id) ON DELETE SET NULL
-        )
-      ''');
-    } catch (_) {}
-
-
     // Ensure emotions table exists for mood records
     try {
       await db.execute('''
@@ -1665,8 +1622,8 @@ if (!colsQuotes.contains('quote_uid')) { await db.execute("ALTER TABLE quotes AD
       var colsCfg = infoCfg.map((e)=> e['name'] as String).toList();
 
       if (!colsCfg.contains('location_rules_enabled')) { await db.execute("ALTER TABLE configs ADD COLUMN location_rules_enabled INTEGER DEFAULT 0"); }
-      if (!colsCfg.contains('baidu_ak')) { await db.execute("ALTER TABLE configs ADD COLUMN baidu_ak TEXT DEFAULT 'kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2'"); }
-      if (!colsCfg.contains('baidu_ak_android')) { await db.execute("ALTER TABLE configs ADD COLUMN baidu_ak_android TEXT DEFAULT 'oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh'"); }
+      if (!colsCfg.contains('baidu_ak')) { await db.execute("ALTER TABLE configs ADD COLUMN baidu_ak TEXT DEFAULT ''"); }
+      if (!colsCfg.contains('baidu_ak_android')) { await db.execute("ALTER TABLE configs ADD COLUMN baidu_ak_android TEXT DEFAULT ''"); }
       if (!colsCfg.contains('bg_image'))     { await db.execute("ALTER TABLE configs ADD COLUMN bg_image TEXT"); }
       if (!colsCfg.contains('openrouter_key')) { await db.execute("ALTER TABLE configs ADD COLUMN openrouter_key TEXT"); }// --- Diary module config columns ---
 try {
