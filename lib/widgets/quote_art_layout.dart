@@ -258,52 +258,7 @@ class QuoteArtLayout {
         if (boundary > 0) tail = tail.sublist(0, boundary);
       }
       if (!english) {
-        final ending = RegExp(r'(?:为了|因为|所以|因此|而且|并且|但是|如果|虽然|以及|对于|关于|通过|能够|可以|变得|成为) ||
-              RegExp(r'^[，。；：、,;:（(“‘《]$').hasMatch(tail.last) ||
-              (!english && hanging.hasMatch(tail.last)))) {
-        tail.removeLast();
-      }
-      lines.add(QuoteArtLine('${tail.join()}$ellipsis', last.rect, last.align));
-    }
-    final signatureWidth = math.min(signatureSize.width, content.width);
-    final signatureHeight = signatureSize.height;
-    final last = lines.isEmpty ? null : lines.last;
-    final lastWidth = last == null ? 0.0 : measure(last.text);
-    final tailFill = lastWidth / content.width;
-    // Default to the right of the text column, retaining the wood's margin.
-    final edgeBreathing = (content.width *
-        (compact || verse ? .065 : (tailFill < .55 ? .07 : .035)))
-        .clamp(6.0, 16.0).toDouble();
-    final desiredRight = content.right - edgeBreathing;
-    final signatureLeft = (desiredRight - signatureWidth)
-        .clamp(
-          content.left,
-          math.max(content.left, content.right - signatureWidth - 6),
-        )
-        .toDouble();
-    final afterBody = last?.rect.bottom ?? (portrait?.bottom ?? content.top);
-    final signatureTop = (afterBody + gap)
-        .clamp(top, math.max(top, signatureBottom - signatureHeight))
-        .toDouble();
-
-    return QuoteArtLayout(
-      lines: List.unmodifiable(lines),
-      portrait: portrait,
-      contentBounds: Rect.fromLTRB(content.left, content.top, content.right, safeBodyBottom),
-      signatureRect: Rect.fromLTWH(
-        signatureLeft,
-        signatureTop,
-        signatureWidth,
-        signatureHeight,
-      ),
-      footerRect: footer,
-      leading: leading,
-      letterSpacing: spacing,
-      isTruncated: truncated,
-    );
-  }
-}
-)
+        final ending = RegExp(r'(?:为了|因为|所以|因此|而且|并且|但是|如果|虽然|以及|对于|关于|通过|能够|可以|变得|成为)$')
             .firstMatch(tail.join());
         if (ending != null) {
           final count = ending.group(0)!.characters.length;
@@ -329,26 +284,17 @@ class QuoteArtLayout {
         .clamp(6.0, 16.0).toDouble();
     final desiredRight = content.right - edgeBreathing;
     final signatureLeft = (desiredRight - signatureWidth)
-        .clamp(
-          content.left,
-          math.max(content.left, content.right - signatureWidth - 6),
-        )
+        .clamp(content.left, math.max(content.left, content.right - signatureWidth - 6))
         .toDouble();
     final afterBody = last?.rect.bottom ?? (portrait?.bottom ?? content.top);
     final signatureTop = (afterBody + gap)
-        .clamp(top, math.max(top, signatureBottom - signatureHeight))
-        .toDouble();
+        .clamp(top, math.max(top, signatureBottom - signatureHeight)).toDouble();
 
     return QuoteArtLayout(
       lines: List.unmodifiable(lines),
       portrait: portrait,
       contentBounds: Rect.fromLTRB(content.left, content.top, content.right, safeBodyBottom),
-      signatureRect: Rect.fromLTWH(
-        signatureLeft,
-        signatureTop,
-        signatureWidth,
-        signatureHeight,
-      ),
+      signatureRect: Rect.fromLTWH(signatureLeft, signatureTop, signatureWidth, signatureHeight),
       footerRect: footer,
       leading: leading,
       letterSpacing: spacing,
