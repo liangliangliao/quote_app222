@@ -7,10 +7,17 @@ import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
 import '../data/dao.dart';
+import '../models/quote_insight.dart';
+import '../services/quote_comparison_service.dart';
+import '../services/quote_insight_settings.dart';
+import '../widgets/quote_comparison_sheet.dart';
 import '../widgets/quote_history_avatar.dart';
+import '../widgets/quote_reading_insights.dart';
 
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key});
+  final QuoteDao? dao;
+  final QuoteComparisonService? comparisonService;
+  const HistoryPage({super.key, this.dao, this.comparisonService});
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
@@ -29,17 +36,42 @@ class _HistoryPageState extends State<HistoryPage> {
     _items.clear();
     _offset = 0;
     _done = false;
+    _loadGeneration++;
+    _loading = false;
     await _loadMore();
     if (mounted) setState((){});
   }
 
-  final _dao = QuoteDao();
+  late final _dao = widget.dao ?? QuoteDao();
   final _scroll = ScrollController();
   String _q = '';
   List<Map<String,dynamic>> _items = [];
   int _offset = 0;
   bool _loading = false;
   bool _done = false;
+  int _loadGeneration = 0;
+  bool _selecting = false;
+  final Map<String, QuoteReference> _selected = {};
+
+  void _toggleQuote(QuoteReference quote) {
+    if (quote.content.trim().isEmpty) return;
+    final key = quote.contentKey;
+    if (!_selected.containsKey(key) && _selected.length == 2) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('一次比较两条名言，请先取消一条')));
+      return;
+    }
+    setState(() {
+      _selecting = true;
+      if (_selected.containsKey(key)) { _selected.remove(key); }
+      else { _selected[key] = quote; }
+    });
+  }
+
+  Future<void> _compareSelected() async {
+    if (_selected.length != 2) return;
+    final pair = _selected.values.toList();
+    await showQuoteComparison(context, pair[0], pair[1], service: widget.comparisonService);
+  }
 
   @override
   void initState() {
@@ -59,13 +91,22 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _loadMore() async {
+    if (_loading || _done) return;
+    final generation = _loadGeneration;
     _loading = true;
-    final rows = await _dao.latest(limit: 100, offset: _offset, q: _q.isEmpty ? null : _q);
-    _offset += rows.length;
-    _items.addAll(rows);
-    _loading = false;
-    if (mounted) setState((){});
-    if (rows.length < 100) _done = true;
+    try {
+      final rows = await _dao.latest(limit: 100, offset: _offset, q: _q.isEmpty ? null : _q);
+      if (!mounted || generation != _loadGeneration) return;
+      _offset += rows.length;
+      _items.addAll(rows);
+      _done = rows.length < 100;
+    } catch (_) {
+      if (mounted && generation == _loadGeneration) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('名言列表暂未加载，请重新搜索后重试')));
+      }
+    } finally {
+      if (mounted && generation == _loadGeneration) setState(() => _loading = false);
+    }
   }
 
   ImageProvider? _avatarProvider(String raw) {
@@ -145,8 +186,11 @@ class _HistoryPageState extends State<HistoryPage> {
                 ],
                 if (explanation.isNotEmpty) ...[
                   const Divider(height: 32),
+                  const Text('解读 · 一种理解', style: TextStyle(fontSize: 13, color: Colors.black54)),
+                  const SizedBox(height: 8),
                   Text(explanation, style: const TextStyle(height: 1.65)),
                 ],
+                QuoteReadingInsights(quote: QuoteReference.fromRow(quote)),
               ],
             ),
           ),
@@ -186,10 +230,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     ),
                     onChanged: (v) {
                       _q = v;
-                      _items.clear();
-                      _offset = 0;
-                      _done = false;
-                      _loadMore();
+                      _reload();
                     },
                   ),
                 ),
@@ -209,8 +250,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           await _dao.shuffleQuotesPhysically();
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已完成洗牌')));
-                          _items.clear(); _offset = 0; _done = false;
-                          await _loadMore();
+                          await _reload();
                         } catch (e) {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('洗牌失败: ' + e.toString())));
@@ -233,8 +273,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           await _dao.restoreQuotesToOriginalOrder();
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已恢复最初顺序')));
-                          _items.clear(); _offset = 0; _done = false;
-                          await _loadMore();
+                          await _reload();
                         } catch (e) {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('恢复失败: ' + e.toString())));
@@ -393,6 +432,37 @@ class _HistoryPageState extends State<HistoryPage> {
               ],
             ),
           ),
+          if (QuoteInsightSettings.comparisonEnabled)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Wrap(spacing: 12, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  TextButton.icon(
+                    key: const ValueKey('quote-select-comparison'),
+                    icon: Icon(_selecting ? Icons.close : Icons.compare_arrows),
+                    label: Text(_selecting ? '退出选择（${_selected.length}/2）' : '选择比较'),
+                    onPressed: () => setState(() {
+                      _selecting = !_selecting;
+                      _selected.clear();
+                    }),
+                  ),
+                  if (_selecting)
+                    FilledButton(
+                      key: const ValueKey('quote-start-comparison'),
+                      onPressed: _selected.length == 2 ? _compareSelected : null,
+                      child: const Text('开始比较'),
+                    ),
+                ]),
+                if (_selecting && _selected.isEmpty)
+                  const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('选择两条名言；可以搜索后继续选择。')),
+                if (_selected.isNotEmpty)
+                  Wrap(spacing: 8, children: _selected.values.indexed.map((entry) => InputChip(
+                    label: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 220),
+                      child: Text('${entry.$1 == 0 ? 'A' : 'B'} · ${entry.$2.content}', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    onDeleted: () => _toggleQuote(entry.$2),
+                  )).toList()),
+              ]),
+            ),
           // List content with zero top/bottom padding
           Expanded(
             child: ListView.builder(
@@ -401,6 +471,7 @@ class _HistoryPageState extends State<HistoryPage> {
               itemCount: _items.length,
               itemBuilder: (_, i) {
                 final e = _items[i];
+                final reference = QuoteReference.fromRow(e);
                 final content = (e['content'] ?? '').toString();
                 final author = (e['author_name'] ?? '').toString().trim();
                 final source = (e['source_from'] ?? '').toString().trim();
@@ -414,6 +485,7 @@ class _HistoryPageState extends State<HistoryPage> {
                   if (taskName.isNotEmpty) taskName,
                 ].join(' · ');
                 return ListTile(
+                  key: ValueKey('quote-history-row-${reference.id.isEmpty ? reference.contentKey : reference.id}'),
                   minVerticalPadding: 8,
                   leading: QuoteHistoryAvatar(
                     key: ValueKey('quote-history-list-avatar-$i'),
@@ -422,8 +494,16 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                   title: Text(content, maxLines: 3, overflow: TextOverflow.ellipsis),
                   subtitle: meta.isEmpty ? null : Text(meta, maxLines: 2, overflow: TextOverflow.ellipsis),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _showQuoteDetails(e),
+                  trailing: _selecting
+                      ? Checkbox(
+                          value: _selected.containsKey(reference.contentKey),
+                          semanticLabel: '选择名言：$content',
+                          onChanged: (_) => _toggleQuote(reference),
+                        )
+                      : const Icon(Icons.chevron_right),
+                  selected: _selected.containsKey(reference.contentKey),
+                  onTap: () => _selecting ? _toggleQuote(reference) : _showQuoteDetails(e),
+                  onLongPress: QuoteInsightSettings.comparisonEnabled ? () => _toggleQuote(reference) : null,
                 );
               },
             ),
