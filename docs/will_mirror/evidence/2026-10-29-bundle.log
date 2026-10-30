@@ -1,0 +1,6 @@
+Command: flutter build bundle --debug --no-pub --target-platform android-arm64
+Observed exit code: 0
+Artifact: build/flutter_assets/kernel_blob.bin
+Artifact bytes: 131412256
+SHA256: b7f470479f0555913d0df860f72718977f3f93cd1b1fba29e715f121c3f2afc2
+This compiles the host Dart app and assets. It is not an APK or an Android device test.

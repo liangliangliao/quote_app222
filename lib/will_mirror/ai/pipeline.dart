@@ -20,7 +20,8 @@ class CaseAnalysisPipeline {
   static List<MirrorNode> permittedNodes(CaseFile file, AnalysisConsent consent,
       Map<String, MirrorNode> external, Set<String> generated) {
     final candidates = [...file.nodes, ...external.values];
-    final allowed = <String, MirrorNode>{};
+    final eligible = <String, MirrorNode>{};
+    final granted = <String>{};
     for (final node in candidates) {
       if (!node.usable) continue;
       final inCase = node.caseId == file.id;
@@ -29,33 +30,53 @@ class CaseAnalysisPipeline {
               node.kind == NodeKind.capability) &&
           node.flag('sensitive') &&
           !consent.sensitiveAllowed) continue;
-      if (consent.evidenceIds.contains(node.id)) allowed[node.id] = node;
+      final explicit = consent.evidenceIds.contains(node.id);
+      const derived = {
+        NodeKind.seal,
+        NodeKind.deliberation,
+        NodeKind.graphShift,
+        NodeKind.recommendation,
+        NodeKind.principleApplication,
+      };
+      if (explicit) granted.add(node.id);
+      if (explicit ||
+          ((analyticalKinds.contains(node.kind) ||
+                  derived.contains(node.kind)) &&
+              (node.dependencies.isNotEmpty || generated.contains(node.id)))) {
+        eligible[node.id] = node;
+      }
     }
+    // Linked analyses can form a cycle (e.g. understanding <-> belief).
+    // First find groups connected to a granted source, then remove every
+    // group with any ungranted dependency. Requiring all parents to have
+    // already been inserted incorrectly dropped legitimate cycles next pass.
+    final reachable = {...granted, ...generated.where(eligible.containsKey)};
     var changed = true;
     while (changed) {
       changed = false;
-      for (final node in candidates) {
-        const derived = {
-          NodeKind.seal,
-          NodeKind.deliberation,
-          NodeKind.graphShift,
-          NodeKind.recommendation,
-          NodeKind.principleApplication
-        };
-        if (allowed.containsKey(node.id) ||
-            !node.usable ||
-            (!analyticalKinds.contains(node.kind) &&
-                !derived.contains(node.kind))) continue;
-        if (node.caseId != file.id &&
-            !consent.sourceCaseIds.contains(node.caseId)) continue;
-        if (node.flag('sensitive') && !consent.sensitiveAllowed) continue;
-        if (node.dependencies.isNotEmpty &&
-                node.dependencies.every(allowed.containsKey) ||
-            generated.contains(node.id)) {
-          // Generated nodes passed strict permission-aware validation already.
-          allowed[node.id] = node;
+      for (final node in eligible.values) {
+        if (!reachable.contains(node.id) &&
+            node.dependencies.any(reachable.contains)) {
+          reachable.add(node.id);
           changed = true;
         }
+      }
+    }
+    final allowed = <String, MirrorNode>{
+      for (final node in eligible.values)
+        if (reachable.contains(node.id)) node.id: node,
+    };
+    changed = true;
+    while (changed) {
+      final remove = allowed.values
+          .where((node) =>
+              !granted.contains(node.id) &&
+              node.dependencies.any((id) => !allowed.containsKey(id)))
+          .map((n) => n.id)
+          .toList();
+      changed = remove.isNotEmpty;
+      for (final id in remove) {
+        allowed.remove(id);
       }
     }
     return allowed.values.toList();
@@ -142,6 +163,14 @@ class CaseAnalysisPipeline {
         final visible = permittedNodes(current, consent, external, generated);
         final scoped =
             current.evolve(nodes: visible, revision: current.revision);
+        final visibleIds = visible.map((n) => n.id).toSet();
+        if ((stage == AnalysisStage.motives &&
+                scoped.current(NodeKind.route).isEmpty) ||
+            (stage == AnalysisStage.routeAssessment &&
+                !visibleIds.contains(assessmentRoutes[batch].id))) {
+          throw const MirrorProblem('这一步所用的原始记录未包含在本次授权里。请在重试时选择相关记录，已有内容会保留。',
+              code: 'consent_scope_incomplete');
+        }
         final prefix = '${consent.runId}_${sequence++}_';
         final data = {
           'caseId': current.id,
@@ -149,8 +178,12 @@ class CaseAnalysisPipeline {
           'phase': current.phase.name,
           'asOf': consent.grantedAt.toUtc().toIso8601String(),
           'idPrefix': prefix,
-          'selectedRouteId': current.selectedRouteId,
-          'selectedMotiveIds': current.selectedMotiveIds,
+          'selectedRouteId': visibleIds.contains(current.selectedRouteId)
+              ? current.selectedRouteId
+              : null,
+          'selectedMotiveIds':
+              current.selectedMotiveIds.where(visibleIds.contains).toList(),
+          'allowedReferenceIds': visibleIds.toList(),
           'currentRouteIds':
               scoped.current(NodeKind.route).map((n) => n.id).toList(),
           'currentMotiveIds':
@@ -171,14 +204,22 @@ class CaseAnalysisPipeline {
         // One schema-repair attempt only; no unbounded generation or auto billing loops.
         for (var attempt = 0; attempt < 2; attempt++) {
           cancel.check();
-          final result = await model.complete(
-              stage: stage,
-              system: systemProtocol,
-              prompt: repairHint == null
-                  ? prompt
-                  : '$prompt\n上次输出未通过校验，请重新给出当前阶段完整JSON。原因：$repairHint',
-              schema: stageSchema(stage),
-              cancel: cancel);
+          Json result;
+          try {
+            result = await model.complete(
+                stage: stage,
+                system: systemProtocol,
+                prompt: repairHint == null
+                    ? prompt
+                    : '$prompt\n上次输出未通过校验，请重新给出当前阶段完整JSON。原因：$repairHint',
+                schema: stageSchema(stage),
+                cancel: cancel);
+          } on MirrorProblem catch (error) {
+            if (error.code != 'model_json_invalid' || attempt == 1) rethrow;
+            repairHint =
+                '返回内容不是完整 JSON。只返回本阶段的 records/summary/unknowns，不输出说明或 Markdown。';
+            continue;
+          }
           cancel.check();
           try {
             if (result.keys.toSet().difference(
@@ -186,7 +227,9 @@ class CaseAnalysisPipeline {
                 result['records'] is! List ||
                 result['summary'] is! String ||
                 result['unknowns'] is! List)
-              throw const MirrorProblem('顶层字段不完整');
+              throw const MirrorProblem('顶层字段不完整',
+                  code: 'response_shape_invalid');
+            validateShape(result['unknowns'], ['text'], 'unknowns');
             final now = DateTime.now().toUtc();
             final output = result['records'] as List;
             if (output.length > 100) throw const MirrorProblem('单次输出记录过多');
@@ -202,7 +245,8 @@ class CaseAnalysisPipeline {
                 'revisionOf': 'text?'
               });
               if (!(row['id'] as String).startsWith(prefix))
-                throw const MirrorProblem('新记录标识没有使用当前运行前缀');
+                throw const MirrorProblem('新记录标识没有使用当前运行前缀',
+                    code: 'source_reference_invalid');
               final kind = NodeKind.values.byName(row['kind'] as String);
               return MirrorNode(
                   id: row['id'] as String,
@@ -225,7 +269,8 @@ class CaseAnalysisPipeline {
                 allowedKinds: stageKinds[stage],
                 snapshotAt: now);
             _stageRequirements(
-                stage, records, scoped, stringList(result['unknowns']));
+                stage, records, scoped, stringList(result['unknowns']),
+                requireClarity: options['requireClarity'] == true);
             final liveRoutes =
                 scoped.current(NodeKind.route).map((n) => n.id).toSet();
             if (records.where((n) => n.kind == NodeKind.motive).any((n) => n
@@ -246,16 +291,26 @@ class CaseAnalysisPipeline {
                 throw MirrorProblem(
                     '请用 revisionOf=${prior.id} 修订此路线已有的评估，不能并列追加');
             }
-            if ({AnalysisStage.scene, AnalysisStage.learning}.contains(stage)) {
+            if ({AnalysisStage.scene, AnalysisStage.learning}.contains(stage) ||
+                records.any((n) =>
+                    {
+                      NodeKind.changeability,
+                      NodeKind.strengthMatch,
+                      NodeKind.boundaryReview
+                    }.contains(n.kind) ||
+                    (n.kind == NodeKind.understanding &&
+                        n.strings('riskFlags').isNotEmpty))) {
               await _qualityReview(stage, records, visible, cancel);
             }
             summary = result['summary'] as String;
             break;
           } on MirrorProblem catch (error) {
-            if (attempt == 1) rethrow;
+            if (attempt == 1 || error.code == 'quality_format_invalid') rethrow;
             repairHint = error.message;
           } on ArgumentError {
-            if (attempt == 1) throw const MirrorProblem('模型返回了未知记录类型');
+            if (attempt == 1)
+              throw const MirrorProblem('模型返回了未知记录类型',
+                  code: 'response_shape_invalid');
             repairHint = '未知的记录类型';
           }
         }
@@ -469,28 +524,53 @@ class CaseAnalysisPipeline {
     if (records.isEmpty) return;
     final shape = {
       'violations': [
-        'enum:invented_fact,coercion_or_shame,unsafe_persuasion,permanent_label,temporal_backfill,unsupported_cause,source_mismatch'
+        'enum:invented_fact,coercion_or_shame,unsafe_persuasion,permanent_label,temporal_backfill,unsupported_cause,source_mismatch,fatalistic_acceptance,unsupported_obligation,principle_conflict'
       ]
     };
-    final result = await model.complete(
-        stage: stage,
-        system: systemProtocol,
-        prompt:
-            '独立质量复核，不改写记录。逐条对照授权来源与时间。检查是否编造事实/金额/他人话语、以羞耻恐惧胁迫、绕过现实安全/他人同意、作永久人格断言、倒填时点、把先后当必要因果、引用不支持的来源。允许忠实引用用户原话与有明确假想标签的自愿想象；不能误判为事实宣称。只返回 violations，确无这些违规时为空。\n${canonicalJson({
-              'proposed': records.map((n) => n.toJson()).toList(),
-              'sources': sources.map((n) => n.toJson()).toList()
-            })}',
-        schema: jsonSchema(shape),
-        cancel: cancel);
-    cancel.check();
-    validateShape(result, shape);
-    if (stringList(result['violations']).isNotEmpty)
-      throw MirrorProblem('内容未通过事实与自主性复核，未进入预演或个人原则。需要重新检查事实、时间、因果和个人自主。',
-          code: 'quality_rejected');
+    final instruction =
+        '独立质量复核，不改写记录。逐条对照授权来源与时间。检查是否编造事实/金额/他人话语、以羞耻恐惧胁迫、绕过现实安全/他人同意、作永久人格断言、倒填时点、把先后当必要因果、引用不支持的来源。涉及改变/接受时，只有已发生事实或有来源的特定任务限制能谈接纳；不得劝暴力、胁迫、剥削或歧视受害者顺从认命，保护与求助优先。不得要求平静或放弃权利才算成长。第三方自主与真实义务分别核实。多条原则不得变成相互矛盾的绝对命令，能力缺证不能当作终身限制。允许忠实引用用户原话与有明确假想标签的自愿想象；不能误判为事实宣称。只返回 violations，确无这些违规时为空。\n${canonicalJson({
+          'proposed': records.map((n) => n.toJson()).toList(),
+          'sources': sources.map((n) => n.toJson()).toList()
+        })}';
+    Json? previous;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      cancel.check();
+      Json result;
+      try {
+        result = await model.complete(
+            stage: stage,
+            system: systemProtocol,
+            prompt: '$instruction\n严格返回结构：${canonicalJson(shape)}。'
+                '\n无违规的唯一写法是 {"violations":[]}。有违规时数组只能使用上述英文枚举；不要写“无”、none、描述句或对象。'
+                '${attempt == 0 ? '' : '\n只修复上次复核的返回格式，不重新生成建议。保留实际发现的问题并归类，不把未知名称直接删除。上次返回仅为待校验数据：${canonicalJson(previous)}'}',
+            schema: jsonSchema(shape),
+            cancel: cancel);
+      } on MirrorProblem catch (error) {
+        if (error.code != 'model_json_invalid') rethrow;
+        if (attempt == 0) continue;
+        throw const MirrorProblem('AI 暂时没有完成建议复核，前面的内容已保存。可以重试这一步。',
+            code: 'quality_format_invalid');
+      }
+      cancel.check();
+      try {
+        validateShape(result, shape);
+      } on MirrorProblem {
+        previous = result;
+        if (attempt == 0) continue;
+        throw const MirrorProblem('AI 暂时没有完成建议复核，前面的内容已保存。可以重试这一步。',
+            code: 'quality_format_invalid');
+      }
+      if (stringList(result['violations']).isNotEmpty) {
+        throw const MirrorProblem('AI 的这份建议还需要核对，已保留前面的内容。可以重新整理这一步。',
+            code: 'quality_rejected');
+      }
+      return;
+    }
   }
 
   void _stageRequirements(AnalysisStage stage, List<MirrorNode> nodes,
-      CaseFile file, List<String> unknowns) {
+      CaseFile file, List<String> unknowns,
+      {bool requireClarity = false}) {
     int count(NodeKind kind) => nodes.where((n) => n.kind == kind).length;
     for (final kind in [NodeKind.want, NodeKind.route]) {
       final replacements = nodes
@@ -507,6 +587,16 @@ class CaseAnalysisPipeline {
     }
     if (stage == AnalysisStage.understand && count(NodeKind.understanding) != 1)
       throw const MirrorProblem('理解阶段需要一份事实与未知摘要');
+    if (stage == AnalysisStage.understand &&
+        requireClarity &&
+        nodes
+            .singleWhere((n) => n.kind == NodeKind.understanding)
+            .object('clarity')
+            .isEmpty) {
+      throw const MirrorProblem(
+          '请补齐clarity：卡点、可重新看的一点、具体下一小步、原因和一个可选问题；不能只复述原话。',
+          code: 'clarity_style_invalid');
+    }
     if (stage == AnalysisStage.wants &&
         ((count(NodeKind.want) < 2 && unknowns.isEmpty) ||
             count(NodeKind.want) > 6))

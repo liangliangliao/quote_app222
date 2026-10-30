@@ -32,6 +32,7 @@ extension _ActionViews on _CaseWorkbenchState {
               icon: const Icon(Icons.auto_awesome_outlined),
               label: const Text('整理具体的准备与备用方案')),
         ] else ...[
+          AiOriginLabel(node: preflight, resolve: c.resolve),
           Text('目前的基线', style: Theme.of(context).textTheme.labelLarge),
           Text(preflight.text('baseline')),
           const SizedBox(height: 12),
@@ -78,6 +79,7 @@ extension _ActionViews on _CaseWorkbenchState {
           const SizedBox(height: 14),
           const MirrorTag('已有一份条件性预案', icon: Icons.lock_outline),
           const SizedBox(height: 10),
+          AiOriginLabel(node: plan, resolve: c.resolve, showHumanSource: true),
           Text(plan.text('ifThen')),
           _sourceLink(plan, label: '查看这份预案及版本')
         ],
@@ -102,6 +104,7 @@ extension _ActionViews on _CaseWorkbenchState {
             padding: const EdgeInsets.all(15),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              AiOriginLabel(node: intervention, resolve: c.resolve),
               Text(intervention.text('action'),
                   style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
@@ -156,6 +159,7 @@ extension _ActionViews on _CaseWorkbenchState {
 
   Widget _sceneCard(MirrorNode scene) =>
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        AiOriginLabel(node: scene, resolve: c.resolve),
         Wrap(spacing: 6, runSpacing: 6, children: [
           MirrorTag(humanValue(scene.text('mode'))),
           MirrorTag(statusLabel(scene.status))
@@ -288,16 +292,15 @@ extension _ActionViews on _CaseWorkbenchState {
                             if (voice) {
                               await _tts.setLanguage('zh-CN');
                               await _tts.setSpeechRate(.43);
-                              await _tts.speak(scene
-                                  .objects('frames')
-                                  .map((e) => e['text'])
-                                  .join('。'));
+                              await _tts.speak(
+                                  '内容来源：${contentSourceLabel(scene, resolve: c.resolve)}。${scene.objects('frames').map((e) => e['text']).join('。')}');
                             }
                             if (!mounted) return;
                             await mirrorSheet<void>(context,
                                 title: '未来画面 ≠ 实际结果',
                                 child: SceneRehearsal(
                                     scene: scene,
+                                    resolve: c.resolve,
                                     duration: duration,
                                     animate: c.preferences.animations,
                                     onStop: () => _tts.stop()));
@@ -339,6 +342,13 @@ extension _ActionViews on _CaseWorkbenchState {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (existing != null)
+                        AiOriginLabel(
+                            node: existing,
+                            resolve: c.resolve,
+                            showHumanSource: true)
+                      else if (preflight != null)
+                        AiOriginLabel(node: preflight, resolve: c.resolve),
                       Text(route.text('title'),
                           style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 12),
@@ -424,6 +434,9 @@ extension _ActionViews on _CaseWorkbenchState {
                                 f.id,
                                 {
                                   'routeId': route.id,
+                                  'sourceAnalysisIds': [
+                                    if (preflight != null) preflight.id
+                                  ],
                                   'motiveIds': f.selectedMotiveIds,
                                   'sceneId':
                                       scene.isEmpty ? null : scene.last.id,
@@ -521,6 +534,7 @@ extension _ActionViews on _CaseWorkbenchState {
         const Divider(),
         Text('当时留给自己的预案', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
+        AiOriginLabel(node: plan, resolve: c.resolve, showHumanSource: true),
         Text(plan.text('ifThen')),
         if (seal != null)
           Text(
@@ -597,6 +611,7 @@ extension _ActionViews on _CaseWorkbenchState {
         .toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (key != null) ...[
+        AiOriginLabel(node: key, resolve: c.resolve),
         const MirrorTag('事前认可的一条理由'),
         const SizedBox(height: 8),
         Text(key.text('summary'),
@@ -613,12 +628,14 @@ extension _ActionViews on _CaseWorkbenchState {
       if (counter.isNotEmpty) ...[
         const SizedBox(height: 10),
         const MirrorTag('另一方仍值得听见'),
+        AiOriginLabel(node: counter.first, resolve: c.resolve),
         const SizedBox(height: 7),
         Text(counter.first.text('summary'))
       ],
       if (scene.isNotEmpty &&
           f.latest(NodeKind.reappraisal)?.flag('safetyChanged') != true) ...[
         const SizedBox(height: 12),
+        AiOriginLabel(node: scene.last, resolve: c.resolve),
         Text(scene.last.text('fieldCue')),
         TextButton.icon(
             onPressed: () => _playScene(scene.last),

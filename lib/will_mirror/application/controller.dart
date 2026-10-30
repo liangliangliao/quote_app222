@@ -8,6 +8,7 @@ import '../data/store.dart';
 import '../domain/model.dart';
 import '../domain/ranking.dart';
 import '../domain/rules.dart';
+import '../domain/failures.dart';
 import '../integration/reminders.dart';
 
 class MirrorController extends ChangeNotifier {
@@ -192,6 +193,43 @@ class MirrorController extends ChangeNotifier {
     await mutate(
         id, (f) => commands.feedback(f, target, action, comment: comment));
     await _rerank(id);
+    await reconcileReminders();
+  }
+
+  Future<void> addCounterEvidence(String id, String target, String text) async {
+    stop();
+    // Validate before cancelling anything; then cancel OS jobs before making
+    // the new review version visible. Historical applications stay readable.
+    final source = file(id);
+    if (source == null) throw const MirrorProblem('课题已经删除');
+    commands.addCounterEvidence(source, target, text);
+    final affected = EvidenceRules.invalidationClosure(
+        files.expand((f) => f.nodes), {target});
+    await _cancelAffected({target});
+    await mutate(id, (f) => commands.addCounterEvidence(f, target, text));
+    for (final entry in files
+        .where((f) =>
+            f.nodes.any((n) => n.id != target && affected.contains(n.id)))
+        .toList()) {
+      await mutate(
+          entry.id,
+          (f) => f.evolve(
+                nodes: f.nodes
+                    .map((n) => n.id != target &&
+                            affected.contains(n.id) &&
+                            (analyticalKinds.contains(n.kind) ||
+                                {
+                                  NodeKind.plan,
+                                  NodeKind.trigger,
+                                  NodeKind.reminder,
+                                  NodeKind.recommendation,
+                                }.contains(n.kind))
+                        ? n.withStatus(NodeStatus.stale)
+                        : n)
+                    .toList(),
+                analysisMessage: '新增反例，相关建议已暂停。过去的准备、行动与应用版本继续保留。',
+              ));
+    }
     await reconcileReminders();
   }
 
@@ -494,7 +532,7 @@ class MirrorController extends ChangeNotifier {
           result, commands.append(result, [complete], authorized: external));
     } catch (e) {
       if (!cancel.cancelled) {
-        error = e is MirrorProblem ? e.message : '分析没有完成，已有阶段结果已保存';
+        error = analysisFailureMessage(e);
         final failed = await store.load(initial.id);
         if (failed != null && !cancel.cancelled) {
           final audit = commands.record(
@@ -674,6 +712,9 @@ class MirrorController extends ChangeNotifier {
           [
             commands.record(f, kind, body,
                 origin: origin,
+                status: kind == NodeKind.principle
+                    ? NodeStatus.draft
+                    : NodeStatus.active,
                 evidenceIds: evidenceIds,
                 counterIds: counterIds,
                 links: links,
@@ -698,6 +739,9 @@ class MirrorController extends ChangeNotifier {
     if (kind == NodeKind.reappraisal && body['safetyChanged'] == true) {
       await cancelReminders(id);
       await _rerank(id);
+    }
+    if (kind == NodeKind.principle && revisionOf != null) {
+      await reconcileReminders();
     }
   }
 
@@ -792,11 +836,17 @@ class MirrorController extends ChangeNotifier {
         if (id == null) continue;
         final plan = file.node(job.text('planId'));
         final route = file.node(plan?.text('routeId'));
+        final principleId = plan?.body['principleId'] as String?;
+        final principle = principleId == null ? null : resolve(principleId);
         final active = job.usable &&
             job.text('state') == 'scheduled' &&
             plan?.usable == true &&
             route != null &&
             EvidenceRules.routeCanBePrepared(route, file) &&
+            (principleId == null ||
+                (principle != null &&
+                    EvidenceRules.principleCanBePrepared(principle, file,
+                        authorized: authorizedHistory))) &&
             file.stage != CaseStage.paused &&
             file.current(NodeKind.observation).isEmpty;
         if (!active) {
@@ -828,12 +878,18 @@ class MirrorController extends ChangeNotifier {
     final plan = current.node(link.planId);
     final trigger = current.node(link.triggerId);
     final route = current.node(plan?.text('routeId'));
+    final principleId = plan?.body['principleId'] as String?;
+    final principle = principleId == null ? null : resolve(principleId);
     if (plan == null ||
         trigger == null ||
         !plan.usable ||
         !trigger.usable ||
         route == null ||
         !EvidenceRules.routeCanBePrepared(route, current) ||
+        (principleId != null &&
+            (principle == null ||
+                !EvidenceRules.principleCanBePrepared(principle, current,
+                    authorized: authorizedHistory))) ||
         current.latest(NodeKind.plan)?.id != plan.id) return false;
     final jobs = current
         .current(NodeKind.reminder, allEpisodes: true)

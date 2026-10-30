@@ -11,8 +11,10 @@ class SceneRehearsal extends StatefulWidget {
       required this.scene,
       required this.duration,
       required this.animate,
+      this.resolve,
       required this.onStop});
   final MirrorNode scene;
+  final MirrorNode? Function(String)? resolve;
   final int duration;
   final bool animate;
   final VoidCallback onStop;
@@ -64,6 +66,7 @@ class _SceneRehearsalState extends State<SceneRehearsal>
         : math.min(frames.length - 1,
             (_elapsed * frames.length / widget.duration).floor());
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      AiOriginLabel(node: widget.scene, resolve: widget.resolve),
       MotiveTide(
           caption: _elapsed >= widget.duration
               ? '停在这里，回到眼前可以做的一步。'
@@ -145,7 +148,7 @@ class JourneyTimeline extends StatelessWidget {
                   contentPadding: const EdgeInsets.fromLTRB(10, 4, 0, 10),
                   title: Text(nodeTitle(n)),
                   subtitle: Text(
-                      '${kindLabel(n.kind)} · ${phaseLabel(n.phase)}\n发生：${timeLabel(n.happenedAt)}\n记录：${timeLabel(n.recordedAt)}'),
+                      '${contentSourceLabel(n, resolve: file.node)} · ${kindLabel(n.kind)} · ${phaseLabel(n.phase)}\n发生：${timeLabel(n.happenedAt)}\n记录：${timeLabel(n.recordedAt)}'),
                   trailing: const Icon(Icons.chevron_right, size: 18),
                   onTap: () => onNode(n))),
         ]))
@@ -204,6 +207,8 @@ class _MotiveGraphViewState extends State<MotiveGraphView> {
             n.objects('directionByRoute').any((d) => d['routeId'] == _route))
         .toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (motives.firstOrNull case final generated?)
+        AiOriginLabel(node: generated, resolve: widget.file.node),
       const Text('同一个理由可能支持一条路线，也可能反对另一条。连线表示当前解释，实际作用仍需要现场与事后证据。'),
       const SizedBox(height: 14),
       Wrap(spacing: 6, runSpacing: 6, children: [
@@ -294,6 +299,8 @@ class RouteComparison extends StatelessWidget {
       'difficulty': '实施难度'
     };
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (fits.values.firstOrNull case final assessment?)
+        AiOriginLabel(node: assessment, resolve: file.node),
       const Text('安全与现实条件先核实。各个维度分别比较，综合数字不能抵消硬性限制。'),
       const SizedBox(height: 16),
       SingleChildScrollView(
@@ -395,6 +402,7 @@ class LifeZigzag extends StatelessWidget {
                                           .textTheme
                                           .labelMedium),
                                   const SizedBox(height: 6),
+                                  AiOriginLabel(node: events[i]),
                                   Text(nodeTitle(events[i]),
                                       maxLines: 4,
                                       overflow: TextOverflow.ellipsis),

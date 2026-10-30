@@ -132,7 +132,9 @@ T0事前、T1现场、T2事后、T3后续不可互相倒灌。通知!=条件发�
 人格/经验推论必须条件化、可反驳，允许同一行为多动机和无关联的新经历；新兴趣缺历史不等于不适合。
 不要复述通用价值清单，不做所有领域相同的模板。对每个具体人恢复真实取舍、可比情境、代价、反例、未知。
 所有建议使用简洁中文，默认手机阅读。每段只处理一个具体差异。不要要求用户填写长问卷或主观概率。
+直接对用户说“你”，避免“当事人”“若此候选成立”“记录没有说明”式鉴定报告。严谨通过来源、未知和可反驳条件表达，不在每句话重复免责声明。首屏必须提供超出复述原话的帮助，详细推理放结构化详情。
 所有新 id 使用本次提供的 idPrefix 加编号；引用既有 id 则逐字保留。顶层对象统一 records/summary/unknowns。
+evidenceIds/counterIds/links 和 body 内所有引用只可选 allowedReferenceIds 或本批 records 中真实声明的新 id；不能猜测编号或从早前运行前缀续写一个不存在的 id。只用到自己的证据，不要为了凑关系让所有记录互相链接。
 记录格式 {id,kind,body,evidenceIds,counterIds,links,revisionOf}；revisionOf 只能指旧的同种对象或 null。
 再次分析已有阶段时，应在现有对象上逐项修订，用 revisionOf 保留变化，不可把相同欲求、路线或评估重复追加为独立对象。
 ''';
@@ -140,10 +142,14 @@ T0事前、T1现场、T2事后、T3后续不可互相倒灌。通知!=条件发�
 String taskFor(AnalysisStage stage, {int batch = 0}) => switch (stage) {
       AnalysisStage.understand =>
         '''S1：从所给原文恢复这件事。生成恰好1个understanding和0–5个belief。facts每条必须给原文的连续quote与对应evidenceIds，只做忠实提取；解释放belief。
-分事实/原话/感受/推测/未知。若是过去事件，只作事后记录，不能补造T0。只给最多1条会改变结论的keyQuestion，无需强制回答。领域可多标签，时间和风险未知保留。
+summary用“你”以1–2句概括，不写第三人称鉴定。understanding.clarity必须提供：stuckPoint（60字内说清当前卡点或关键取舍，不只复述）、perspective（70字内指出一个值得分开看/可重新检验的判断）、nextStep（60字内可做的最小核实或低负担动作）、whyThisStep（50字内说明这一步为什么有用）、question（最多一个真正改变下一步的具体问题；不需要就空字符串）。不是保证成功、诊断人格或要求积极化；原判断合理时说明保留它的条件。
+分事实/原话/感受/推测/未知。若是过去事件，只作事后记录，不能补造T0；尚未行动则不要用“这次满足/牺牲了什么”假装已发生。keyQuestion与clarity.question保持一致，优先问能把下一步具体化的问题，不机械追问“你是否已经做过”。不要列一屏与下一步无关的未知。
+如果已有understanding，新版本revisionOf必须引用当前understanding.id；其他分析也修订当前版本，不反复追加相同解释。
+unknowns只保留会影响判断的少量缺口。riskFlags仅列有具体线索的医疗、法律、人身安全、重大资金等风险；普通学习或选择中的信息不全不自动等于危险。任务类型未明确时，可先用文字把任务说具体，不默认索取健康、身体或资格资料。
 只有原文明确提供任务能力或身体技能线索时，可另给0–3个capability待核实候选，必须有原文来源，不从性别/年龄/身份猜测；健康与身体资料sensitive=true。没有资料不补问长问卷。''',
       AnalysisStage.wants =>
-        '''S2：生成2–6个有差异的个人want候选；输入太少可少于2但说明缺口。依据当前事件、真实取舍、代价、反例、目标与手段分离。
+        '''S2：通常只生成最相关的2个有差异的个人want候选，确有必要最多6个；输入太少可少于2并说明缺口。claim用35字以内的普通表达直接说可能在意什么，别在标题里堆支持程度和未证实说明。依据当前事件、真实取舍、代价、反例、目标与手段分离。
+immediateBenefit和longTermCost各用一句40字以内的“可能”表达即可，具体不确定/反例放alternatives、falsifier、contexts。不要从一句话扩写出整个人格故事，也不要把“记录没有说明”重复填入所有字段。
 给contexts/alternatives/falsifier/nextTest。普通人的安全或快乐需求不等于此人的稳定欲求，标generic/tentative。
 分social_symbol/anticipated_outcome/process_preference/lived_evidence；被吸引、审议认可、实际投入、获得后适配不可混同。''',
       AnalysisStage.options =>
@@ -172,6 +178,8 @@ matrix每项欲求分别列now/near/long，有条件与支持，未知不得编�
 按相关性给consequence时间窗口/重复累计阈值/暂时可恢复或不可逆；未来日期只有已知才填，永久损失的感受不是事实。
 给有证据相关的obstacle（阶段、机制、控制度、客观与T0信念、支持反例）、taskRequirement、supportVariant。未知身体条件不猜测不强制问卷，技能可训练有支持变体；功能限制仅属特定任务。
 实际共享资源才给resourceConflict（兼容/先后/竞争/互斥/未知），没有容量证据不得强迫舍弃。给最多2项strengthMatch及必要boundaryReview，个人行动/他人自主/已证义务/待核实分别写。
+strengthMatch非unknown必须引用本路线有真实出处的requirementIds和有reported/observed/verified出处的capabilityIds，supportVariantIds也须属于该路线；没有资料就unknown或零条，不为新兴趣补造能力证据。风险门槛不能低于路线和当前安全评估。
+boundaryReview的verifiedObligations必须直接引用已授权外部观察或已核实的taskRequirement；用户推测、未核实约定放unknownObligations，允许保留未知。
 若授权资料里有已接受的principle，比较真实场景、反例和新风险，生成0–1个principleMatch；不适用或未知可零条，不能自动采用。
 不新增路线总分，不因高欲求或Top5越过硬风险。''',
       AnalysisStage.prepare =>
@@ -189,12 +197,14 @@ frames有事实/可能未来/真实或可能障碍/具体应对，claimType严�
 behaviorQualification逐项检查行为观察可靠性、真实可选路线、当时自主、动机进入审议的机会、当时已知代价、情境覆盖和替代解释七个维度；未知必须保留未知。已完成行为不自动是自由取舍证据。decisionModes仅在有具体事件证据时给James五类决意机制的竞争性候选（可空或unknown），不能给人贴类型标签。
 已实施且先于结果不等于必要或唯一因果；required_by_rule必须规则证据。区分信息/策略/执行/不可控损失/道德/预期后悔。保留真实责任、补救、未知和下次低风险验证。
 revisedClaims引用哪些既有判断因此获支持/受质疑/未知；不能回写过去事实。changeability是特定事实的状态，不是人的永久边界；不公/伤害允许保护、求助、投诉/合法渠道，不劝忍受。
+changeability.factId仅指具体事实、障碍或任务条件；非uncertain必须有真实来源。irreversible_past只能指有已发生时点的本人/授权事实，不能指未来猜测。hard_limit_for_task必须有routeId及该任务已verified的taskRequirement出处，否则uncertain并给核实步骤。modifiable_with_support写出工具、协作或训练等条件、safeAlternatives和reviewCondition。
 得到不代表满意、初次不适不等于终生不适。无获得后观察satisfactionGap只能未知。''',
       AnalysisStage.learning =>
         '''S8：使用真实经历及反例生成0–3个insight、0–2个manifestation、0–3个principle；无可靠证据允许全部为空。
 主动搜索可比反例并核查角色/知识/任务/身体技能/资源/机会/自主/时间差。两件经历不自动独立；单次只tentative；没有真实选择机会/被迫行为不能证明自愿欲求。
 不硬统一所有人生经历，一个行动可多动机、不同经历可独立。新兴趣缺历史不构成反证。
 原则必须可观察thenAction、具体ifCondition、例外、支持反证、适用contexts、风险、失效条件及下次验证；最多3个，未认可不能义务化。
+fieldCue可选，为本人可修改的现场短提醒，中文最多75字；完整条件与例外仍保留。遇到已有needs_review或contradicted版本，先对照counterIds与reviewReason，若修订必须revisionOf当前版；没有足够证据可维持待复核或不输出，不能强行恢复成熟度。
 Top5分数、原则被打开和被认可不能作为原则有效性证据。实际应用与结果、满意分别分析。可给有真实任务能力出处的strengthMatch，不做天赋/道德排名。
 如果已有principle/insight被新反例推翻，返回修订新版本revisionOf旧ID，并解释条件改变；不默默保留旧结论。''',
       AnalysisStage.reappraise =>
@@ -334,5 +344,6 @@ Json parseStructured(String raw) {
     final parsed = jsonDecode(text);
     if (parsed is Map) return jsonMap(parsed);
   } catch (_) {}
-  throw const MirrorProblem('AI 未返回完整结构化结果，可以重试当前阶段');
+  throw const MirrorProblem('AI 未返回完整结构化结果，可以重试当前阶段',
+      code: 'model_json_invalid');
 }

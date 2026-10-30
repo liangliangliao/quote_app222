@@ -7552,7 +7552,9 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/experience_qualification_test.dart",
+      "test/will_mirror/experience_flow_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7623,7 +7625,9 @@
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
       "test/will_mirror/store_controller_test.dart",
-      "test/will_mirror/principle_application_test.dart"
+      "test/will_mirror/principle_application_test.dart",
+      "test/will_mirror/experience_flow_test.dart",
+      "test/will_mirror/experience_storage_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -7647,7 +7651,8 @@
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
       "test/will_mirror/store_controller_test.dart",
-      "test/will_mirror/principle_application_test.dart"
+      "test/will_mirror/principle_application_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7694,7 +7699,8 @@
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
       "test/will_mirror/store_controller_test.dart",
-      "test/will_mirror/principle_application_test.dart"
+      "test/will_mirror/principle_application_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -7717,7 +7723,8 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7763,7 +7770,10 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/experience_qualification_test.dart",
+      "test/will_mirror/experience_flow_test.dart",
+      "test/will_mirror/experience_storage_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7788,7 +7798,8 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/experience_flow_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -7857,7 +7868,9 @@
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/store_controller_test.dart"
+      "test/will_mirror/store_controller_test.dart",
+      "test/will_mirror/experience_flow_test.dart",
+      "test/will_mirror/experience_ai_review_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7898,11 +7911,14 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/domain/rules.dart",
       "lib/will_mirror/ai/protocol.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
-      "test/will_mirror/regression_v28_test.dart"
+      "test/will_mirror/regression_v28_test.dart",
+      "test/will_mirror/experience_qualification_test.dart",
+      "test/will_mirror/experience_flow_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7919,11 +7935,13 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/domain/rules.dart",
       "lib/will_mirror/ai/protocol.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
-      "test/will_mirror/regression_v28_test.dart"
+      "test/will_mirror/regression_v28_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7940,11 +7958,13 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/domain/rules.dart",
       "lib/will_mirror/ai/protocol.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
-      "test/will_mirror/regression_v28_test.dart"
+      "test/will_mirror/regression_v28_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7961,11 +7981,13 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/domain/rules.dart",
       "lib/will_mirror/ai/protocol.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
-      "test/will_mirror/regression_v28_test.dart"
+      "test/will_mirror/regression_v28_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -7982,11 +8004,13 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/domain/rules.dart",
       "lib/will_mirror/ai/protocol.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
-      "test/will_mirror/regression_v28_test.dart"
+      "test/will_mirror/regression_v28_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -8005,7 +8029,8 @@
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_analysis.dart",
       "lib/will_mirror/data/store.dart",
-      "lib/will_mirror/application/controller.dart"
+      "lib/will_mirror/application/controller.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
@@ -8027,12 +8052,15 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_qualification_test.dart",
+      "test/will_mirror/experience_flow_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -8049,12 +8077,14 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -8071,12 +8101,14 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -8093,12 +8125,14 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -8115,12 +8149,14 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_ai_review_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -8137,7 +8173,8 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
@@ -8159,12 +8196,14 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_flow_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -8181,12 +8220,15 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_qualification_test.dart",
+      "test/will_mirror/experience_ai_review_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按原文检查真实模型生成、反证质量和具体上下文适用性。",
@@ -8203,7 +8245,8 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
@@ -8225,7 +8268,8 @@
       "lib/will_mirror/domain/schema.dart",
       "lib/will_mirror/ai/protocol.dart",
       "lib/will_mirror/presentation/workbench_review.dart",
-      "lib/will_mirror/presentation/workbench_analysis.dart"
+      "lib/will_mirror/presentation/workbench_analysis.dart",
+      "lib/will_mirror/presentation/experience_cards.dart"
     ],
     "regression_files": [
       "test/will_mirror/domain_test.dart",
@@ -8286,7 +8330,8 @@
       "test/will_mirror/regression_v28_test.dart",
       "test/will_mirror/scenario_integrity_test.dart",
       "test/will_mirror/principle_application_test.dart",
-      "test/will_mirror/startup_recovery_test.dart"
+      "test/will_mirror/startup_recovery_test.dart",
+      "test/will_mirror/experience_storage_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -8313,7 +8358,8 @@
       "test/will_mirror/ai_contract_test.dart",
       "test/will_mirror/widget_flow_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_qualification_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "执行 DEVICE_CHECKLIST.md：真机通知权限、冷/热启动、重启、省电、撤回、读屏/音频；Keystore 真机鉴权与升级保留。",
@@ -8367,7 +8413,8 @@
       "test/will_mirror/ai_contract_test.dart",
       "test/will_mirror/widget_flow_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_flow_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "执行 DEVICE_CHECKLIST.md：真机通知权限、冷/热启动、重启、省电、撤回、读屏/音频；Keystore 真机鉴权与升级保留。",
@@ -8395,7 +8442,10 @@
       "test/will_mirror/widget_flow_test.dart",
       "test/will_mirror/regression_v28_test.dart",
       "test/will_mirror/scenario_integrity_test.dart",
-      "test/will_mirror/principle_application_test.dart"
+      "test/will_mirror/principle_application_test.dart",
+      "test/will_mirror/experience_qualification_test.dart",
+      "test/will_mirror/experience_flow_test.dart",
+      "test/will_mirror/experience_storage_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "结合原文进行完整交互验收；模型输出语义和真实设备行为不由模拟测试证明。",
@@ -8422,7 +8472,8 @@
       "test/will_mirror/ai_contract_test.dart",
       "test/will_mirror/widget_flow_test.dart",
       "test/will_mirror/regression_v28_test.dart",
-      "test/will_mirror/scenario_integrity_test.dart"
+      "test/will_mirror/scenario_integrity_test.dart",
+      "test/will_mirror/experience_flow_test.dart"
     ],
     "evidence_limit": "关联测试覆盖可重复的结构、状态或守门规则；不等于本条全部行为验收通过。",
     "remaining": "按 evaluation/README.md 对 24 个虚构案例做首轮与相反新证据的真实模型盲审；不得用 mock 或关键词规则替代。",
