@@ -25,6 +25,7 @@ import 'package:quote_app/models/quote_insight.dart';
 import 'package:quote_app/services/quote_comparison_service.dart';
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
 import 'package:quote_app/widgets/quote_comparison_sheet.dart';
+import 'package:quote_app/widgets/thought_taxonomy_mindmap.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'cognitive_core_test.dart' as core;
 
@@ -217,7 +218,6 @@ void main() {
       before =
           (await db.query('entries', where: 'id=?', whereArgs: [entry])).single;
     });
-    await enable(tester);
     final key = GlobalKey<EntryEditorPageState>();
     await mount(
         tester,
@@ -228,6 +228,21 @@ void main() {
             cognitiveService: service,
             useBackground: false));
     await waitFor(tester, find.text(full));
+    final readOnlyGate = find
+        .ancestor(
+            of: find.byType(EditableText).first,
+            matching: find.byType(AbsorbPointer))
+        .first;
+    expect(tester.widget<AbsorbPointer>(readOnlyGate).absorbing, isTrue);
+    await enable(tester);
+    await tester.pumpAndSettle();
+    expect(tester.widget<AbsorbPointer>(readOnlyGate).absorbing, isFalse);
+    await tester.runAsync(() =>
+        CognitivePreferenceStore.instance.update(const CognitivePreferences()));
+    await tester.pumpAndSettle();
+    expect(tester.widget<AbsorbPointer>(readOnlyGate).absorbing, isTrue);
+    await enable(tester);
+    await tester.pumpAndSettle();
     final state =
         tester.state<EditableTextState>(find.byType(EditableText).first);
     state.widget.focusNode.requestFocus();
@@ -412,10 +427,14 @@ void main() {
     await capture(tester, '07-movie-analogy');
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await mount(
-        tester, Scaffold(body: MovieCognitionView(text: movie.encode())));
+    await tester.pumpAndSettle();
     expect(find.text('情节'), findsNothing);
     expect(find.text('保留的完整电影解读'), findsOneWidget);
+    expect(tester.widget<SelectableText>(find.byType(SelectableText)).style,
+        const TextStyle(fontSize: 14, height: 1.55));
+    await enable(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('情节'), findsOneWidget);
   });
 
   testWidgets(
@@ -464,12 +483,39 @@ void main() {
           createdAt: '2026-10-30T00:00:00Z');
       await CognitiveStore().save(note);
     });
+    await tester.runAsync(() =>
+        CognitivePreferenceStore.instance.update(const CognitivePreferences()));
     await mount(
         tester,
-        const ConceptExplorer(
-            title: '过程中的幸福',
-            nodeUid: 'test-specific',
-            parentUid: 'test-general'));
+        const Scaffold(
+            body: Column(children: [
+          ThoughtTaxonomyMindMap(
+              selectedUids: ['test-general', 'test-specific']),
+          CognitiveSelectableText(
+              text: '这一次的体验需要核查适用范围。',
+              module: 'thought',
+              recordId: 'mode-transition',
+              title: '念头'),
+        ])));
+    await waitFor(tester, find.text('过程中的幸福'));
+    expect(find.byType(SelectableText), findsNothing);
+    await tester.tap(find.text('过程中的幸福'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ConceptExplorer), findsNothing);
+    await enable(tester);
+    await tester.pumpAndSettle();
+    expect(
+        find.widgetWithText(SelectableText, '这一次的体验需要核查适用范围。'), findsOneWidget);
+    await tester.runAsync(() =>
+        CognitivePreferenceStore.instance.update(const CognitivePreferences()));
+    await tester.pumpAndSettle();
+    expect(find.byType(SelectableText), findsNothing);
+    await tester.tap(find.text('过程中的幸福'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ConceptExplorer), findsNothing);
+    await enable(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('过程中的幸福'));
     await waitFor(tester, find.text('具体表现 · 模拟示例'));
     expect(find.text('返回上位概念：幸福'), findsOneWidget);
     await capture(tester, '06-concept-examples');

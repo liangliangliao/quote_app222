@@ -37,7 +37,19 @@ class _ThoughtTaxonomyMindMapState extends State<ThoughtTaxonomyMindMap> {
   @override
   void initState() {
     super.initState();
+    CognitivePreferenceStore.instance.addListener(_preferencesChanged);
+    CognitivePreferenceStore.instance.load();
     _future = _load();
+  }
+
+  void _preferencesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    CognitivePreferenceStore.instance.removeListener(_preferencesChanged);
+    super.dispose();
   }
 
   @override

@@ -111,6 +111,13 @@ class _MovieCognitionViewState extends State<MovieCognitionView> {
           ])));
   @override
   Widget build(BuildContext context) {
+    CognitivePreferenceStore.instance.load();
+    return ValueListenableBuilder<CognitivePreferences>(
+        valueListenable: CognitivePreferenceStore.instance,
+        builder: (context, _, __) => _buildContent(context));
+  }
+
+  Widget _buildContent(BuildContext context) {
     final m = MovieCognition.decode(widget.text);
     final enabled = CognitivePreferenceStore.enabledInBuild &&
         CognitivePreferenceStore.instance.value.enabled;

@@ -3,6 +3,7 @@ import 'cognitive_models.dart';
 import 'cognitive_preferences.dart';
 import 'cognitive_sheet.dart';
 import 'cognitive_recap.dart';
+import 'cognitive_mode.dart';
 
 class JudgmentExercise {
   final String title, subtitle, situation, changedSituation;
@@ -217,34 +218,34 @@ class CognitiveSelectableText extends StatelessWidget {
       required this.title,
       this.task = CognitiveTask.calibration});
   @override
-  Widget build(BuildContext context) => !CognitivePreferenceStore.active
-      ? Text(text, style: const TextStyle(fontSize: 15))
-      : SelectableText(text, contextMenuBuilder: (context, state) {
-          final selection = state.textEditingValue.selection;
-          final prefs = CognitivePreferenceStore.instance.value;
-          return AdaptiveTextSelectionToolbar.buttonItems(
-              anchors: state.contextMenuAnchors,
-              buttonItems: [
-                if (CognitivePreferenceStore.enabledInBuild &&
-                    prefs.enabled &&
-                    selection.isValid &&
-                    !selection.isCollapsed)
-                  ContextMenuButtonItem(
-                      label: '检验适用范围',
-                      onPressed: () {
-                        state.hideToolbar();
-                        showCognitiveAnalysis(context,
-                            task: task,
-                            selection: CognitiveSelection.fromText(
-                                module: module,
-                                recordId: recordId,
-                                title: title,
-                                fullText: text,
-                                start: selection.start,
-                                end: selection.end),
-                            currentText: () => text);
-                      }),
-                ...state.contextMenuButtonItems,
-              ]);
-        });
+  Widget build(BuildContext context) => CognitiveMode(
+      fallback: Text(text, style: const TextStyle(fontSize: 15)),
+      child: SelectableText(text, contextMenuBuilder: (context, state) {
+        final selection = state.textEditingValue.selection;
+        final prefs = CognitivePreferenceStore.instance.value;
+        return AdaptiveTextSelectionToolbar.buttonItems(
+            anchors: state.contextMenuAnchors,
+            buttonItems: [
+              if (CognitivePreferenceStore.enabledInBuild &&
+                  prefs.enabled &&
+                  selection.isValid &&
+                  !selection.isCollapsed)
+                ContextMenuButtonItem(
+                    label: '检验适用范围',
+                    onPressed: () {
+                      state.hideToolbar();
+                      showCognitiveAnalysis(context,
+                          task: task,
+                          selection: CognitiveSelection.fromText(
+                              module: module,
+                              recordId: recordId,
+                              title: title,
+                              fullText: text,
+                              start: selection.start,
+                              end: selection.end),
+                          currentText: () => text);
+                    }),
+              ...state.contextMenuButtonItems,
+            ]);
+      }));
 }

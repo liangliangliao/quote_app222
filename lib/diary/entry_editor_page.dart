@@ -229,6 +229,7 @@ class EntryEditorPageState extends State<EntryEditorPage> {
   @override
   void initState() {
     super.initState();
+    CognitivePreferenceStore.instance.addListener(_cognitivePreferencesChanged);
     CognitivePreferenceStore.instance.load();
 
     // New entries start editable; existing entries open in read-only mode.
@@ -245,6 +246,10 @@ class EntryEditorPageState extends State<EntryEditorPage> {
       if (!_settingEntryContent && !_dirty) setState(() => _dirty = true);
       WidgetsBinding.instance.addPostFrameCallback((_) => _updateContentScrollPhysics());
     });
+  }
+
+  void _cognitivePreferencesChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -279,6 +284,7 @@ class EntryEditorPageState extends State<EntryEditorPage> {
 
   @override
   void dispose() {
+    CognitivePreferenceStore.instance.removeListener(_cognitivePreferencesChanged);
     if (_entryId == 0) {
       unawaited(_cognitiveStore.deleteRecord('diary', _cognitiveDraftId).catchError((_) {}));
     }
