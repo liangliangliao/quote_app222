@@ -260,6 +260,8 @@ jobs:
             > build/apk-delivery/build-info.json
           (cd build/apk-delivery && sha256sum "${package_name}.apk" > SHA256SUMS)
           cp docs/quote_epistemic_p0_implementation.md build/apk-delivery/READING-AND-COMPARISON.md
+          cp docs/cognitive_prototypes_2_10.md build/apk-delivery/COGNITIVE-MODES.md
+          echo 'New style is opt-in: 设置 → 阅读与认知风格 → 叔本华认知风格. Home artwork remains unchanged.' >> "$GITHUB_STEP_SUMMARY"
           echo "name=$package_name" >> "$GITHUB_OUTPUT"
           echo "APK source: $SOURCE_REF / $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
 

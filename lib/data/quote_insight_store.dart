@@ -39,6 +39,21 @@ class QuoteInsightStore {
   Future<void> saveAddon(QuoteReference quote, QuoteAnalysisAddon addon) =>
       _write('quote_insight.addon.${quote.contentKey}', addon.toJson());
 
+  Future<Map<String, QuoteAnalysisAddon>> readAddons(List<QuoteReference> quotes) async {
+    final db = await _ready();
+    final result = <String, QuoteAnalysisAddon>{};
+    final keys = quotes.map((q) => 'quote_insight.addon.${q.contentKey}').toSet().toList();
+    for (var offset = 0; offset < keys.length; offset += 200) {
+      final batch = keys.skip(offset).take(200).toList();
+      final rows = await db.query('app_kv', where: 'key IN (${List.filled(batch.length, '?').join(',')})', whereArgs: batch);
+      for (final row in rows) {
+        final key = row['key'] as String;
+        result[key.substring('quote_insight.addon.'.length)] = QuoteAnalysisAddon.fromStoredJson(row['value']);
+      }
+    }
+    return result;
+  }
+
   Future<String?> readComparison(String cacheKey) =>
       _read('quote_insight.comparison.$cacheKey');
 

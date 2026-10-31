@@ -7,7 +7,8 @@ import '../services/quote_insight_settings.dart';
 class QuoteReadingInsights extends StatefulWidget {
   final QuoteReference quote;
   final Future<QuoteAnalysisAddon> Function(QuoteReference)? loadAddon;
-  const QuoteReadingInsights({super.key, required this.quote, this.loadAddon});
+  final bool showReadingSections;
+  const QuoteReadingInsights({super.key, required this.quote, this.loadAddon, this.showReadingSections = true});
 
   @override
   State<QuoteReadingInsights> createState() => _QuoteReadingInsightsState();
@@ -72,7 +73,7 @@ class _QuoteReadingInsightsState extends State<QuoteReadingInsights> {
           style: TextStyle(
               fontSize: 13,
               color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      if (QuoteInsightSettings.readingEnabled) ...[
+      if (QuoteInsightSettings.readingEnabled && widget.showReadingSections) ...[
         if (_addon.concreteExample.isNotEmpty)
           _fold('具体是什么样子', [
             _paragraph('示例 / 模拟情境，不作为史实或作者原意'),
