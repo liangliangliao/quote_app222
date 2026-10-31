@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../platform/exact_alarm_permission_coordinator.dart';
+import '../epistemic/cognitive_reflection.dart';
 import 'zhixing_ai_service.dart';
 import 'zhixing_agent_service.dart';
 import 'zhixing_ai_knowledge_service.dart';
@@ -2729,6 +2730,10 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             ),
             const SizedBox(height: 10),
             _labelValue('行动证据', report.progressEvidence),
+            CognitiveReflectionCard(module: 'zhixing_action', recordId: action.id,
+              observation: report.progressEvidence,
+              judgment: report.barrierFinding, basis: report.rationale,
+              concepts: [selectedNames]),
             _labelValue('关键发现', report.barrierFinding),
             _labelValue('系统建议', report.recommendedDecision.label),
             _labelValue('建议理由', report.rationale),

@@ -21,6 +21,8 @@ class QuoteVisualScript {
     required this.frameFinish,
     required this.fromAi,
     this.isThemeOnly = false,
+    this.limitations = '画面尚未呈现原句的全部适用条件、例外与原典语境。',
+    this.clauseMappings = const [],
   });
 
   final String meaning;
@@ -32,6 +34,8 @@ class QuoteVisualScript {
   final String frameFinish;
   final bool fromAi;
   final bool isThemeOnly;
+  final String limitations;
+  final List<Map<String, String>> clauseMappings;
 
   Map<String, dynamic> toJson() => {
     'meaning': meaning,
@@ -43,9 +47,11 @@ class QuoteVisualScript {
     'frameFinish': frameFinish,
     'fromAi': fromAi,
     'isThemeOnly': isThemeOnly,
+    'limitations': limitations,
+    'clause_mappings': clauseMappings,
   };
 
-  factory QuoteVisualScript.fromJson(Map<String, dynamic> value) {
+  factory QuoteVisualScript.fromJson(Map<String, dynamic> value, {String originalQuote = ''}) {
     String valueOf(String key) => (value[key] ?? '').toString().trim();
     final meaning = valueOf('meaning');
     final metaphor = valueOf('metaphor');
@@ -67,6 +73,17 @@ class QuoteVisualScript {
       frameFinish: finishes.contains(requested) ? requested : 'walnut',
       fromAi: value['fromAi'] == true,
       isThemeOnly: value['isThemeOnly'] == true,
+      limitations: valueOf('limitations').isEmpty
+          ? '画面尚未呈现原句的全部适用条件、例外与原典语境。' : valueOf('limitations'),
+      clauseMappings: value['clause_mappings'] is List
+          ? (value['clause_mappings'] as List).whereType<Map>().where((m) =>
+              m['quote_segment'] is String && (m['quote_segment'] as String).trim().length >= 2 &&
+              originalQuote.contains((m['quote_segment'] as String).trim()) &&
+              m['visible_relation'] is String && (m['visible_relation'] as String).trim().isNotEmpty)
+            .take(8).map((m) => <String, String>{
+              'quote_segment': (m['quote_segment'] as String).trim(),
+              'visible_relation': (m['visible_relation'] as String).trim(),
+            }).toList() : const [],
     );
   }
 
@@ -151,7 +168,7 @@ class QuoteVisualScriptService {
     if (!await file.exists()) return null;
     try {
       final decoded = jsonDecode(await file.readAsString());
-      if (decoded is Map<String, dynamic>) return QuoteVisualScript.fromJson(decoded);
+      if (decoded is Map<String, dynamic>) return QuoteVisualScript.fromJson(decoded, originalQuote: quote);
     } catch (_) {}
     return null;
   }
@@ -189,7 +206,8 @@ class QuoteVisualScriptService {
 
 除非原文关系确实需要，否则禁止用孤立的道路、日出、山峰、飞鸟、树、门、镜子、沙漏、星空代替思想。光线和色彩只能强化含义，不能承担全部含义。不要把抽象词写进画面；只描述摄影机真正能看到的事物与关系。
 
-只返回严格 JSON，不要 Markdown，不要额外解释。字段：meaning（精确复述核心命题，不泛化）, metaphor（一句可见的具体类比）, scene（180~320字、一个连贯镜头，写清主体动作与结果）, relationship（按“原句关键关系→画面证据”逐项对应）, mood, palette, frameFinish（固定填 walnut，画框本身不由 AI 生成）。''',
+画面是类比，不是概念的全部含义或因果证明。limitations 明确至少一种图像不能表达的限定、例外或未知；clause_mappings 的 quote_segment 必须逐字摘自本次原句，visible_relation 描述对应的可见事物或动作，不伪称已经核实。
+只返回严格 JSON，不要 Markdown，不要额外解释。字段：meaning（精确复述核心命题，不泛化）, metaphor（一句可见的具体类比）, scene（180~320字、一个连贯镜头，写清主体动作与结果）, relationship（按“原句关键关系→画面证据”逐项对应）, limitations, clause_mappings:[{quote_segment,visible_relation}], mood, palette, frameFinish（固定填 walnut，画框本身不由 AI 生成）。''',
         prompt: '''请把下面名言转化为一幅无需文字也能尽量表达其思想的画面。
 
 【第一证据：原句】$quote
@@ -210,7 +228,7 @@ class QuoteVisualScriptService {
       if (start < 0 || end <= start) throw const FormatException('AI 未返回 JSON');
       final decoded = jsonDecode(raw.substring(start, end + 1));
       if (decoded is! Map<String, dynamic>) throw const FormatException('脚本类型错误');
-      result = QuoteVisualScript.fromJson({...decoded, 'fromAi': true});
+      result = QuoteVisualScript.fromJson({...decoded, 'fromAi': true}, originalQuote: quote);
     } catch (_) {
       result = fallback(topic: topic, quote: quote, theme: theme);
     }

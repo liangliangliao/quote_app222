@@ -4,6 +4,7 @@ import '../services/movie_analysis_service.dart';
 import '../services/movie_external_watch_service.dart';
 import '../services/tmdb_service.dart';
 import 'movie_overview_box.dart';
+import '../epistemic/movie_cognition.dart';
 
 /// A reusable movie card used by:
 /// - Movie ranking list tabs
@@ -100,10 +101,7 @@ class _MovieCardItemState extends State<MovieCardItem> {
                   ),
                   const SizedBox(height: 10),
                 ],
-                SelectableText(
-                  text,
-                  style: const TextStyle(fontSize: 14, height: 1.55),
-                ),
+                MovieCognitionView(text: text),
               ],
             ),
           ),

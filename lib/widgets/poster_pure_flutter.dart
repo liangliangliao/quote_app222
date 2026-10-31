@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/quote_calligraphy_settings.dart';
 import '../models/quote_insight.dart';
+import '../epistemic/quote_cognitive_reader.dart';
+import '../epistemic/cognitive_preferences.dart';
 import 'quote_reading_insights.dart';
 import 'quote_adaptive_frame.dart';
 import 'quote_calligraphy_text.dart';
@@ -40,6 +42,7 @@ class PosterPureFlutter extends StatelessWidget {
   final QuoteReference? quoteReference;
 
   void _openReading(BuildContext context) {
+    CognitivePreferenceStore.instance.load();
     final readingQuoteStyle = quotePrefersLiteraryEnglish(quote)
         ? quoteLiteraryTextStyle(
             const TextStyle(fontSize: 21, height: 1.65),
@@ -57,7 +60,13 @@ class PosterPureFlutter extends StatelessWidget {
         child: SingleChildScrollView(
           key: const ValueKey('quote-full-reading'),
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-          child: SelectionArea(child: Column(
+          child: ValueListenableBuilder<CognitivePreferences>(
+            valueListenable: CognitivePreferenceStore.instance,
+            builder: (context, prefs, _) => CognitivePreferenceStore.active
+              ? SelectionArea(child: QuoteCognitiveReader(
+                  quote: quoteReference ?? QuoteReference(id: '', content: quote, author: author),
+                  topic: topic, authorLabel: author, note: note, imagePath: aiFramePath))
+              : SelectionArea(child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (topic.trim().isNotEmpty) ...[
@@ -80,7 +89,7 @@ class PosterPureFlutter extends StatelessWidget {
               ],
               QuoteReadingInsights(quote: quoteReference ?? QuoteReference(id: '', content: quote)),
             ],
-          )),
+          ))),
         ),
       )),
     );

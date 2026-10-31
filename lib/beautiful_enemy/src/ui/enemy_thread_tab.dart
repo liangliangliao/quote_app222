@@ -13,6 +13,7 @@ import '../domain/evidence_source.dart';
 import '../enemy_talker.dart';
 import 'enemy_tabs.dart';
 import 'ui_helpers.dart';
+import '../../../../epistemic/gentle_counterexample.dart';
 
 /// 对峙：和敌人在同一条时间线上说话。
 ///
@@ -378,8 +379,11 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final latestUser = _messages.reversed.where((m) => m.role == MessageRole.user).firstOrNull;
     return Column(
       children: <Widget>[
+        if (!_crisisNotice && !_noConsent && latestUser != null)
+          GentleCounterexample(recordId: '${latestUser.id}', text: latestUser.text),
         if (_crisisNotice) _crisisCard(),
         if (_noConsent && !_crisisNotice) _consentCard(),
         if (!_noConsent && _missingLabels.isNotEmpty && !_crisisNotice) _missingCard(),

@@ -471,6 +471,7 @@ JSON 字段必须完整：
   "source_status": "unverified",
   "source_refs": [],
   "concrete_example": "示例：具体情境，不冒充史实",
+  "concepts": ["从原句抽取的 2–6 个概念，不作外延或因果断言"],
   "commonality": "情境中两种行为的共同点",
   "critical_difference": "影响判断的决定性差异",
   "boundary": "至少一个适用限制、反例或不确定条件",

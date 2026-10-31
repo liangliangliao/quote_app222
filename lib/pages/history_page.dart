@@ -13,11 +13,15 @@ import '../services/quote_insight_settings.dart';
 import '../widgets/quote_comparison_sheet.dart';
 import '../widgets/quote_history_avatar.dart';
 import '../widgets/quote_reading_insights.dart';
+import '../epistemic/history_knowledge_view.dart';
+import '../epistemic/cognitive_preferences.dart';
+import '../epistemic/quote_cognitive_reader.dart';
 
 class HistoryPage extends StatefulWidget {
   final QuoteDao? dao;
   final QuoteComparisonService? comparisonService;
-  const HistoryPage({super.key, this.dao, this.comparisonService});
+  final QuoteReference? initialComparison;
+  const HistoryPage({super.key, this.dao, this.comparisonService, this.initialComparison});
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
@@ -51,6 +55,8 @@ class _HistoryPageState extends State<HistoryPage> {
   bool _done = false;
   int _loadGeneration = 0;
   bool _selecting = false;
+  int _cognitiveView = 0;
+  int _insightRevision = 0;
   final Map<String, QuoteReference> _selected = {};
 
   void _toggleQuote(QuoteReference quote) {
@@ -76,6 +82,13 @@ class _HistoryPageState extends State<HistoryPage> {
   @override
   void initState() {
     super.initState();
+    CognitivePreferenceStore.instance.load();
+    CognitivePreferenceStore.instance.addListener(_preferencesChanged);
+    final initial = widget.initialComparison;
+    if (initial != null && initial.content.trim().isNotEmpty && QuoteInsightSettings.comparisonEnabled) {
+      _selected[initial.contentKey] = initial;
+      _selecting = true;
+    }
     _loadMore();
     _scroll.addListener(() {
       if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 100 && !_loading && !_done) {
@@ -86,8 +99,15 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   void dispose() {
+    CognitivePreferenceStore.instance.removeListener(_preferencesChanged);
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _preferencesChanged() {
+    if (mounted) setState(() {
+      if (!CognitivePreferenceStore.instance.value.enabled) _cognitiveView = 0;
+    });
   }
 
   Future<void> _loadMore() async {
@@ -134,6 +154,18 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _showQuoteDetails(Map<String, dynamic> quote) async {
+    if (CognitivePreferenceStore.active) {
+      await showModalBottomSheet<void>(context: context, isScrollControlled: true,
+        showDragHandle: true, backgroundColor: const Color(0xfffaf6ee),
+        builder: (_) => SafeArea(top: false, child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .85,
+          child: SingleChildScrollView(padding: const EdgeInsets.all(20),
+            child: SelectionArea(child: QuoteCognitiveReader(
+              quote: QuoteReference.fromRow(quote), topic: '${quote['theme'] ?? ''}',
+              authorLabel: '${quote['author_name'] ?? ''}', note: '${quote['explanation'] ?? ''}'))))));
+      if (mounted) setState(() => _insightRevision++);
+      return;
+    }
     final content = (quote['content'] ?? '').toString().trim();
     final theme = (quote['theme'] ?? '').toString().trim();
     final author = (quote['author_name'] ?? '').toString().trim();
@@ -432,6 +464,13 @@ class _HistoryPageState extends State<HistoryPage> {
               ],
             ),
           ),
+          if (CognitivePreferenceStore.enabledInBuild && CognitivePreferenceStore.instance.value.enabled)
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Wrap(spacing: 8, runSpacing: 4, children: [
+                for (final view in ['列表', '关系图', '时间线', '人物'].indexed)
+                  ChoiceChip(label: Text(view.$2), selected: _cognitiveView == view.$1,
+                    onSelected: (_) => setState(() => _cognitiveView = view.$1)),
+              ])),
           if (QuoteInsightSettings.comparisonEnabled)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -465,7 +504,7 @@ class _HistoryPageState extends State<HistoryPage> {
             ),
           // List content with zero top/bottom padding
           Expanded(
-            child: ListView.builder(
+            child: _cognitiveView == 0 ? ListView.builder(
               controller: _scroll,
               padding: EdgeInsets.zero,
               itemCount: _items.length,
@@ -506,7 +545,13 @@ class _HistoryPageState extends State<HistoryPage> {
                   onLongPress: QuoteInsightSettings.comparisonEnabled ? () => _toggleQuote(reference) : null,
                 );
               },
-            ),
+            ) : HistoryKnowledgeView(
+              key: ValueKey('history-cognition-$_q-$_loadGeneration'),
+              rows: List.of(_items), mode: _cognitiveView, revision: _insightRevision,
+              selectedKeys: _selected.keys.toSet(),
+              onOpen: (row) => _selecting ? _toggleQuote(QuoteReference.fromRow(row)) : _showQuoteDetails(row),
+              onSelect: (row) => _toggleQuote(QuoteReference.fromRow(row)),
+              onLoadMore: _loadMore, hasMore: !_done, loading: _loading),
           ),
         ],
       ),
