@@ -339,6 +339,13 @@ void main() {
     await tester.tap(find.text('按此情境重新比较'));
     await tester.pumpAndSettle();
     expect(service.requests.last.$2, '面对不可逆操作');
+    await tester.runAsync(() => CognitivePreferenceStore.instance
+        .update(const CognitivePreferences(enabled: true, reduceMotion: true)));
+    await tester.pumpAndSettle();
+    for (final tile
+        in tester.widgetList<ExpansionTile>(find.byType(ExpansionTile))) {
+      expect(tile.expansionAnimationStyle?.duration, Duration.zero);
+    }
     await capture(tester, '04-comparison-purpose');
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
@@ -359,6 +366,11 @@ void main() {
         scale: 1.8);
     expect(find.text('识别共同点'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.runAsync(() => CognitivePreferenceStore.instance
+        .update(const CognitivePreferences(enabled: true, prompts: false)));
+    await tester.pumpAndSettle();
+    expect(find.text('识别共同点'), findsNothing);
+    expect(find.text('选取记录，回顾认识的变化'), findsOneWidget);
     await mount(tester, JudgmentExercisePage(exercise: judgmentExercises[1]));
     await tester.tap(find.text('用时短，暂选甲路'));
     await tester.pumpAndSettle();

@@ -3,6 +3,7 @@ import 'cognitive_models.dart';
 import 'cognitive_service.dart';
 import 'cognitive_sheet.dart';
 import 'cognitive_snapshot_view.dart';
+import 'cognitive_mode.dart';
 
 class CognitiveRecapPage extends StatefulWidget {
   final CognitiveService? service;
@@ -112,12 +113,15 @@ class _CognitiveRecapPageState extends State<CognitiveRecapPage> {
                             _selected.remove(n.id);
                           }
                         })),
-            ExpansionTile(title: const Text('查看将发送的完整内容'), children: [
-              Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: CognitiveSnapshotView(
-                      snapshot: CognitiveService.reviewSnapshot(n)))
-            ]),
+            ExpansionTile(
+                expansionAnimationStyle: cognitiveExpansionStyle(context),
+                title: const Text('查看将发送的完整内容'),
+                children: [
+                  Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: CognitiveSnapshotView(
+                          snapshot: CognitiveService.reviewSnapshot(n)))
+                ]),
           ])),
         const SizedBox(height: 16),
         FilledButton.icon(

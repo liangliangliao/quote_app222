@@ -71,75 +71,79 @@ class CognitiveTrainingPanel extends StatelessWidget {
     CognitivePreferenceStore.instance.load();
     return ValueListenableBuilder<CognitivePreferences>(
         valueListenable: CognitivePreferenceStore.instance,
-        builder: (context, prefs, _) => !CognitivePreferenceStore
-                    .enabledInBuild ||
-                !prefs.enabled
-            ? const SizedBox.shrink()
-            : Card(
-                color: const Color(0xfff5f1e7),
-                child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text('在具体情境中练习判断',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 10),
-                          LayoutBuilder(
-                              builder: (context, box) => Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: judgmentExercises
-                                      .map((e) => SizedBox(
-                                          width: box.maxWidth > 300
-                                              ? (box.maxWidth - 8) / 2
-                                              : box.maxWidth,
-                                          child: Card(
-                                              margin: EdgeInsets.zero,
-                                              child: InkWell(
-                                                  onTap: () => Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                          builder: (_) =>
-                                                              JudgmentExercisePage(
-                                                                  exercise:
-                                                                      e))),
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                  child: Padding(
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                              14),
-                                                      child: Column(children: [
-                                                        Icon(e.icon,
-                                                            color: const Color(
-                                                                0xff517469)),
-                                                        const SizedBox(
-                                                            height: 8),
-                                                        Text(e.title,
-                                                            style: const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600)),
-                                                        Text(e.subtitle,
-                                                            textAlign: TextAlign
-                                                                .center,
-                                                            style:
-                                                                const TextStyle(
-                                                                    fontSize:
-                                                                        12)),
-                                                      ]))))))
-                                      .toList())),
-                          TextButton.icon(
-                              icon: const Icon(Icons.history),
-                              label: const Text('选取记录，回顾认识的变化'),
-                              onPressed: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) =>
-                                          const CognitiveRecapPage()))),
-                        ]))));
+        builder:
+            (context, prefs, _) =>
+                !CognitivePreferenceStore.enabledInBuild || !prefs.enabled
+                    ? const SizedBox.shrink()
+                    : Card(
+                        color: const Color(0xfff5f1e7),
+                        child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (prefs.prompts) ...[
+                                    const Text('在具体情境中练习判断',
+                                        style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 10),
+                                    LayoutBuilder(
+                                        builder: (context, box) => Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            children: judgmentExercises
+                                                .map((e) => SizedBox(
+                                                    width: box.maxWidth > 300
+                                                        ? (box.maxWidth - 8) / 2
+                                                        : box.maxWidth,
+                                                    child: Card(
+                                                        margin: EdgeInsets.zero,
+                                                        child: InkWell(
+                                                            onTap: () => Navigator.push(
+                                                                context,
+                                                                MaterialPageRoute(
+                                                                    builder: (_) =>
+                                                                        JudgmentExercisePage(
+                                                                            exercise:
+                                                                                e))),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        12),
+                                                            child: Padding(
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .all(
+                                                                        14),
+                                                                child: Column(
+                                                                    children: [
+                                                                      Icon(e.icon,
+                                                                          color:
+                                                                              const Color(0xff517469)),
+                                                                      const SizedBox(
+                                                                          height:
+                                                                              8),
+                                                                      Text(e.title,
+                                                                          style:
+                                                                              const TextStyle(fontWeight: FontWeight.w600)),
+                                                                      Text(e.subtitle,
+                                                                          textAlign: TextAlign
+                                                                              .center,
+                                                                          style:
+                                                                              const TextStyle(fontSize: 12)),
+                                                                    ]))))))
+                                                .toList())),
+                                  ],
+                                  TextButton.icon(
+                                      icon: const Icon(Icons.history),
+                                      label: const Text('选取记录，回顾认识的变化'),
+                                      onPressed: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const CognitiveRecapPage()))),
+                                ]))));
   }
 }
 

@@ -5,6 +5,7 @@ import '../models/quote_insight.dart';
 import 'cognitive_preferences.dart';
 import 'cognitive_store.dart';
 import 'cognitive_models.dart';
+import 'cognitive_mode.dart';
 
 class QuoteConceptGroup {
   final String title;
@@ -395,6 +396,7 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
       const Text('按记录署名聚合 · 作者声望不代替根据'),
       for (final entry in groups.entries)
         ExpansionTile(
+            expansionAnimationStyle: cognitiveExpansionStyle(context),
             title: Text(entry.key),
             subtitle: Text('${entry.value.length} 条'),
             leading: const CircleAvatar(child: Icon(Icons.person_outline)),

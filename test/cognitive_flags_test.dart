@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/epistemic/cognitive_mode.dart';
 import 'package:quote_app/epistemic/cognitive_preferences.dart';
 import 'package:quote_app/epistemic/cognitive_training.dart';
+import 'package:quote_app/epistemic/cognitive_settings.dart';
 
 void main() {
   testWidgets(
@@ -12,10 +13,18 @@ void main() {
         const CognitivePreferences(enabled: true);
     await tester.pumpWidget(const MaterialApp(
         home: Scaffold(
-            body: Column(children: [
+            body: SingleChildScrollView(
+                child: Column(children: [
       CognitiveMode(fallback: Text('原有模式'), child: Text('认知风格')),
       CognitiveTrainingPanel(),
-    ]))));
+      CognitiveSettingsSection(),
+    ])))));
+    expect(
+        tester
+            .widget<SwitchListTile>(
+                find.byKey(const ValueKey('schopenhauer-style-toggle')))
+            .value,
+        CognitivePreferenceStore.enabledInBuild);
     if (CognitivePreferenceStore.enabledInBuild) {
       expect(find.text('认知风格'), findsOneWidget);
       expect(find.text('识别共同点'), findsOneWidget);

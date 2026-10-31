@@ -49,15 +49,15 @@ class _CognitiveSettingsSectionState extends State<CognitiveSettingsSection> {
                         key: const ValueKey('schopenhauer-style-toggle'),
                         contentPadding: EdgeInsets.zero,
                         title: const Text('叔本华认知风格'),
-                        subtitle: Text(prefs.enabled
+                        subtitle: Text(CognitivePreferenceStore.active
                             ? '已开启：按直观、概念、比较、判断与修订展开；首页保持原样。'
                             : '默认模式：沿用现有页面和交互。开启后可体验认知风格。'),
-                        value: prefs.enabled,
+                        value: CognitivePreferenceStore.active,
                         onChanged:
                             _saving || !CognitivePreferenceStore.enabledInBuild
                                 ? null
                                 : (v) => _set('enabled', v)),
-                    if (prefs.enabled) ...[
+                    if (CognitivePreferenceStore.active) ...[
                       const Text(
                           '偏好只调整展开方式，不定义你的性格或认识水平。关闭风格开关可恢复默认模式，已保存的认识注释会保留。'),
                       const SizedBox(height: 12),

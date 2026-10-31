@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/quote_insight.dart';
 import '../services/quote_comparison_service.dart';
 import '../epistemic/cognitive_preferences.dart';
+import '../epistemic/cognitive_mode.dart';
 
 Future<void> showQuoteComparison(
         BuildContext context, QuoteReference a, QuoteReference b,
@@ -196,6 +197,8 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
                                       }))
                             .toList()),
                     ExpansionTile(
+                        expansionAnimationStyle:
+                            cognitiveExpansionStyle(context),
                         title: const Text('改变情境或条件'),
                         subtitle: const Text('目标、资源、风险变化时，重新检验判断'),
                         children: [
@@ -257,10 +260,14 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
                             result.limitation
                           ][_tab]),
                       if (_tab != 3)
-                        ExpansionTile(title: const Text('适用条件与未知'), children: [
-                          Text(result.limitation,
-                              style: const TextStyle(height: 1.65))
-                        ]),
+                        ExpansionTile(
+                            expansionAnimationStyle:
+                                cognitiveExpansionStyle(context),
+                            title: const Text('适用条件与未知'),
+                            children: [
+                              Text(result.limitation,
+                                  style: const TextStyle(height: 1.65))
+                            ]),
                     ],
                     const SizedBox(height: 20),
                     if (!CognitivePreferenceStore.active || prefs.relations)

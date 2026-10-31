@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/quote_insight.dart';
 import 'cognitive_models.dart';
 import 'cognitive_preferences.dart';
+import 'cognitive_mode.dart';
 
 /// Persisted inside the existing analysis text column; legacy text stays readable.
 class MovieCognition {
@@ -143,7 +144,9 @@ class _MovieCognitionViewState extends State<MovieCognitionView> {
                 : '待核对推测 → ${s['concept']}',
             '${s['excerpt']}\n一种理解：${s['interpretation']}')),
         ExpansionTile(
-            title: const Text('完整解读'), children: [SelectableText(m.narrative)]),
+            expansionAnimationStyle: cognitiveExpansionStyle(context),
+            title: const Text('完整解读'),
+            children: [SelectableText(m.narrative)]),
       ],
       if (_tab == 1) ...[
         Wrap(
