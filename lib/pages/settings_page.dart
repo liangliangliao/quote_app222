@@ -11,6 +11,7 @@ import 'package:quote_app/services/native_am.dart';
 import 'package:quote_app/services/native_wm.dart';
 import 'package:quote_app/services/native_guard.dart';
 import 'package:flutter/material.dart';
+import '../epistemic/cognitive_settings.dart';
 import 'package:image_picker/image_picker.dart';
 // removed duplicate import of path_provider
 // 用于选择和上传量表 Excel 模板文件
@@ -3834,6 +3835,7 @@ const Text('头像（用于通知图标）'),
         // Remove top and bottom padding; keep horizontal padding only
         padding: const EdgeInsets.only(left: 12.0, right: 12.0),
         child: ListView(children: [
+          const CognitiveSettingsSection(),
           ListTile(title: const Text('日记设置'), trailing: const Icon(Icons.chevron_right), onTap: (){ Navigator.push(context, MaterialPageRoute(builder: (_)=>const DiarySettingsPage())); },),
           _quoteCalligraphySettingsCard(),
           ListTile(

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
 
 import '../data/dao.dart';
+import '../epistemic/concept_explorer.dart';
+import '../epistemic/cognitive_preferences.dart';
 
 /// A lightweight mindmap-style visualization for selected thought taxonomy nodes.
 ///
@@ -184,7 +186,11 @@ class _ThoughtTaxonomyMindMapState extends State<ThoughtTaxonomyMindMap> {
               elevation: 0,
               margin: EdgeInsets.zero,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              child: Padding(
+              child: InkWell(onTap: info == null || uid == '__taxonomy_root__' ||
+                  !CognitivePreferenceStore.enabledInBuild || !CognitivePreferenceStore.instance.value.enabled ? null :
+                    () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
+                      ConceptExplorer(title: title, nodeUid: uid, parentUid: info.parentUid))),
+                child: Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: widget.compact ? 10 : 12,
                   vertical: widget.compact ? 6 : 8,
@@ -198,7 +204,7 @@ class _ThoughtTaxonomyMindMapState extends State<ThoughtTaxonomyMindMap> {
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
-              ),
+              )),
             ),
           );
         }

@@ -1,8 +1,20 @@
-name: Quote Reading and Comparison CI
+name: Quote and Cognitive Modes CI
 
 on:
   pull_request:
     paths:
+      - 'lib/epistemic/**'
+      - 'lib/diary/entry_editor_page.dart'
+      - 'lib/pages/settings_page.dart'
+      - 'lib/pages/discover_page.dart'
+      - 'lib/pages/vision_thought_history_page.dart'
+      - 'lib/widgets/thought_taxonomy_mindmap.dart'
+      - 'lib/widgets/movie_card_item.dart'
+      - 'lib/services/movie_analysis_service.dart'
+      - 'lib/xiangji_future_strategist/xiangji_problem_pages.dart'
+      - 'lib/zhixing_tree/zhixing_tree_home_page.dart'
+      - 'lib/beautiful_enemy/src/ui/enemy_thread_tab.dart'
+      - 'test/cognitive_*test.dart'
       - 'lib/models/quote_insight.dart'
       - 'lib/data/quote_insight_store.dart'
       - 'lib/data/dao.dart'
@@ -22,6 +34,18 @@ on:
   push:
     branches: [main]
     paths:
+      - 'lib/epistemic/**'
+      - 'lib/diary/entry_editor_page.dart'
+      - 'lib/pages/settings_page.dart'
+      - 'lib/pages/discover_page.dart'
+      - 'lib/pages/vision_thought_history_page.dart'
+      - 'lib/widgets/thought_taxonomy_mindmap.dart'
+      - 'lib/widgets/movie_card_item.dart'
+      - 'lib/services/movie_analysis_service.dart'
+      - 'lib/xiangji_future_strategist/xiangji_problem_pages.dart'
+      - 'lib/zhixing_tree/zhixing_tree_home_page.dart'
+      - 'lib/beautiful_enemy/src/ui/enemy_thread_tab.dart'
+      - 'test/cognitive_*test.dart'
       - 'lib/models/quote_insight.dart'
       - 'lib/data/quote_insight_store.dart'
       - 'lib/data/dao.dart'
@@ -66,33 +90,47 @@ jobs:
             https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf \
             -o /tmp/quote-preview-cjk.otf
       - run: flutter pub get
-      - name: Analyze reading and comparison modules
+      - name: Analyze reading and cognitive modules
         run: >-
           flutter analyze --no-pub
+          lib/epistemic
+          test/cognitive_core_test.dart test/cognitive_extended_test.dart
+          test/cognitive_widgets_test.dart test/cognitive_flags_test.dart
           lib/models/quote_insight.dart lib/data/quote_insight_store.dart
           lib/services/quote_comparison_service.dart lib/services/quote_insight_settings.dart
           lib/widgets/quote_reading_insights.dart lib/widgets/quote_comparison_sheet.dart
           test/quote_insight_test.dart test/quote_comparison_test.dart
           test/quote_insight_store_test.dart test/quote_insight_widgets_test.dart
           test/quote_insight_flags_test.dart test/quote_insight_delivery_test.dart
-      - name: Test P0 behavior and existing quote layout
+      - name: Test both modes, real entries and original quote layout
         run: >-
           flutter test --no-pub --reporter expanded
+          test/cognitive_core_test.dart test/cognitive_extended_test.dart
+          test/cognitive_widgets_test.dart test/cognitive_flags_test.dart
           test/quote_insight_test.dart test/quote_comparison_test.dart
           test/quote_insight_store_test.dart test/quote_insight_widgets_test.dart
           test/quote_insight_flags_test.dart test/quote_insight_delivery_test.dart
           test/quote_ai_service_test.dart test/quote_paper_layout_test.dart
           test/quote_history_avatar_test.dart test/quote_ai_integration_compile_test.dart
+      - name: Test existing module behavior
+        run: >-
+          flutter test --no-pub --reporter expanded
+          test/xiangji_future_strategist/xiangji_rev3_widget_test.dart
+          test/xiangji_future_strategist/xiangji_privacy_guard_test.dart
+          test/zhixing_tree/zhixing_dual_mode_test.dart
       - name: Test disabled feature flags
         run: >-
           flutter test --no-pub --reporter expanded
+          --dart-define=COGNITIVE_EXPERIENCES=false
           --dart-define=QUOTE_READING_INSIGHTS=false
           --dart-define=QUOTE_COMPARISON_ENABLED=false
-          test/quote_insight_flags_test.dart
+          test/quote_insight_flags_test.dart test/cognitive_flags_test.dart
       - name: Upload rendered entry previews
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: quote-reading-comparison-previews-${{ github.event.pull_request.head.sha || github.sha }}
-          path: build/quote-insight-preview/
+          path: |
+            build/quote-insight-preview/
+            build/cognitive-preview/
           if-no-files-found: warn

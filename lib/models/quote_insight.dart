@@ -160,6 +160,7 @@ class QuoteAnalysisAddon {
       boundary,
       analysisBasis;
   final List<String> sourceRefs;
+  final List<String> concepts;
   final EpistemicSource source;
   final String modelSourceAssessment;
 
@@ -170,6 +171,7 @@ class QuoteAnalysisAddon {
     this.boundary = '',
     this.analysisBasis = '',
     this.sourceRefs = const [],
+    this.concepts = const [],
     this.source = const EpistemicSource(),
     this.modelSourceAssessment = '',
   });
@@ -187,6 +189,7 @@ class QuoteAnalysisAddon {
       {String source = ''}) {
     final map = insightObject(value);
     final refs = map['source_refs'];
+    final concepts = map['concepts'];
     return QuoteAnalysisAddon(
       concreteExample: insightText(map, 'concrete_example'),
       commonality: insightText(map, 'commonality'),
@@ -195,6 +198,14 @@ class QuoteAnalysisAddon {
       analysisBasis: insightText(map, 'analysis_basis'),
       sourceRefs: refs is List
           ? refs
+              .whereType<String>()
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .take(8)
+              .toList()
+          : const [],
+      concepts: concepts is List
+          ? concepts
               .whereType<String>()
               .map((s) => s.trim())
               .where((s) => s.isNotEmpty)
@@ -218,6 +229,7 @@ class QuoteAnalysisAddon {
       boundary: parsed.boundary,
       analysisBasis: parsed.analysisBasis,
       sourceRefs: parsed.sourceRefs,
+      concepts: parsed.concepts,
       source: EpistemicSource.fromStoredJson(map['epistemic_source']),
       modelSourceAssessment: parsed.modelSourceAssessment,
     );
@@ -231,6 +243,7 @@ class QuoteAnalysisAddon {
         'boundary': boundary,
         'analysis_basis': analysisBasis,
         'source_refs': sourceRefs,
+        'concepts': concepts,
         'epistemic_source': source.toJson(),
         'source_confidence': modelSourceAssessment,
         'epistemic_status': status.name,
