@@ -267,6 +267,7 @@ jobs:
           cp docs/cognitive_requirements_audit_2026_11_01.md build/apk-delivery/cognitive_requirements_audit_2026_11_01.md
           cp docs/schopenhauer_plan_full_acceptance.md build/apk-delivery/schopenhauer_plan_full_acceptance.md
           cp docs/cognitive_prototype_depth_v3.md build/apk-delivery/COGNITIVE-PROTOTYPE-V3.md
+          cp -R docs/cognition-v3 build/apk-delivery/cognition-v3
           echo 'New style is opt-in: 设置 → 阅读与认知风格 → 叔本华认知风格. Home artwork remains unchanged.' >> "$GITHUB_STEP_SUMMARY"
           echo "name=$package_name" >> "$GITHUB_OUTPUT"
           echo "APK source: $SOURCE_REF / $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
