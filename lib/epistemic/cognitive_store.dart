@@ -26,6 +26,27 @@ class CognitiveStore {
         conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  Future<CognitiveNote> updateIfUnchanged(CognitiveNote expected,
+      CognitiveNote Function(CognitiveNote) update) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final rows = await txn
+          .query('app_kv', where: 'key=?', whereArgs: [_key(expected)]);
+      final current =
+          rows.isEmpty ? null : CognitiveNote.fromJson(rows.single['value']);
+      if (current == null ||
+          insightHash(current.toJson()) != insightHash(expected.toJson())) {
+        throw StateError('认识记录已变化，请重新查看后再保存修订。');
+      }
+      final next = update(current);
+      if (_key(next) != _key(expected)) throw ArgumentError('修订必须保留原记录身份');
+      await txn.insert(
+          'app_kv', {'key': _key(next), 'value': jsonEncode(next.toJson())},
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      return next;
+    });
+  }
+
   Future<List<CognitiveNote>> _read(String glob) async {
     final db = await database;
     final rows = await db.query('app_kv',

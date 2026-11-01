@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../data/quote_insight_store.dart';
 import '../models/quote_insight.dart';
 import '../services/quote_insight_settings.dart';
+import '../epistemic/cognitive_usage.dart';
+import '../epistemic/cognitive_mode.dart';
 
 class QuoteReadingInsights extends StatefulWidget {
   final QuoteReference quote;
@@ -49,9 +51,15 @@ class _QuoteReadingInsightsState extends State<QuoteReadingInsights> {
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(bottom: 16),
         expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-        expansionAnimationStyle: MediaQuery.disableAnimationsOf(context)
+        expansionAnimationStyle: cognitiveExpansionStyle(context) ?? (MediaQuery.disableAnimationsOf(context)
             ? AnimationStyle.noAnimation
-            : const AnimationStyle(duration: Duration(milliseconds: 240)),
+            : const AnimationStyle(duration: Duration(milliseconds: 240))),
+        onExpansionChanged: (open) {
+          if (!open) return;
+          CognitiveUsageStore.instance.track(title == '具体是什么样子'
+              ? CognitiveEvent.exampleOpened : title == '这个解释依据什么'
+                  ? CognitiveEvent.basisOpened : CognitiveEvent.differenceOpened);
+        },
         title: Text(title, style: const TextStyle(fontSize: 16)),
         children: children,
       );

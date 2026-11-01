@@ -6,6 +6,8 @@ import 'cognitive_store.dart';
 import 'cognitive_input_dialog.dart';
 import 'cognitive_snapshot_view.dart';
 import 'cognitive_mode.dart';
+import 'cognitive_evidence_view.dart';
+import 'cognitive_usage.dart';
 import '../models/quote_insight.dart';
 
 Future<void> showCognitiveAnalysis(
@@ -52,6 +54,7 @@ class CognitiveAnalysisSheet extends StatefulWidget {
 class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
   late final _service = widget.service ?? CognitiveService();
   CognitiveNote? _note;
+  final _originalKey = GlobalKey();
   bool _busy = false;
   String? _error;
   @override
@@ -76,6 +79,7 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
   Future<void> _generate() async {
     await CognitivePreferenceStore.instance.load();
     if (!mounted || !CognitivePreferenceStore.active || _busy) return;
+    CognitiveUsageStore.instance.track(CognitiveEvent.analysisRequested);
     setState(() {
       _busy = true;
       _error = null;
@@ -83,14 +87,17 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
     try {
       final note = await _service.analyze(widget.selection, widget.task);
       if (mounted) setState(() => _note = note);
-    } catch (_) {
+    } catch (e) {
+      CognitiveUsageStore.instance.track(e is FormatException
+          ? CognitiveEvent.invalidOutput
+          : CognitiveEvent.requestFailed);
       if (mounted) setState(() => _error = '暂未完成分析。请检查网络和全局 AI 配置后重试；原文保持不变。');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _save(CognitiveNote note) async {
+  Future<void> _save(CognitiveNote note, {CognitiveEvent? event}) async {
     if (!CognitivePreferenceStore.active) return;
     setState(() {
       _busy = true;
@@ -98,8 +105,10 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
     });
     try {
       await _service.store.save(note);
+      if (event != null) CognitiveUsageStore.instance.track(event);
       if (mounted) setState(() => _note = note);
     } catch (_) {
+      CognitiveUsageStore.instance.track(CognitiveEvent.storageFailed);
       if (mounted) setState(() => _error = '注释暂未保存，请重试。原文不受影响。');
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -112,6 +121,8 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
     setState(() => _busy = true);
     try {
       await _service.store.delete(note);
+      CognitiveUsageStore.instance.track(
+          note.accepted ? CognitiveEvent.deleted : CognitiveEvent.skipped);
       if (mounted) Navigator.pop(context);
     } catch (_) {
       if (mounted)
@@ -139,10 +150,12 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                       required: false),
                 ]));
     if (values != null && mounted) {
-      await _save(note.revise(
-          judgment: values['judgment']!,
-          evidence: values['evidence']!,
-          reason: values['reason']!));
+      await _save(
+          note.revise(
+              judgment: values['judgment']!,
+              evidence: values['evidence']!,
+              reason: values['reason']!),
+          event: CognitiveEvent.revised);
     }
   }
 
@@ -179,7 +192,10 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
       valueListenable: CognitivePreferenceStore.instance,
       builder: (context, prefs, _) {
         if (!CognitivePreferenceStore.active) {
-          return CognitiveDisabledView(originalText: widget.selection.text);
+          return CognitiveDisabledView(
+              originalText: widget.task == CognitiveTask.review
+                  ? null
+                  : widget.selection.text);
         }
         final note = _note;
         final stale = widget.currentText != null &&
@@ -200,14 +216,19 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                         icon: const Icon(Icons.close))
                   ]),
                   Card(
+                      key: _originalKey,
                       child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                const Text('原文 · 保持原样',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w600)),
+                                Text(
+                                    note?.modelInfo ==
+                                            'existing_record_snapshot'
+                                        ? '原记录快照 · 保持原样'
+                                        : '原文 · 保持原样',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600)),
                                 const SizedBox(height: 8),
                                 if (widget.task == CognitiveTask.review)
                                   for (final value
@@ -242,7 +263,12 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                         icon: const Icon(Icons.refresh),
                         label: const Text('重试分析')),
                   if (note != null) ...[
-                    Text(note.accepted ? '已采纳的注释 · 仍是一种理解' : 'AI 暂定理解 · 可修改或拒绝',
+                    Text(
+                        note.accepted
+                            ? '已采纳的注释 · 仍是一种理解'
+                            : note.modelInfo == 'existing_record_snapshot'
+                                ? '记录中的暂定理解 · 可修改或拒绝'
+                                : 'AI 暂定理解 · 可修改或拒绝',
                         style: TextStyle(
                             color: Theme.of(context)
                                 .colorScheme
@@ -278,21 +304,26 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                                                   ];
                                                   spans[entry.$1] =
                                                       entry.$2.withKind(kind);
-                                                  _save(note.copyWith(
-                                                      analysis: note.analysis
-                                                          .withSpans(spans),
-                                                      classificationHistory: [
-                                                        ...note
-                                                            .classificationHistory,
-                                                        {
-                                                          'at': DateTime.now()
-                                                              .toUtc()
-                                                              .toIso8601String(),
-                                                          'analysis': note
+                                                  _save(
+                                                      note.copyWith(
+                                                          analysis: note
                                                               .analysis
-                                                              .toJson()
-                                                        }
-                                                      ]));
+                                                              .withSpans(spans),
+                                                          classificationHistory: [
+                                                            ...note
+                                                                .classificationHistory,
+                                                            {
+                                                              'at': DateTime
+                                                                      .now()
+                                                                  .toUtc()
+                                                                  .toIso8601String(),
+                                                              'analysis': note
+                                                                  .analysis
+                                                                  .toJson()
+                                                            }
+                                                          ]),
+                                                      event: CognitiveEvent
+                                                          .classificationChanged);
                                                 }),
                                       if (entry.$2.reason.isNotEmpty)
                                         Text(entry.$2.reason,
@@ -308,11 +339,15 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                                       ...note.classificationHistory
                                     ];
                                     final previous = history.removeLast();
-                                    _save(note.copyWith(
-                                        analysis: CognitiveAnalysis.fromJson(
-                                            previous['analysis'],
-                                            note.selection.text),
-                                        classificationHistory: history));
+                                    _save(
+                                        note.copyWith(
+                                            analysis:
+                                                CognitiveAnalysis.fromJson(
+                                                    previous['analysis'],
+                                                    note.selection.text),
+                                            classificationHistory: history),
+                                        event: CognitiveEvent
+                                            .classificationUndone);
                                   },
                             child: const Text('撤销上一次分类修改')),
                     ],
@@ -338,7 +373,18 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                     _section('可以怎样检验',
                         note.analysis.questions.map((q) => '• $q').join('\n')),
                     if (prefs.grounds) ...[
-                      _section('判断依据 · 未经外部核对', note.analysis.basis),
+                      CognitiveEvidenceView(
+                          note: note,
+                          onOriginal: () {
+                            final originalContext = _originalKey.currentContext;
+                            if (originalContext != null)
+                              Scrollable.ensureVisible(originalContext,
+                                  duration: prefs.reduceMotion ||
+                                          MediaQuery.disableAnimationsOf(
+                                              context)
+                                      ? Duration.zero
+                                      : const Duration(milliseconds: 240));
+                          }),
                       if (widget.task == CognitiveTask.diary)
                         for (final lens in GroundLens.values)
                           ExpansionTile(
@@ -391,27 +437,40 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                                       CognitiveChangedText(
                                           before: entry.$2.previous,
                                           after: entry.$2.judgment),
-                                      Text('新材料（用户报告）：${entry.$2.evidence}'),
+                                      Container(
+                                          padding: const EdgeInsets.all(10),
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .secondaryContainer,
+                                          child: SelectableText(
+                                              '新材料（用户报告）：${entry.$2.evidence}')),
                                       if (entry.$2.reason.isNotEmpty)
                                         Text('改判理由：${entry.$2.reason}'),
                                       TextButton(
-                                          onPressed: _busy
+                                          onPressed: _busy || stale
                                               ? null
-                                              : () => _save(note.revise(
-                                                  judgment: entry.$2.previous,
-                                                  evidence:
-                                                      '用户重新审视第 ${entry.$1 + 1} 次修订前的判断',
-                                                  reason: '手动回退，保留全部修订记录')),
+                                              : () => _save(
+                                                  note.revise(
+                                                      judgment:
+                                                          entry.$2.previous,
+                                                      evidence:
+                                                          '用户重新审视第 ${entry.$1 + 1} 次修订前的判断',
+                                                      reason: '手动回退，保留全部修订记录'),
+                                                  event: CognitiveEvent
+                                                      .rolledBack),
                                           child: const Text('回退到此前判断')),
                                     ]))),
                     ],
                     const SizedBox(height: 16),
                     Wrap(spacing: 8, runSpacing: 8, children: [
                       FilledButton(
-                          onPressed: _busy || stale
+                          onPressed: _busy || (stale && !note.accepted)
                               ? null
                               : () => _save(
-                                  note.copyWith(accepted: !note.accepted)),
+                                  note.copyWith(accepted: !note.accepted),
+                                  event: note.accepted
+                                      ? CognitiveEvent.acceptanceUndone
+                                      : CognitiveEvent.accepted),
                           child: Text(note.accepted ? '撤销采纳' : '采纳这条注释')),
                       OutlinedButton(
                           onPressed: _busy || stale ? null : _revise,
@@ -481,13 +540,19 @@ class CognitiveLoopSteps extends StatelessWidget {
             ? '概念尚待澄清，先保留具体经验。'
             : note.analysis.concepts.join('、')
       ),
-      ('判断与根据', '${note.currentJudgment}\n${note.analysis.basis}'),
+      (
+        '判断与根据',
+        '${note.currentJudgment}\n最初根据：${note.analysis.basis}'
+            '${note.revisions.isEmpty ? '' : '\n修订材料：${note.revisions.last.evidence}'}'
+      ),
       ('回到经验检验', note.analysis.questions.join('\n')),
       (
         '修订认识',
         note.revisions.isEmpty
             ? '有新材料时，可以保留旧判断并记录修订。'
-            : note.revisions.last.reason
+            : note.revisions.last.reason.isEmpty
+                ? note.revisions.last.evidence
+                : note.revisions.last.reason
       )
     ];
     return Padding(

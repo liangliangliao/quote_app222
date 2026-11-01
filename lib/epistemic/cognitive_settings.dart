@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'cognitive_preferences.dart';
+import 'cognitive_usage_view.dart';
 
 class CognitiveSettingsSection extends StatefulWidget {
   const CognitiveSettingsSection({super.key});
@@ -114,6 +115,7 @@ class _CognitiveSettingsSectionState extends State<CognitiveSettingsSection> {
                           prefs.evidenceReminders
                         ),
                         ('reduce_motion', '减弱展开与关系动效', prefs.reduceMotion),
+                        ('usage_enabled', '匿名使用记录（仅此设备）', prefs.usageEnabled),
                       ])
                         SwitchListTile.adaptive(
                             contentPadding: EdgeInsets.zero,
@@ -122,6 +124,14 @@ class _CognitiveSettingsSectionState extends State<CognitiveSettingsSection> {
                             onChanged: _saving || !prefs.enabled
                                 ? null
                                 : (v) => _set(item.$1, v)),
+                      const Text(
+                          '匿名记录默认关闭；开启后仅累计展开、采纳、修正、跳过及错误类别，不记录正文，也不上传。关闭后停止新增记录，原有计数可清除。',
+                          style: TextStyle(fontSize: 12, height: 1.5)),
+                      TextButton(
+                          onPressed: () => showDialog<void>(
+                              context: context,
+                              builder: (_) => const CognitiveUsageDialog()),
+                          child: const Text('查看 / 清除本地匿名计数')),
                       const Text(
                           '普通阅读不追加模型请求。只有主动分析所选材料时才使用已有全局 AI 配置；来源状态始终如实显示。',
                           style: TextStyle(fontSize: 12, height: 1.5)),

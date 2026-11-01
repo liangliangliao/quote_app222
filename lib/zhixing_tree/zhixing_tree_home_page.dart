@@ -2733,6 +2733,7 @@ class _ZhixingTreeHomePageState extends State<ZhixingTreeHomePage>
             CognitiveReflectionCard(module: 'zhixing_action', recordId: action.id,
               observation: report.progressEvidence,
               judgment: report.barrierFinding, basis: report.rationale,
+              newEvidence: report.progressEvidence,
               concepts: [selectedNames]),
             _labelValue('关键发现', report.barrierFinding),
             _labelValue('系统建议', report.recommendedDecision.label),

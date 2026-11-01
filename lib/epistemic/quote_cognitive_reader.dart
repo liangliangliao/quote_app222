@@ -14,6 +14,7 @@ import 'cognitive_sheet.dart';
 import 'cognitive_store.dart';
 import 'cognitive_input_dialog.dart';
 import 'concept_explorer.dart';
+import 'cognitive_usage.dart';
 
 class QuoteCognitiveReader extends StatefulWidget {
   final QuoteReference quote;
@@ -159,6 +160,14 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                             onSelected: (_) => setState(() {
                                   _tab = tab.$1;
                                   _choseTab = true;
+                                  final event = switch (tab.$1) {
+                                    0 => CognitiveEvent.exampleOpened,
+                                    2 => CognitiveEvent.differenceOpened,
+                                    3 => CognitiveEvent.basisOpened,
+                                    _ => null,
+                                  };
+                                  if (event != null)
+                                    CognitiveUsageStore.instance.track(event);
                                 })),
                     ]),
                     if (_tab == 0) ...[
@@ -275,59 +284,71 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
 
 class QuoteVisualExplanation extends StatefulWidget {
   final String topic, quote;
+  final QuoteVisualScript? script;
   const QuoteVisualExplanation(
-      {super.key, required this.topic, required this.quote});
+      {super.key, required this.topic, required this.quote, this.script});
   @override
   State<QuoteVisualExplanation> createState() => _QuoteVisualExplanationState();
 }
 
 class _QuoteVisualExplanationState extends State<QuoteVisualExplanation> {
   int? _highlighted;
-  late final Future<QuoteVisualScript?> _script = QuoteFrameAiService()
-      .readCachedScript(widget.topic, widget.quote)
-      .catchError((_) => null);
+  late final Future<QuoteVisualScript?> _script = widget.script != null
+      ? Future.value(widget.script)
+      : QuoteFrameAiService()
+          .readCachedScript(widget.topic, widget.quote)
+          .catchError((_) => null);
   @override
-  Widget build(BuildContext context) => FutureBuilder<QuoteVisualScript?>(
-      future: _script,
-      builder: (context, snapshot) {
-        final script = snapshot.data;
-        if (script == null) return const SizedBox.shrink();
-        final prefs = CognitivePreferenceStore.instance.value;
-        return ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: const Text('画面如何对应原句'),
-            expansionAnimationStyle: prefs.reduceMotion ||
-                    MediaQuery.disableAnimationsOf(context)
-                ? AnimationStyle.noAnimation
-                : const AnimationStyle(duration: Duration(milliseconds: 250)),
-            children: [
-              for (final entry in script.clauseMappings.indexed)
-                Semantics(
-                    button: true,
-                    selected: _highlighted == entry.$1,
-                    child: InkWell(
-                        onTap: () => setState(() => _highlighted =
-                            _highlighted == entry.$1 ? null : entry.$1),
-                        child: AnimatedContainer(
-                            duration: prefs.reduceMotion ||
-                                    MediaQuery.disableAnimationsOf(context)
-                                ? Duration.zero
-                                : const Duration(milliseconds: 250),
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(10),
-                                color: _highlighted == entry.$1
-                                    ? const Color(0xfff5e8cb)
-                                    : Colors.transparent),
-                            child: Text(
-                                '“${entry.$2['quote_segment']}”\n↓ 视觉类比\n${entry.$2['visible_relation']}',
-                                style: const TextStyle(height: 1.6))))),
-              Text(
-                  '视觉类比：${script.metaphor}\n\n对应关系：${script.relationship}\n\n'
-                  '画面没有表达的部分：${script.limitations}\n\n'
-                  '画面不等于概念的全部含义，也不证明因果。${script.fromAi ? '这是一种 AI 解释。' : '这是有限本地规则生成的意象。'}',
-                  style: const TextStyle(height: 1.65))
-            ]);
-      });
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<CognitivePreferences>(
+          valueListenable: CognitivePreferenceStore.instance,
+          builder: (context, prefs, _) => FutureBuilder<QuoteVisualScript?>(
+              future: _script,
+              builder: (context, snapshot) {
+                final script = snapshot.data;
+                if (script == null) return const SizedBox.shrink();
+                return ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('画面如何对应原句'),
+                    onExpansionChanged: (open) {
+                      if (open)
+                        CognitiveUsageStore.instance
+                            .track(CognitiveEvent.visualOpened);
+                    },
+                    expansionAnimationStyle: prefs.reduceMotion ||
+                            MediaQuery.disableAnimationsOf(context)
+                        ? AnimationStyle.noAnimation
+                        : const AnimationStyle(
+                            duration: Duration(milliseconds: 250)),
+                    children: [
+                      for (final entry in script.clauseMappings.indexed)
+                        Semantics(
+                            button: true,
+                            selected: _highlighted == entry.$1,
+                            child: InkWell(
+                                onTap: () => setState(() => _highlighted =
+                                    _highlighted == entry.$1 ? null : entry.$1),
+                                child: AnimatedContainer(
+                                    duration:
+                                        prefs.reduceMotion || MediaQuery.disableAnimationsOf(context)
+                                            ? Duration.zero
+                                            : const Duration(milliseconds: 250),
+                                    margin:
+                                        const EdgeInsets.symmetric(vertical: 4),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(10),
+                                        color: _highlighted == entry.$1
+                                            ? const Color(0xfff5e8cb)
+                                            : Colors.transparent),
+                                    child: Text(
+                                        '“${entry.$2['quote_segment']}”\n↓ 视觉类比\n${entry.$2['visible_relation']}',
+                                        style: const TextStyle(height: 1.6))))),
+                      Text(
+                          '视觉类比：${script.metaphor}\n\n对应关系：${script.relationship}\n\n'
+                          '画面没有表达的部分：${script.limitations}\n\n'
+                          '画面不等于概念的全部含义，也不证明因果。${script.fromAi ? '这是一种 AI 解释。' : '这是有限本地规则生成的意象。'}',
+                          style: const TextStyle(height: 1.65))
+                    ]);
+              }));
 }

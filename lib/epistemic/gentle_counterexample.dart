@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:sqflite/sqflite.dart';
 import 'cognitive_models.dart';
 import 'cognitive_preferences.dart';
 import 'cognitive_sheet.dart';
-import 'cognitive_store.dart';
+import 'cognitive_hint_budget.dart';
+import 'cognitive_scope_hint.dart';
+import 'cognitive_usage.dart';
 
-bool hasAbsoluteScope(String text) =>
-    RegExp(r'总是|永远|一定|每次都|从来不|必然').hasMatch(text);
+bool hasAbsoluteScope(String text) => findAbsoluteClaim(text) != null;
 
 class GentleCounterexample extends StatefulWidget {
   final String recordId, text;
@@ -17,43 +17,61 @@ class GentleCounterexample extends StatefulWidget {
 }
 
 class _GentleCounterexampleState extends State<GentleCounterexample> {
-  bool _visible = false;
+  bool _visible = false, _checking = false, _dismissed = false;
   @override
   void initState() {
     super.initState();
+    CognitivePreferenceStore.instance.addListener(_preferencesChanged);
     _check();
   }
 
   @override
   void didUpdateWidget(covariant GentleCounterexample oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.recordId != widget.recordId) {
+    if (oldWidget.recordId != widget.recordId ||
+        oldWidget.text != widget.text) {
       _visible = false;
+      _dismissed = false;
       _check();
     }
   }
 
   Future<void> _check() async {
-    if (!hasAbsoluteScope(widget.text) ||
+    if (_checking ||
+        _dismissed ||
+        !hasAbsoluteScope(widget.text) ||
         !CognitivePreferenceStore.enabledInBuild) return;
+    _checking = true;
     final id = widget.recordId;
-    await CognitivePreferenceStore.instance.load();
-    final prefs = CognitivePreferenceStore.instance.value;
-    if (!prefs.enabled || !prefs.prompts) return;
+    final text = widget.text;
     try {
-      final db = await CognitiveStore().database;
-      final day = DateTime.now().toIso8601String().substring(0, 10);
-      final show = await db.transaction((txn) async {
-        final old = await txn.query('app_kv',
-            where: 'key=?', whereArgs: ['cognition.gentle.last_day']);
-        if (old.isNotEmpty && old.first['value'] == day) return false;
-        await txn.insert(
-            'app_kv', {'key': 'cognition.gentle.last_day', 'value': day},
-            conflictAlgorithm: ConflictAlgorithm.replace);
-        return true;
-      });
-      if (mounted && widget.recordId == id) setState(() => _visible = show);
-    } catch (_) {/* Optional hint must never disrupt the conversation. */}
+      await CognitivePreferenceStore.instance.load();
+      final prefs = CognitivePreferenceStore.instance.value;
+      if (!prefs.enabled || !prefs.prompts) return;
+      final show = await CognitiveHintBudget().claim();
+      if (mounted &&
+          widget.recordId == id &&
+          widget.text == text &&
+          CognitivePreferenceStore.active &&
+          CognitivePreferenceStore.instance.value.prompts) {
+        setState(() => _visible = show);
+        if (show) CognitiveUsageStore.instance.track(CognitiveEvent.hintShown);
+      }
+    } catch (_) {
+      /* Optional hint must never disrupt the conversation. */
+    } finally {
+      _checking = false;
+    }
+  }
+
+  void _preferencesChanged() {
+    if (!_visible && !_dismissed && CognitivePreferenceStore.active) _check();
+  }
+
+  @override
+  void dispose() {
+    CognitivePreferenceStore.instance.removeListener(_preferencesChanged);
+    super.dispose();
   }
 
   @override
@@ -78,8 +96,14 @@ class _GentleCounterexampleState extends State<GentleCounterexample> {
                                           fontWeight: FontWeight.w600))),
                               IconButton(
                                   tooltip: '今天不再提示',
-                                  onPressed: () =>
-                                      setState(() => _visible = false),
+                                  onPressed: () {
+                                    setState(() {
+                                      _visible = false;
+                                      _dismissed = true;
+                                    });
+                                    CognitiveUsageStore.instance
+                                        .track(CognitiveEvent.hintSkipped);
+                                  },
                                   icon: const Icon(Icons.close))
                             ]),
                             const Text('感受可以保留；“这一次”是否足以支持“总是”，可以慢慢核查。'),

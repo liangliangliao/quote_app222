@@ -9,6 +9,7 @@ on:
       - 'lib/pages/discover_page.dart'
       - 'lib/pages/vision_thought_history_page.dart'
       - 'lib/widgets/thought_taxonomy_mindmap.dart'
+      - 'lib/widgets/thought_record_dialog.dart'
       - 'lib/widgets/movie_card_item.dart'
       - 'lib/services/movie_analysis_service.dart'
       - 'lib/xiangji_future_strategist/xiangji_problem_pages.dart'
@@ -40,6 +41,7 @@ on:
       - 'lib/pages/discover_page.dart'
       - 'lib/pages/vision_thought_history_page.dart'
       - 'lib/widgets/thought_taxonomy_mindmap.dart'
+      - 'lib/widgets/thought_record_dialog.dart'
       - 'lib/widgets/movie_card_item.dart'
       - 'lib/services/movie_analysis_service.dart'
       - 'lib/xiangji_future_strategist/xiangji_problem_pages.dart'
@@ -96,6 +98,7 @@ jobs:
           lib/epistemic
           test/cognitive_core_test.dart test/cognitive_extended_test.dart
           test/cognitive_catalog_test.dart
+          test/cognitive_plan_contract_test.dart
           test/cognitive_widgets_test.dart test/cognitive_flags_test.dart
           lib/models/quote_insight.dart lib/data/quote_insight_store.dart
           lib/services/quote_comparison_service.dart lib/services/quote_insight_settings.dart
@@ -108,12 +111,14 @@ jobs:
           flutter test --no-pub --reporter expanded
           test/cognitive_core_test.dart test/cognitive_extended_test.dart
           test/cognitive_catalog_test.dart
+          test/cognitive_plan_contract_test.dart
           test/cognitive_widgets_test.dart test/cognitive_flags_test.dart
           test/quote_insight_test.dart test/quote_comparison_test.dart
           test/quote_insight_store_test.dart test/quote_insight_widgets_test.dart
           test/quote_insight_flags_test.dart test/quote_insight_delivery_test.dart
           test/quote_ai_service_test.dart test/quote_paper_layout_test.dart
           test/quote_history_avatar_test.dart test/quote_ai_integration_compile_test.dart
+          test/quote_visual_script_test.dart test/quote_frame_theme_test.dart
       - name: Test existing module behavior
         run: >-
           flutter test --no-pub --reporter expanded

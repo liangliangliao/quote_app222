@@ -195,6 +195,7 @@ class _XiangjiProblemWorkspacePageState
     extends State<XiangjiProblemWorkspacePage> {
   bool _loading = true;
   bool _working = false;
+  String _cognitiveNewEvidence = '';
   XiangjiProblemRecord? _problem;
   List<Map<String, Object?>> _items = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _claims = const <Map<String, Object?>>[];
@@ -603,6 +604,7 @@ class _XiangjiProblemWorkspacePageState
         authorizedSensitiveContext: sensitiveCloudAuthorized,
         forceStrategic: problem.campaignId.isNotEmpty,
       );
+      _cognitiveNewEvidence = values['task']!;
     });
   }
 
@@ -1345,6 +1347,7 @@ class _XiangjiProblemWorkspacePageState
                       observation: problem.rawQuestion,
                       judgment: _decisionDraft?.recommendation ?? problem.reframedQuestion,
                       basis: _naturalList(_explanation?['facts_json']),
+                      newEvidence: _cognitiveNewEvidence,
                       onNewEvidence: _working ? null : _askStrategist),
                     if (_aiExecution != null) ...[
                       const SizedBox(height: 12),
