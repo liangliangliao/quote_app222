@@ -100,12 +100,12 @@ class QuoteVisualScript {
 Create one cinematic fine-art image that makes the IDEA of a Chinese quotation
 visually understandable without showing the quotation as text.
 
-PRIMARY SOURCE — semantic ground truth, never draw these words:
+RECORDED QUOTATION TEXT — attribution is unverified; never draw these words:
 "$originalQuote"
 Topic label (context only): $topic
 Commentary (secondary; ignore if it conflicts with the quotation): $trimmedNote
 
-VERIFIED VISUAL THESIS:
+PROVISIONAL VISUAL INTERPRETATION:
 - Precise claim: $meaning
 - One central visual metaphor: $metaphor
 - Concrete subjects, setting, lighting and visible action: $scene

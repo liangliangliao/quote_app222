@@ -13,6 +13,7 @@ class CognitivePreferences {
       grounds,
       evidenceReminders,
       reduceMotion,
+      usageEnabled,
       enabled;
   const CognitivePreferences(
       {this.style = CognitiveStyle.intuitive,
@@ -21,6 +22,7 @@ class CognitivePreferences {
       this.grounds = true,
       this.evidenceReminders = true,
       this.reduceMotion = false,
+      this.usageEnabled = false,
       this.enabled = false});
   factory CognitivePreferences.fromJson(dynamic value) {
     final m = insightObject(value);
@@ -32,6 +34,7 @@ class CognitivePreferences {
         grounds: m['grounds'] != false,
         evidenceReminders: m['evidence_reminders'] != false,
         reduceMotion: m['reduce_motion'] == true,
+        usageEnabled: m['usage_enabled'] == true,
         enabled: m['enabled'] == true);
   }
   Map<String, dynamic> toJson() => {
@@ -41,6 +44,7 @@ class CognitivePreferences {
         'grounds': grounds,
         'evidence_reminders': evidenceReminders,
         'reduce_motion': reduceMotion,
+        'usage_enabled': usageEnabled,
         'enabled': enabled
       };
   CognitivePreferences change(String key, Object value) =>

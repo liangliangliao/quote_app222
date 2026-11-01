@@ -5,6 +5,7 @@ import 'cognitive_sheet.dart';
 import 'cognitive_snapshot_view.dart';
 import 'cognitive_mode.dart';
 import 'cognitive_preferences.dart';
+import 'cognitive_usage.dart';
 
 class CognitiveRecapPage extends StatefulWidget {
   final CognitiveService? service;
@@ -67,6 +68,7 @@ class _CognitiveRecapPageState extends State<CognitiveRecapPage> {
       _error = null;
     });
     try {
+      CognitiveUsageStore.instance.track(CognitiveEvent.recapRequested);
       final note = await _service.reviewSelections(
           _notes.where((n) => _selected.contains(n.id)).toList());
       if (mounted)
@@ -101,6 +103,18 @@ class _CognitiveRecapPageState extends State<CognitiveRecapPage> {
                 style: TextStyle(fontSize: 16, height: 1.6)),
             const SizedBox(height: 8),
             const Text('这是保存时的选文与判断快照，尚未核对原文后续变化。回顾不评价人格或认识水平。'),
+            Builder(builder: (_) {
+              final selected =
+                  _notes.where((n) => _selected.contains(n.id)).toList();
+              final count = selected.isEmpty
+                  ? 0
+                  : CognitiveService.reviewMaterial(selected).length;
+              return Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                      '所选材料 $count / ${CognitiveService.maxReviewCharacters} 字符'
+                      '${count > CognitiveService.maxReviewCharacters ? '：请减少条数或改选较短注释。' : ''}'));
+            }),
             TextButton(
                 onPressed: _busy
                     ? null
@@ -146,7 +160,15 @@ class _CognitiveRecapPageState extends State<CognitiveRecapPage> {
               ])),
             const SizedBox(height: 16),
             FilledButton.icon(
-                onPressed: _busy || _selected.isEmpty ? null : _review,
+                onPressed: _busy ||
+                        _selected.isEmpty ||
+                        CognitiveService.reviewMaterial(_notes
+                                    .where((n) => _selected.contains(n.id))
+                                    .toList())
+                                .length >
+                            CognitiveService.maxReviewCharacters
+                    ? null
+                    : _review,
                 icon: const Icon(Icons.checklist),
                 label: Text('仅分析所选 ${_selected.length} 条记录')),
           ])));

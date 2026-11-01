@@ -18,6 +18,8 @@ import 'package:quote_app/services/quote_ai_service.dart';
 import '../models/quote_insight.dart';
 import '../data/dao.dart';
 import '../utils/debug_logger.dart';
+import '../epistemic/cognitive_mode.dart';
+import '../epistemic/quote_cognitive_reader.dart';
 import 'package:quote_app/services/native_guard.dart';
 
 
@@ -214,9 +216,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       builder: (dialogContext) => AlertDialog(
         title: const Text('名言如何变成画面'),
         content: SingleChildScrollView(
-          child: Text(script == null
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Text(script == null
             ? '当前尚未生成 AI 视觉脚本。请先选择「AI 生成/重绘框内配画」。默认始终使用你提供的木质画框。'
             : '原句含义：${script.meaning}\n\n核心视觉类比：${script.metaphor}\n\n可见场景：${script.scene}\n\n为什么这样画：${script.relationship}\n\n氛围：${script.mood}\n\n固定画框：你提供的木质画框；AI 只替换框内画面。\n\n分析来源：${script.fromAi ? 'AI 语义解析' : '本地有限规则兜底（不代表 AI 已理解）'}'),
+            if (script != null) CognitiveMode(child: QuoteVisualExplanation(
+                topic: topic, quote: quote, script: script)),
+          ]),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),

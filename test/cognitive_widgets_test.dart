@@ -22,7 +22,13 @@ import 'package:quote_app/epistemic/movie_cognition.dart';
 import 'package:quote_app/epistemic/concept_explorer.dart';
 import 'package:quote_app/epistemic/cognitive_recap.dart';
 import 'package:quote_app/epistemic/quote_concept_catalog.dart';
+import 'package:quote_app/epistemic/quote_cognitive_reader.dart';
 import 'package:quote_app/epistemic/gentle_counterexample.dart';
+import 'package:quote_app/epistemic/cognitive_hint_budget.dart';
+import 'package:quote_app/epistemic/cognitive_usage.dart';
+import 'package:quote_app/epistemic/cognitive_reflection.dart';
+import 'package:quote_app/services/quote_visual_script_service.dart';
+import 'package:quote_app/widgets/thought_record_dialog.dart';
 import 'package:quote_app/models/quote_insight.dart';
 import 'package:quote_app/services/quote_comparison_service.dart';
 import 'package:quote_app/widgets/poster_pure_flutter.dart';
@@ -80,8 +86,11 @@ void main() {
     await dir.delete(recursive: true);
   });
   Future<void> mount(WidgetTester tester, Widget home,
-      {double width = 430, double scale = 1}) async {
-    await tester.binding.setSurfaceSize(Size(width, 932));
+      {double width = 430,
+      double scale = 1,
+      double height = 932,
+      EdgeInsets? viewInsets}) async {
+    await tester.binding.setSurfaceSize(Size(width, height));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(RepaintBoundary(
         key: const ValueKey('cognitive-preview'),
@@ -89,8 +98,10 @@ void main() {
             debugShowCheckedModeBanner: false,
             theme: ThemeData(fontFamily: 'PreviewCJK'),
             builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(context)
-                    .copyWith(textScaler: TextScaler.linear(scale)),
+                data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(scale),
+                    viewInsets: viewInsets,
+                    size: viewInsets == null ? null : Size(width, height)),
                 child: child!),
             home: home)));
     await tester.pump();
@@ -734,16 +745,360 @@ void main() {
   });
 
   testWidgets(
-      'gentle challenge is dismissible and appears at most once per local day',
+      'thought composer checks scope locally and keeps the original save result',
       (tester) async {
     await enable(tester);
     await tester.runAsync(() => db.delete('app_kv',
-        where: 'key=?', whereArgs: ['cognition.gentle.last_day']));
+        where: 'key IN (?,?)',
+        whereArgs: [CognitiveHintBudget.key, CognitiveHintBudget.legacyKey]));
+    ThoughtRecordResult? saved;
+    await mount(
+        tester,
+        Scaffold(
+            body: Builder(
+                builder: (context) => TextButton(
+                    onPressed: () async {
+                      saved = await showDialog<ThoughtRecordResult>(
+                          context: context,
+                          builder: (_) => const ThoughtRecordDialog());
+                    },
+                    child: const Text('记录念头')))),
+        width: 320,
+        height: 700,
+        scale: 1.8);
+    await tester.tap(find.text('记录念头'));
+    await waitFor(tester, find.byType(TextField));
+    const original = '保留前文。以后永远找不到工作。保留结尾。';
+    await tester.enterText(find.byType(TextField).first, original);
+    await tester.pump(const Duration(milliseconds: 750));
+    await waitFor(tester, find.text('看看这句话的适用范围'));
+    final notesBefore = await tester.runAsync(() => db
+        .query('app_kv', where: 'key GLOB ?', whereArgs: ['cognition.note.*']));
+    await tester.tap(find.text('看看这句话的适用范围'));
+    await tester.pumpAndSettle();
+    expect(find.text('以后永远找不到工作。'), findsOneWidget);
+    expect(find.textContaining('可能反例：是否有过一次不同的结果'), findsOneWidget);
+    await capture(tester, '11-discovery-local-scope');
+    await tester.runAsync(() =>
+        CognitivePreferenceStore.instance.update(const CognitivePreferences()));
+    await tester.pumpAndSettle();
+    expect(find.text('叔本华认知风格已关闭'), findsOneWidget);
+    Navigator.of(tester.element(find.text('叔本华认知风格已关闭'))).pop();
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        original);
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(saved!.thought, original);
+    final notesAfter = await tester.runAsync(() => db
+        .query('app_kv', where: 'key GLOB ?', whereArgs: ['cognition.note.*']));
+    expect(notesAfter!.length, notesBefore!.length);
+  });
+
+  testWidgets(
+      'grounding expands exact material and respects reduced motion and source boundaries',
+      (tester) async {
+    await tester.runAsync(() => CognitivePreferenceStore.instance
+        .update(const CognitivePreferences(enabled: true, reduceMotion: true)));
+    const original = '今天没有参加面试。原因还不能确定。';
+    final selection = CognitiveSelection.fromText(
+        module: 'diary',
+        recordId: 'ground-ui',
+        title: '日记',
+        fullText: original);
+    final note = CognitiveNote(
+        id: 'ground-ui',
+        task: CognitiveTask.calibration,
+        selection: selection,
+        analysis: const CognitiveAnalysis(
+            summary: '一次经历不足以判断以后',
+            boundary: '长期结果仍未知',
+            basis: '仅能定位这次经历',
+            evidence: [
+              CognitiveEvidence(start: 0, end: 9, excerpt: '今天没有参加面试。')
+            ]),
+        modelInfo: 'fixture',
+        createdAt: '2026-11-01T00:00:00Z');
+    final ai = core.FakeCognitiveAi();
+    await mount(
+        tester,
+        Scaffold(
+            body: CognitiveAnalysisSheet(
+                selection: selection,
+                task: note.task,
+                initialNote: note,
+                service: CognitiveService(ai: ai))),
+        width: 320,
+        scale: 1.8);
+    expect(find.text('仅能定位这次经历'), findsNothing);
+    await tester.scrollUntilVisible(find.text('判断依据'), 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('判断依据'));
+    await tester.pumpAndSettle();
+    expect(find.text('仅能定位这次经历'), findsOneWidget);
+    expect(find.text('原文对应 · 尚未外部核实'), findsOneWidget);
+    final tile = tester.widget<ExpansionTile>(
+        find.byKey(const ValueKey('cognitive-evidence')));
+    expect(tile.expansionAnimationStyle!.duration, Duration.zero);
+    expect(ai.calls, 0);
+    await capture(tester, '12-selected-grounding');
+    await tester.runAsync(() => CognitivePreferenceStore.instance
+        .update(const CognitivePreferences(enabled: true, grounds: false)));
+    await tester.pumpAndSettle();
+    expect(find.text('判断依据'), findsNothing);
+  });
+
+  testWidgets(
+      'existing-record card links a new business judgment and supports rollback without a solver call',
+      (tester) async {
+    await enable(tester);
+    Widget card(String observation, String judgment, {String evidence = ''}) =>
+        Scaffold(
+            body: SingleChildScrollView(
+                child: CognitiveReflectionCard(
+                    module: 'record-ui',
+                    recordId: 'one-business-record',
+                    observation: observation,
+                    judgment: judgment,
+                    basis: '当前记录中的材料',
+                    newEvidence: evidence)));
+    await mount(tester, card('第一次没有完成。', '当前方法可能不合适。'));
+    await tester.tap(find.text('保存本次理解与修订笔记'));
+    await waitFor(tester, find.text('记录中的暂定理解 · 可修改或拒绝'));
+    await tester.tap(find.byTooltip('关闭分析'));
+    await tester.pumpAndSettle();
+    await mount(
+        tester, card('第二次调整方法后完成。', '调整方法后可以改善结果。', evidence: '第二次调整方法后完成。'));
+    await tester.tap(find.text('保存本次理解与修订笔记'));
+    await waitFor(tester, find.text('把当前判断接入修订记录'));
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        '第二次调整方法后完成。');
+    await tester.tap(find.text('保存这次改判'));
+    await waitFor(tester, find.text('记录中的暂定理解 · 可修改或拒绝'));
+    var notes = await tester.runAsync(
+        () => CognitiveStore().forRecord('record-ui', 'one-business-record'));
+    expect(notes, hasLength(1));
+    expect(notes!.single.selection.text, '第一次没有完成。');
+    expect(notes.single.revisions.single.previous, '当前方法可能不合适。');
+    expect(notes.single.currentJudgment, '调整方法后可以改善结果。');
+    await tester.scrollUntilVisible(find.text('回退到此前判断'), 300,
+        scrollable: find
+            .descendant(
+                of: find.byType(CognitiveAnalysisSheet),
+                matching: find.byType(Scrollable))
+            .first);
+    await tester.tap(find.text('回退到此前判断'));
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 80)));
+    await tester.pumpAndSettle();
+    notes = await tester.runAsync(
+        () => CognitiveStore().forRecord('record-ui', 'one-business-record'));
+    expect(notes!.single.revisions.length, 2);
+    expect(notes.single.currentJudgment, '当前方法可能不合适。');
+  });
+
+  testWidgets(
+      'usage settings are voluntary and expose only clearable local counts',
+      (tester) async {
+    await enable(tester);
+    await tester.runAsync(() => CognitiveUsageStore.instance.clear());
+    await mount(
+        tester,
+        const Scaffold(
+            body: SingleChildScrollView(child: CognitiveSettingsSection())),
+        width: 320,
+        scale: 1.8);
+    const title = '匿名使用记录（仅此设备）';
+    await tester.scrollUntilVisible(find.text(title), 350);
+    expect(
+        tester
+            .widget<SwitchListTile>(find.widgetWithText(SwitchListTile, title))
+            .value,
+        isFalse);
+    await tester.tap(find.text(title));
+    for (var i = 0;
+        i < 100 && !CognitivePreferenceStore.instance.value.usageEnabled;
+        i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+    }
+    expect(CognitivePreferenceStore.instance.value.usageEnabled, isTrue);
+    await tester.runAsync(() async {
+      await CognitiveUsageStore.instance.record(CognitiveEvent.basisOpened);
+      await CognitiveUsageStore.instance.record(CognitiveEvent.accepted);
+    });
+    await tester.scrollUntilVisible(find.text('查看 / 清除本地匿名计数'), 300);
+    await tester.tap(find.text('查看 / 清除本地匿名计数'));
+    await waitFor(tester, find.text('展开判断依据：1'));
+    expect(find.text('采纳建议：1'), findsOneWidget);
+    await capture(tester, '13-opt-in-local-counts');
+    await tester.tap(find.text('清除本地计数'));
+    await waitFor(tester, find.text('暂无记录。可在设置中自愿启用。'));
+    expect(await tester.runAsync(() => CognitiveUsageStore.instance.read()),
+        isEmpty);
+  });
+
+  testWidgets(
+      'cached visual clauses remain optional and motion can be disabled',
+      (tester) async {
+    await tester.runAsync(() => CognitivePreferenceStore.instance
+        .update(const CognitivePreferences(enabled: true, reduceMotion: true)));
+    final script = QuoteVisualScript.fromJson({
+      'meaning': '根据材料调整行动方式',
+      'metaphor': '岔路与行走作为视觉类比',
+      'scene': '一位行者在山间岔路停步观察，再沿安全的山路继续前进，远处保留柔和的光线。',
+      'relationship': '路线变化对应方法调整，山峰只表示一种方向。',
+      'limitations': '不能说明任何改变都是正确的，也不能证明因果。',
+      'clause_mappings': [
+        {'quote_segment': '调整方法', 'visible_relation': '行者根据路况选择另一条道路'}
+      ],
+    }, originalQuote: '面对新材料，调整方法。');
+    await mount(
+        tester,
+        Scaffold(
+            body: SingleChildScrollView(
+                child: QuoteVisualExplanation(
+                    topic: '行动', quote: '面对新材料，调整方法。', script: script))),
+        width: 320,
+        scale: 1.8);
+    expect(find.textContaining('路线变化对应方法调整'), findsNothing);
+    await tester.tap(find.text('画面如何对应原句'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('不能证明因果'), findsOneWidget);
+    await tester.tap(find.textContaining('“调整方法”'));
+    await tester.pump();
+    expect(
+        find.byWidgetPredicate(
+            (w) => w is Semantics && w.properties.selected == true),
+        findsOneWidget);
+    for (final container in tester
+        .widgetList<AnimatedContainer>(find.byType(AnimatedContainer))) {
+      expect(container.duration, Duration.zero);
+    }
+    await capture(tester, '14-cached-visual-correspondence');
+  });
+
+  testWidgets(
+      'recap requires selection, previews provenance and blocks oversized material before AI',
+      (tester) async {
+    await enable(tester);
+    CognitiveNote item(String id, String title, String value) => CognitiveNote(
+        id: id,
+        task: CognitiveTask.reflection,
+        accepted: true,
+        selection: CognitiveSelection.fromText(
+            module: 'diary', recordId: id, title: title, fullText: value),
+        analysis: const CognitiveAnalysis(
+            summary: '最初判断', basis: '所选记录', boundary: '仍需检验'),
+        modelInfo: 'fixture',
+        createdAt: '2026-11-01T00:00:00Z');
+    await tester.runAsync(() async {
+      await db.delete('app_kv',
+          where: 'key GLOB ?', whereArgs: ['cognition.note.*']);
+      await CognitiveStore().save(item('recap-other', '另一条经历-R', '未选中的私密资料-R'));
+      await CognitiveStore().save(item('recap-picked', '选择经历-R', '主动选择的经历-R'));
+    });
+    final ai = core.FakeCognitiveAi();
+    await mount(tester, CognitiveRecapPage(service: CognitiveService(ai: ai)));
+    await waitFor(tester, find.text('选择经历-R · 日记'));
+    for (final box
+        in tester.widgetList<CheckboxListTile>(find.byType(CheckboxListTile))) {
+      expect(box.value, isFalse);
+    }
+    await tester.scrollUntilVisible(find.text('仅分析所选 0 条记录'), 250,
+        scrollable: find.byType(Scrollable).first);
+    expect(
+        tester
+            .widget<FilledButton>(find
+                .ancestor(
+                    of: find.text('仅分析所选 0 条记录'),
+                    matching: find.byWidgetPredicate((w) => w is FilledButton))
+                .first)
+            .onPressed,
+        isNull);
+    await tester.scrollUntilVisible(find.text('选择经历-R · 日记'), -250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('选择经历-R · 日记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('查看将发送的完整内容').first);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('将发送的定位与依据'), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('将发送的定位与依据'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('记录定位：diary / recap-picked'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('仅分析所选 1 条记录'), 350,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('仅分析所选 1 条记录'));
+    await waitFor(tester, find.text('认识回顾'));
+    expect(ai.calls, 1);
+    expect(ai.lastPrompt, contains('主动选择的经历-R'));
+    expect(ai.lastPrompt, isNot(contains('未选中的私密资料-R')));
+    await tester.tap(find.byTooltip('关闭分析'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => CognitiveStore()
+        .save(item('recap-long', '超长快照-R', List.filled(13000, '字').join())));
+    await tester.tap(find.byTooltip('刷新可选记录'));
+    await waitFor(tester, find.text('选取记录，回顾认识的变化'));
+    await tester.scrollUntilVisible(find.text('超长快照-R · 日记'), -300,
+        scrollable: find.byType(Scrollable).first);
+    await waitFor(tester, find.text('超长快照-R · 日记'));
+    await tester.tap(find.text('超长快照-R · 日记'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('请减少条数或改选较短注释'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('仅分析所选 1 条记录'), 300,
+        scrollable: find.byType(Scrollable).first);
+    expect(
+        tester
+            .widget<FilledButton>(find
+                .ancestor(
+                    of: find.text('仅分析所选 1 条记录'),
+                    matching: find.byWidgetPredicate((w) => w is FilledButton))
+                .first)
+            .onPressed,
+        isNull);
+    expect(ai.calls, 1);
+  });
+
+  testWidgets('scope input remains usable with keyboard and double-size text',
+      (tester) async {
+    await enable(tester);
+    await tester.runAsync(() => db.delete('app_kv',
+        where: 'key IN (?,?)',
+        whereArgs: [CognitiveHintBudget.key, CognitiveHintBudget.legacyKey]));
+    await mount(tester, const ThoughtRecordDialog(initialText: '我永远都会失败。'),
+        width: 320,
+        height: 700,
+        scale: 2,
+        viewInsets: const EdgeInsets.only(bottom: 320));
+    await tester.pump(const Duration(milliseconds: 750));
+    await waitFor(tester, find.text('看看这句话的适用范围'));
+    expect(tester.takeException(), isNull);
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        '我永远都会失败。');
+    expect(find.text('保存'), findsOneWidget);
+  });
+
+  testWidgets(
+      'gentle challenge is dismissible and appears at most once per local day',
+      (tester) async {
+    await tester.runAsync(() => db.delete('app_kv',
+        where: 'key IN (?,?)',
+        whereArgs: [CognitiveHintBudget.key, CognitiveHintBudget.legacyKey]));
     await mount(
         tester,
         const Scaffold(
             body:
                 GentleCounterexample(recordId: 'message-1', text: '我每次都做不好。')));
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+    await tester.pump();
+    expect(find.text('是否也存在一次例外？'), findsNothing);
+    await enable(tester);
     await waitFor(tester, find.text('是否也存在一次例外？'));
     await tester.tap(find.byTooltip('今天不再提示'));
     await tester.pumpAndSettle();

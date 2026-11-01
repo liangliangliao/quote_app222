@@ -193,6 +193,52 @@ class CognitiveExample {
       {'situation': situation, 'connection': connection, 'boundary': boundary};
 }
 
+/// A quote from the selected material, not an externally verified fact. Model
+/// supplied URLs, record IDs and verification flags cannot create references.
+class CognitiveEvidence {
+  final int start, end;
+  final String excerpt, explanation;
+  const CognitiveEvidence(
+      {required this.start,
+      required this.end,
+      required this.excerpt,
+      this.explanation = ''});
+
+  Map<String, dynamic> toJson() => {
+        'start': start,
+        'end': end,
+        'excerpt': excerpt,
+        'explanation': explanation
+      };
+
+  static List<CognitiveEvidence> parse(dynamic value, String original) {
+    final result = <CognitiveEvidence>[];
+    final seen = <String>{};
+    for (final raw in value is List ? value.take(8) : const []) {
+      final m = insightObject(raw);
+      final excerpt = insightText(m, 'excerpt');
+      if (excerpt.runes.length < 2) continue;
+      var start = m['start'], end = m['end'];
+      if (start is! int || end is! int) {
+        start = original.indexOf(excerpt);
+        if (start < 0 || original.indexOf(excerpt, start + 1) >= 0) continue;
+        end = start + excerpt.length;
+      }
+      if (start < 0 ||
+          end > original.length ||
+          end <= start ||
+          original.substring(start, end) != excerpt ||
+          !seen.add('$start:$end')) continue;
+      result.add(CognitiveEvidence(
+          start: start,
+          end: end,
+          excerpt: excerpt,
+          explanation: insightText(m, 'explanation')));
+    }
+    return result;
+  }
+}
+
 class CognitiveAnalysis {
   final String summary,
       common,
@@ -204,6 +250,7 @@ class CognitiveAnalysis {
   final List<String> concepts, questions;
   final List<CognitiveSpan> spans;
   final List<CognitiveExample> examples;
+  final List<CognitiveEvidence> evidence;
   final Map<GroundLens, String> lenses;
   const CognitiveAnalysis(
       {this.summary = '',
@@ -217,6 +264,7 @@ class CognitiveAnalysis {
       this.questions = const [],
       this.spans = const [],
       this.examples = const [],
+      this.evidence = const [],
       this.lenses = const {}});
 
   factory CognitiveAnalysis.fromJson(dynamic value, String original) {
@@ -245,6 +293,7 @@ class CognitiveAnalysis {
         questions: cognitiveTexts(m['questions']),
         spans: CognitiveSpan.parse(m['spans'], original),
         examples: examples,
+        evidence: CognitiveEvidence.parse(m['evidence_refs'], original),
         lenses: {
           for (final lens in GroundLens.values)
             lens: insightText(lensMap, lens.name)
@@ -262,6 +311,7 @@ class CognitiveAnalysis {
       questions: questions,
       spans: value,
       examples: examples,
+      evidence: evidence,
       lenses: lenses);
   Map<String, dynamic> toJson() => {
         'summary': summary,
@@ -275,6 +325,7 @@ class CognitiveAnalysis {
         'questions': questions,
         'spans': spans.map((e) => e.toJson()).toList(),
         'examples': examples.map((e) => e.toJson()).toList(),
+        'evidence_refs': evidence.map((e) => e.toJson()).toList(),
         'lenses': {
           for (final entry in lenses.entries) entry.key.name: entry.value
         }
@@ -283,18 +334,21 @@ class CognitiveAnalysis {
 
 class JudgmentRevision {
   final String previous, judgment, evidence, reason, createdAt;
+  final String sourceSnapshot;
   const JudgmentRevision(
       {required this.previous,
       required this.judgment,
       required this.evidence,
       required this.reason,
-      required this.createdAt});
+      required this.createdAt,
+      this.sourceSnapshot = ''});
   Map<String, dynamic> toJson() => {
         'previous': previous,
         'judgment': judgment,
         'evidence': evidence,
         'reason': reason,
-        'created_at': createdAt
+        'created_at': createdAt,
+        if (sourceSnapshot.isNotEmpty) 'source_snapshot': sourceSnapshot,
       };
   factory JudgmentRevision.fromJson(dynamic value) {
     final m = insightObject(value);
@@ -303,7 +357,8 @@ class JudgmentRevision {
         judgment: insightText(m, 'judgment'),
         evidence: insightText(m, 'evidence'),
         reason: insightText(m, 'reason'),
-        createdAt: insightText(m, 'created_at'));
+        createdAt: insightText(m, 'created_at'),
+        sourceSnapshot: insightText(m, 'source_snapshot'));
   }
 }
 
@@ -328,6 +383,41 @@ class CognitiveNote {
       this.classificationHistory = const []});
   String get currentJudgment =>
       revisions.isEmpty ? analysis.summary : revisions.last.judgment;
+  String get currentSnapshot =>
+      revisions.isEmpty ? id : revisions.last.sourceSnapshot;
+  List<Map<String, dynamic>> get evidenceRefs {
+    final grounded = analysis.evidence
+        .where((e) =>
+            e.start >= 0 &&
+            e.end <= selection.text.length &&
+            e.end > e.start &&
+            selection.text.substring(e.start, e.end) == e.excerpt)
+        .toList();
+    final evidence = grounded.isEmpty
+        ? [
+            CognitiveEvidence(
+                start: 0,
+                end: selection.text.length,
+                excerpt: selection.text,
+                explanation: '本次明确选中的原始材料；尚未外部核对。')
+          ]
+        : grounded;
+    return [
+      for (final e in evidence)
+        {
+          'locator':
+              '${selection.module}:${selection.recordId}#${selection.start + e.start}-${selection.start + e.end}',
+          'source_type': 'selected_record',
+          'source_status': 'unverified',
+          'excerpt': e.excerpt,
+          'explanation': e.explanation,
+          'start': selection.start + e.start,
+          'end': selection.start + e.end,
+          'original_hash': selection.originalHash,
+        }
+    ];
+  }
+
   CognitiveNote copyWith(
           {CognitiveSelection? selection,
           CognitiveAnalysis? analysis,
@@ -348,7 +438,8 @@ class CognitiveNote {
   CognitiveNote revise(
       {required String judgment,
       required String evidence,
-      String reason = ''}) {
+      String reason = '',
+      String sourceSnapshot = ''}) {
     if (judgment.trim().isEmpty || evidence.trim().isEmpty) {
       throw ArgumentError('修订需要新的判断和具体材料');
     }
@@ -359,7 +450,8 @@ class CognitiveNote {
           judgment: judgment.trim(),
           evidence: evidence.trim(),
           reason: reason.trim(),
-          createdAt: DateTime.now().toUtc().toIso8601String())
+          createdAt: DateTime.now().toUtc().toIso8601String(),
+          sourceSnapshot: sourceSnapshot)
     ]);
   }
 
@@ -374,6 +466,9 @@ class CognitiveNote {
         'accepted': accepted,
         'revisions': revisions.map((e) => e.toJson()).toList(),
         'classification_history': classificationHistory,
+        'evidence_refs': evidenceRefs,
+        'review_status': accepted ? 'accepted' : 'pending',
+        'content_kind': 'interpretation',
         'epistemic_status': 'provisional',
         'source_status': 'unverified'
       };

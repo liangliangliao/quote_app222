@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/quote_insight.dart';
+import 'cognitive_mode.dart';
 
 String cognitiveModuleLabel(String module) =>
     const {
@@ -11,6 +12,7 @@ String cognitiveModuleLabel(String module) =>
       'zhixing_action': '知行',
       'quote_observation': '名言实践',
       'enemy_message': '美丽的敌人',
+      'discover_belief': '发现之旅信念',
     }[module] ??
     '认识注释';
 
@@ -51,6 +53,26 @@ class CognitiveSnapshotView extends StatelessWidget {
                   '新材料：${revision['evidence']}\n理由：${revision['reason']}\n${revision['created_at']}',
                   style: const TextStyle(height: 1.6)));
         }),
+      ExpansionTile(
+          expansionAnimationStyle: cognitiveExpansionStyle(context),
+          tilePadding: EdgeInsets.zero,
+          title: const Text('将发送的定位与依据'),
+          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SelectableText('记录定位：${record['module']} / ${record['id']}\n'
+                '注释定位：${record['note_id']}\n内容指纹：${record['original_hash']}'),
+            for (final value in snapshot['evidence_refs'] is List
+                ? snapshot['evidence_refs'] as List
+                : const [])
+              Builder(builder: (_) {
+                final ref = insightObject(value);
+                return Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: SelectableText('依据定位：${ref['locator']}\n'
+                        '${ref['uses_selected_text'] == true ? '引用上方完整所选原文' : ref['excerpt'] ?? ''}\n'
+                        '依据说明：${ref['explanation'] ?? ''}\n状态：尚未外部核对'));
+              }),
+          ]),
     ]);
   }
 }
