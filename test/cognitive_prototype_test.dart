@@ -10,6 +10,7 @@ import 'package:quote_app/epistemic/concept_meaning_diagram.dart';
 import 'package:quote_app/epistemic/cognitive_models.dart';
 import 'package:quote_app/epistemic/cognitive_service.dart';
 import 'package:quote_app/epistemic/diary_cognition_panel.dart';
+import 'package:quote_app/epistemic/movie_cognition.dart';
 import 'package:quote_app/epistemic/quote_intuitive_gallery.dart';
 import 'package:quote_app/epistemic/schopenhauer_guidance.dart';
 import 'package:quote_app/models/quote_insight.dart';
@@ -79,6 +80,45 @@ void main() {
         ConceptScope.parse({...scope(), 'illustration': false}, '感恩也可以伴随问题解决'),
         isNotNull);
     expect(ConceptScope.parse(scope(), '')!.illustration, isTrue);
+  });
+
+  test('final JSON contracts include the fields enforced by depth validation',
+      () {
+    final prompt = CognitiveService.buildPrompt(
+        CognitiveSelection.fromText(
+            module: 'diary',
+            recordId: 'schema',
+            title: '',
+            fullText: '今天没有去面试。'),
+        CognitiveTask.diary);
+    final contract = jsonDecode(prompt.split('返回：').last.trim()) as Map;
+    final abstraction = (contract['abstractions'] as List).single as Map;
+    expect(
+        abstraction.keys,
+        containsAll([
+          'term',
+          'definition',
+          'observed',
+          'retained',
+          'omitted',
+          'counter_example'
+        ]));
+    expect(contract['concept_scopes'], isList);
+    final movieContract =
+        jsonDecode(MovieCognition.instructions.split('只返回 JSON：').last.trim())
+            as Map;
+    expect(movieContract['abstractions'], isNotEmpty);
+    expect(movieContract['concept_scopes'], isList);
+    expect(
+        ((movieContract['scenes'] as List).single as Map).keys,
+        containsAll([
+          'observed',
+          'retained',
+          'omitted',
+          'judgment',
+          'alternative',
+          'test'
+        ]));
   });
 
   test('all five sphere patterns and both inclusion directions round trip', () {

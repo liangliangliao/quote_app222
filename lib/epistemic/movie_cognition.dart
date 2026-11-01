@@ -64,6 +64,12 @@ class MovieCognition {
     final analysis = CognitiveAnalysis.fromJson(m, overview);
     if (requireDepth &&
         (analysis.abstractions.isEmpty ||
+            scenes.where((s) => s['status'] == 'provided_synopsis').any((s) => [
+                  'retained',
+                  'judgment',
+                  'alternative',
+                  'test'
+                ].any((k) => s[k]?.isNotEmpty != true)) ||
             analysis.abstractions.any((a) =>
                 a.observed.isEmpty ||
                 a.retained.isEmpty ||
@@ -123,8 +129,8 @@ concept_scopes仅在可定义同一论域的外延关系时提供[{relation_type
 只能逐字引用输入 overview 作为“所给简介材料”；它不等于已核对的影片事实。
 没有提供的台词、镜头、人物行为只能标为未核实推测；不得补写为事实。
 人物分析是解读而非心理诊断。现实例子必须标为模拟，解释它与电影的共同点、差异和失效条件。
-只返回 JSON：{"narrative":"完整解读，区分材料与解释","boundary":"局限、未知和待核对的情节",
-"scenes":[{"excerpt":"逐字摘自 overview 或空字符串","concept":"概念","interpretation":"暂定解释"}],
+只返回 JSON：{"abstractions":[{"term":"关键概念","definition":"含义与边界","observed":"对应的简介材料或明确的模拟","retained":"抽出的共同规定","omitted":"省略的具体处境","counter_example":"非成员或反例"}],"concept_scopes":[],"narrative":"完整解读，区分材料与解释","boundary":"局限、未知和待核对的情节",
+"scenes":[{"excerpt":"逐字摘自 overview 或空字符串","concept":"概念","interpretation":"暂定解释","observed":"摘录对应的具体行为或明确未知","retained":"抽出的共同规定","omitted":"省略的处境","judgment":"有条件判断","alternative":"其他可能解释","test":"可区分解释的观察"}],
 "concepts":["概念"],"characters":["人物的暂定理解及其依据"],
 "examples":[{"situation":"模拟现实情境","connection":"对应及共同点","boundary":"差异与失效条件"}]}''';
 }

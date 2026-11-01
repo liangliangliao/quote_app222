@@ -478,7 +478,7 @@ JSON 字段必须完整：
   "critical_difference": "影响判断的决定性差异",
   "boundary": "至少一个适用限制、反例或不确定条件",
   "analysis_basis": "与原句具体词语的对应依据",
-  "cognition": {"abstractions": [], "concept_scopes": []},
+  "cognition": {"abstractions": [{"term":"核心概念","definition":"含义与成员判准","observed":"可观察的具体场景，注明是否模拟","retained":"保留的共同规定","omitted":"省略的个别情境","counter_example":"非成员或反例"}], "concept_scopes": []},
   "avatar_search_query": "人物肖像搜索词",
   "avatar_url": "可信的 Wikimedia/Wikipedia 图片直链或空字符串"
 }
