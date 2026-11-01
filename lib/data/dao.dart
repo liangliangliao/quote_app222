@@ -2783,6 +2783,17 @@ class VisionDao {
     );
   }
 
+  /// 按名称查找现有分类；同名节点留给调用者明确选择。
+  Future<List<Map<String, dynamic>>> findThoughtNodesByTitle(String title) async {
+    if (title.trim().isEmpty) return const [];
+    final db = await _db();
+    await _ensureTables(db);
+    return db.query('vision_node',
+        where: 'taxonomy_id=? AND title = ? COLLATE NOCASE AND is_active=1',
+        whereArgs: [kThoughtTaxonomyId, title.trim()],
+        orderBy: 'depth ASC, display_order ASC, id ASC');
+  }
+
   /// 子节点列表（用于懒加载树）
   Future<List<Map<String, dynamic>>> listThoughtChildNodes(String parentUid) async {
     final db = await _db();

@@ -6,6 +6,7 @@ import 'cognitive_preferences.dart';
 import 'cognitive_store.dart';
 import 'cognitive_models.dart';
 import 'cognitive_mode.dart';
+import 'quote_concept_catalog.dart';
 
 class QuoteConceptGroup {
   final String title;
@@ -68,7 +69,11 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
   final _transform =
       TransformationController(Matrix4.diagonal3Values(.43, .43, 1));
   Map<String, QuoteAnalysisAddon> _addons = {};
+  List<QuoteConceptGroup>? _groups;
   String? _selected;
+  String _conceptSearch = '';
+  int _conceptPage = 0;
+  String? _addonError;
   double _zoom = .43;
   int _generation = 0;
   @override
@@ -83,7 +88,10 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.revision != widget.revision ||
         oldWidget.rows.length != widget.rows.length ||
-        oldWidget.rows.toString() != widget.rows.toString()) _load();
+        oldWidget.rows.toString() != widget.rows.toString()) {
+      _groups = null;
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -93,20 +101,16 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
           .readAddons(widget.rows.map(QuoteReference.fromRow).toList());
       final refs = widget.rows.map(QuoteReference.fromRow).toList();
       List<CognitiveNote> notes = const [];
+      String? warning;
       try {
         notes = await CognitiveStore().forRecords('quote',
             refs.map((r) => r.id.isEmpty ? r.contentKey : r.id).toList());
       } catch (_) {
         // A note-store problem must not discard existing quote concept tags.
+        warning = '认识注释暂未读取；当前显示已有概念标注与原主题。';
       }
       for (final ref in refs) {
-        final note = notes
-            .where((n) =>
-                n.task == CognitiveTask.concept &&
-                n.selection.recordId ==
-                    (ref.id.isEmpty ? ref.contentKey : ref.id) &&
-                n.selection.matches(ref.content))
-            .firstOrNull;
+        final note = QuoteConceptCatalog.currentConceptNote(ref, notes);
         if (note != null && note.analysis.concepts.isNotEmpty) {
           addons[ref.contentKey] = QuoteAnalysisAddon.fromStoredJson({
             ...?addons[ref.contentKey]?.toJson(),
@@ -115,9 +119,18 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
         }
       }
       if (mounted && generation == _generation)
-        setState(() => _addons = addons);
+        setState(() {
+          _addons = addons;
+          _groups = null;
+          _addonError = warning;
+        });
     } catch (_) {
-      if (mounted && generation == _generation) setState(() => _addons = {});
+      if (mounted && generation == _generation)
+        setState(() {
+          _addons = {};
+          _groups = null;
+          _addonError = '概念标注暂未读取，当前按原记录主题展示。';
+        });
     }
   }
 
@@ -164,9 +177,16 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
       return const Center(child: Text('暂无匹配名言，可先导入或保存名言。'));
     if (widget.mode == 2) return _timeline();
     if (widget.mode == 3) return _authors();
-    final groups = groupQuoteConcepts(widget.rows, _addons);
-    final selected =
-        groups.where((g) => g.title == _selected).firstOrNull ?? groups.first;
+    final groups = _groups ??= groupQuoteConcepts(widget.rows, _addons);
+    final filtered = groups
+        .where((g) =>
+            g.title.toLowerCase().contains(_conceptSearch.trim().toLowerCase()))
+        .toList();
+    final pageCount = math.max(1, (filtered.length + 23) ~/ 24);
+    final page = _conceptPage.clamp(0, pageCount - 1).toInt();
+    final visible = filtered.skip(page * 24).take(24).toList();
+    final selected = visible.where((g) => g.title == _selected).firstOrNull ??
+        visible.firstOrNull;
     return ValueListenableBuilder<CognitivePreferences>(
         valueListenable: CognitivePreferenceStore.instance,
         builder: (context, prefs, _) => ColoredBox(
@@ -190,16 +210,60 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
                               color: Color(0xffbdcbd0),
                               height: 1.5)),
                       const SizedBox(height: 10),
+                      if (_addonError != null)
+                        TextButton.icon(
+                            onPressed: _load,
+                            icon: const Icon(Icons.refresh),
+                            label: Text(_addonError!)),
+                      TextField(
+                          key: const ValueKey('history-concept-search'),
+                          decoration: const InputDecoration(
+                              labelText: '查找概念',
+                              prefixIcon: Icon(Icons.search)),
+                          onChanged: (value) => setState(() {
+                                _conceptSearch = value;
+                                _conceptPage = 0;
+                                _selected = null;
+                              })),
+                      if (pageCount > 1)
+                        Row(children: [
+                          IconButton(
+                              tooltip: '上一组概念',
+                              onPressed: page == 0
+                                  ? null
+                                  : () => setState(() {
+                                        _conceptPage = page - 1;
+                                        _selected = null;
+                                      }),
+                              icon: const Icon(Icons.chevron_left)),
+                          Expanded(
+                              child: Text(
+                                  '共 ${filtered.length} 个概念 · 第 ${page + 1}/$pageCount 组',
+                                  textAlign: TextAlign.center)),
+                          IconButton(
+                              tooltip: '下一组概念',
+                              onPressed: page + 1 >= pageCount
+                                  ? null
+                                  : () => setState(() {
+                                        _conceptPage = page + 1;
+                                        _selected = null;
+                                      }),
+                              icon: const Icon(Icons.chevron_right)),
+                        ]),
+                      if (visible.isEmpty)
+                        const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text('暂无匹配概念。可修改搜索词，或加载更多名言。')),
                       Wrap(spacing: 7, runSpacing: 4, children: [
-                        for (final group in groups.take(24))
+                        for (final group in visible)
                           ChoiceChip(
                               label:
                                   Text('${group.title} ${group.rows.length}'),
-                              selected: group.title == selected.title,
+                              selected: group.title == selected?.title,
                               onSelected: (_) =>
                                   setState(() => _selected = group.title))
                       ]),
-                      if (prefs.relations) ...[
+                      if (prefs.relations && selected != null) ...[
                         Row(children: [
                           const Expanded(
                               child: Text('缩小看概念 · 放大看名言',
@@ -230,20 +294,28 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
                                     minScale: .3,
                                     maxScale: 2.5,
                                     boundaryMargin: const EdgeInsets.all(200),
-                                    onInteractionUpdate: (_) => setState(() =>
-                                        _zoom = _transform.value
-                                            .getMaxScaleOnAxis()),
-                                    child: _graph(
-                                        groups.take(24).toList(), selected)))),
-                      ] else
+                                    onInteractionUpdate: (_) {
+                                      final zoom =
+                                          _transform.value.getMaxScaleOnAxis();
+                                      final detailsChanged =
+                                          (zoom >= 1) != (_zoom >= 1);
+                                      _zoom = zoom;
+                                      if (detailsChanged) setState(() {});
+                                    },
+                                    child: _graph(visible, selected)))),
+                      ] else if (!prefs.relations)
                         const Padding(
                             padding: EdgeInsets.all(16),
                             child: Text('关系图已关闭，仍可按概念浏览关联名言。')),
                       const SizedBox(height: 12),
-                      Text(
-                          '${selected.title} · ${selected.fromExplicitConcepts ? '已保存的概念标注' : '原记录主题'}',
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      for (final row in selected.rows) _quote(row, dark: true),
+                      if (selected != null) ...[
+                        Text(
+                            '${selected.title} · ${selected.fromExplicitConcepts ? '已保存的概念标注' : '原记录主题'}',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                        for (final row in selected.rows)
+                          _quote(row, dark: true),
+                      ],
                       _more,
                     ])))));
   }

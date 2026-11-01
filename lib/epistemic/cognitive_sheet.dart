@@ -5,6 +5,7 @@ import 'cognitive_service.dart';
 import 'cognitive_store.dart';
 import 'cognitive_input_dialog.dart';
 import 'cognitive_snapshot_view.dart';
+import 'cognitive_mode.dart';
 import '../models/quote_insight.dart';
 
 Future<void> showCognitiveAnalysis(
@@ -58,10 +59,23 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
     super.initState();
     CognitivePreferenceStore.instance.load();
     _note = widget.initialNote;
+    CognitivePreferenceStore.instance.addListener(_modeChanged);
     if (_note == null) _generate();
   }
 
+  void _modeChanged() {
+    if (CognitivePreferenceStore.active && _note == null && !_busy) _generate();
+  }
+
+  @override
+  void dispose() {
+    CognitivePreferenceStore.instance.removeListener(_modeChanged);
+    super.dispose();
+  }
+
   Future<void> _generate() async {
+    await CognitivePreferenceStore.instance.load();
+    if (!mounted || !CognitivePreferenceStore.active || _busy) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -77,6 +91,7 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
   }
 
   Future<void> _save(CognitiveNote note) async {
+    if (!CognitivePreferenceStore.active) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -163,6 +178,9 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
           CognitivePreferences>(
       valueListenable: CognitivePreferenceStore.instance,
       builder: (context, prefs, _) {
+        if (!CognitivePreferenceStore.active) {
+          return CognitiveDisabledView(originalText: widget.selection.text);
+        }
         final note = _note;
         final stale = widget.currentText != null &&
             !widget.selection.matches(widget.currentText!());
@@ -528,57 +546,64 @@ class _CognitiveNotesListState extends State<_CognitiveNotesList> {
   late Future<List<CognitiveNote>> _notes =
       widget.store.forRecord(widget.module, widget.recordId);
   @override
-  Widget build(BuildContext context) => SafeArea(
-      child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .7,
-          child: FutureBuilder<List<CognitiveNote>>(
-              future: _notes,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done)
-                  return const Center(child: CircularProgressIndicator());
-                if (snapshot.hasError)
-                  return Center(
-                      child: TextButton(
-                          onPressed: () => setState(() {
-                                _notes = widget.store
-                                    .forRecord(widget.module, widget.recordId);
-                              }),
-                          child: const Text('注释暂未读取，点击重试')));
-                final notes = snapshot.data ?? [];
-                return ListView(padding: const EdgeInsets.all(20), children: [
-                  const Text('认识注释',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  if (notes.isEmpty)
-                    const Text('尚无注释。选中原文中的一段文字，可选择“区分事实与解释”。'),
-                  for (final note in notes)
-                    ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(note.selection.text,
-                            maxLines: 3, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(widget.currentText != null &&
-                                !note.selection.matches(widget.currentText!())
-                            ? '原文已变化 · 请重新选择'
-                            : note.accepted
-                                ? '已采纳 · 一种理解'
-                                : '待确认 · AI 暂定理解'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () async {
-                          await showCognitiveAnalysis(context,
-                              selection: note.selection,
-                              task: note.task,
-                              note: note,
-                              currentText: widget.currentText,
-                              service: CognitiveService(store: widget.store));
-                          if (mounted)
-                            setState(() {
-                              _notes = widget.store
-                                  .forRecord(widget.module, widget.recordId);
-                            });
-                        }),
-                ]);
-              })));
+  Widget build(BuildContext context) => CognitiveMode(
+      fallback: const CognitiveDisabledView(),
+      child: SafeArea(
+          child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .7,
+              child: FutureBuilder<List<CognitiveNote>>(
+                  future: _notes,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done)
+                      return const Center(child: CircularProgressIndicator());
+                    if (snapshot.hasError)
+                      return Center(
+                          child: TextButton(
+                              onPressed: () => setState(() {
+                                    _notes = widget.store.forRecord(
+                                        widget.module, widget.recordId);
+                                  }),
+                              child: const Text('注释暂未读取，点击重试')));
+                    final notes = snapshot.data ?? [];
+                    return ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          const Text('认识注释',
+                              style: TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 12),
+                          if (notes.isEmpty)
+                            const Text('尚无注释。选中原文中的一段文字，可选择“区分事实与解释”。'),
+                          for (final note in notes)
+                            ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(note.selection.text,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis),
+                                subtitle: Text(widget.currentText != null &&
+                                        !note.selection
+                                            .matches(widget.currentText!())
+                                    ? '原文已变化 · 请重新选择'
+                                    : note.accepted
+                                        ? '已采纳 · 一种理解'
+                                        : '待确认 · AI 暂定理解'),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () async {
+                                  await showCognitiveAnalysis(context,
+                                      selection: note.selection,
+                                      task: note.task,
+                                      note: note,
+                                      currentText: widget.currentText,
+                                      service: CognitiveService(
+                                          store: widget.store));
+                                  if (mounted)
+                                    setState(() {
+                                      _notes = widget.store.forRecord(
+                                          widget.module, widget.recordId);
+                                    });
+                                }),
+                        ]);
+                  }))));
 }
 
 class CognitiveAction extends StatelessWidget {

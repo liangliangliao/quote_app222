@@ -20,6 +20,8 @@ import 'package:quote_app/epistemic/cognitive_training.dart';
 import 'package:quote_app/epistemic/history_knowledge_view.dart';
 import 'package:quote_app/epistemic/movie_cognition.dart';
 import 'package:quote_app/epistemic/concept_explorer.dart';
+import 'package:quote_app/epistemic/cognitive_recap.dart';
+import 'package:quote_app/epistemic/quote_concept_catalog.dart';
 import 'package:quote_app/epistemic/gentle_counterexample.dart';
 import 'package:quote_app/models/quote_insight.dart';
 import 'package:quote_app/services/quote_comparison_service.dart';
@@ -320,7 +322,12 @@ void main() {
     await capture(tester, '03-history-constellation');
     await tester.tap(find.byTooltip('放大关系图'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byTooltip('加入比较').first, 240);
+    await tester.scrollUntilVisible(find.byTooltip('加入比较').first, 240,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable))
+            .first);
     await tester.tap(find.byTooltip('加入比较').first);
     expect(selections, 1);
     await mount(tester, view(2));
@@ -531,6 +538,199 @@ void main() {
             .widget<FilledButton>(find.widgetWithText(FilledButton, '比较所选概念'))
             .onPressed,
         isNull);
+  });
+
+  testWidgets(
+      'concept title resolves hierarchy and asks before merging homonyms',
+      (tester) async {
+    await enable(tester);
+    await tester.runAsync(() async {
+      await VisionDao().listThoughtRootNodes();
+      for (final node in [
+        {'uid': 'audit-parent', 'title': '上位概念_完整性', 'parent_uid': null},
+        {
+          'uid': 'audit-unique',
+          'title': '特定体验_完整性',
+          'parent_uid': 'audit-parent'
+        },
+        {
+          'uid': 'audit-leaf',
+          'title': '具体特征_完整性',
+          'parent_uid': 'audit-unique'
+        },
+        {
+          'uid': 'audit-poly-a',
+          'title': '多义_完整性',
+          'parent_uid': 'audit-parent'
+        },
+        {'uid': 'audit-poly-b', 'title': '多义_完整性', 'parent_uid': 'audit-leaf'},
+      ]) {
+        await db.insert(
+            'vision_node',
+            {
+              'taxonomy_id': kThoughtTaxonomyId,
+              'slug': node['uid'],
+              'node_kind': 'concept',
+              ...node,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
+    await mount(tester, const ConceptExplorer(title: '特定体验_完整性'));
+    await waitFor(tester, find.text('具体特征_完整性'));
+    expect(find.text('返回上位概念：上位概念_完整性'), findsOneWidget);
+    await capture(tester, '06-concept-resolved-hierarchy');
+    await tester.runAsync(() =>
+        CognitivePreferenceStore.instance.update(const CognitivePreferences()));
+    await tester.pumpAndSettle();
+    expect(find.text('叔本华认知风格已关闭'), findsOneWidget);
+    expect(find.text('具体特征_完整性'), findsNothing);
+    await enable(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('具体特征_完整性'), findsOneWidget);
+    await mount(tester, const SizedBox());
+    await mount(tester, const ConceptExplorer(title: '多义_完整性'));
+    await waitFor(tester, find.textContaining('发现多个同名分类'));
+    expect(find.textContaining('audit-poly-'), findsNothing);
+    await tester.tap(
+        find.widgetWithText(ListTile, '上位分类：上位概念_完整性 → 特定体验_完整性 → 具体特征_完整性'));
+    await waitFor(tester, find.text('返回上位概念：具体特征_完整性'));
+  });
+
+  testWidgets(
+      'tagged related quotes load beyond the first page and open the reader',
+      (tester) async {
+    await enable(tester);
+    final rows = List.generate(
+        31,
+        (i) => <String, dynamic>{
+              'quote_uid': 'catalog-audit-$i',
+              'content': '目录名言$i',
+              'author_name': '测试示例',
+            });
+    await tester.runAsync(() async {
+      for (final row in rows) {
+        await QuoteInsightStore().saveAddon(QuoteReference.fromRow(row),
+            const QuoteAnalysisAddon(concepts: ['目录_完整性']));
+      }
+    });
+    final catalog = QuoteConceptCatalog(
+        readPage: (limit, offset) async =>
+            rows.skip(offset).take(limit).toList());
+    await mount(tester, ConceptExplorer(title: '目录_完整性', catalog: catalog));
+    await waitFor(tester, find.text('从具体经验中辨认共同规定，同时保留差异。'));
+    await tester.tap(find.text('相关名言'));
+    await waitFor(tester, find.text('目录名言0'));
+    await tester.scrollUntilVisible(find.text('继续加载相关名言'), 450);
+    await tester.tap(find.text('继续加载相关名言'));
+    await waitFor(tester, find.text('目录名言30'));
+    await tester.ensureVisible(find.text('目录名言30'));
+    await tester.tap(find.text('目录名言30'));
+    await waitFor(tester, find.text('直观'));
+    expect(find.text('判断'), findsOneWidget);
+  });
+
+  testWidgets(
+      'every loaded history concept remains accessible after the first 24',
+      (tester) async {
+    await enable(tester);
+    final rows = List.generate(
+        30,
+        (i) => <String, dynamic>{
+              'quote_uid': 'graph-audit-$i',
+              'content': '星图名言$i',
+              'theme': '编号${i.toString().padLeft(2, '0')}',
+            });
+    var opens = 0;
+    await mount(
+        tester,
+        Scaffold(
+            body: HistoryKnowledgeView(
+                rows: rows,
+                mode: 1,
+                onOpen: (_) => opens++,
+                onSelect: (_) {},
+                selectedKeys: const {},
+                onLoadMore: () {},
+                hasMore: false,
+                loading: false)));
+    await waitFor(tester, find.text('编号00 1'));
+    expect(find.text('编号29 1'), findsNothing);
+    await tester.tap(find.byTooltip('下一组概念'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编号29 1'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('星图名言29'), 350,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable))
+            .first);
+    await tester.tap(find.text('星图名言29'));
+    expect(opens, 1);
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('history-concept-search')));
+    await tester.enterText(
+        find.byKey(const ValueKey('history-concept-search')), '编号29');
+    await tester.pumpAndSettle();
+    expect(find.text('编号29 1'), findsOneWidget);
+    expect(find.text('编号24 1'), findsNothing);
+    await capture(tester, '03-history-search-all-concepts');
+    await tester.enterText(
+        find.byKey(const ValueKey('history-concept-search')), '不存在的概念');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('暂无匹配概念'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'analysis, recap and training routes observe mode off without generating',
+      (tester) async {
+    final ai = core.FakeCognitiveAi();
+    final service = CognitiveService(ai: ai);
+    await mount(
+        tester,
+        Scaffold(
+            body: CognitiveAnalysisSheet(
+                selection: CognitiveSelection.fromText(
+                    module: 'diary',
+                    recordId: 'disabled-audit',
+                    title: '日记',
+                    fullText: core.text),
+                task: CognitiveTask.diary,
+                service: service)));
+    expect(find.text('叔本华认知风格已关闭'), findsOneWidget);
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
+    expect(ai.calls, 0);
+    await enable(tester);
+    await waitFor(tester, find.text('采纳这条注释'));
+    expect(ai.calls, 1);
+    await tester.runAsync(() =>
+        CognitivePreferenceStore.instance.update(const CognitivePreferences()));
+    await tester.pumpAndSettle();
+    expect(find.text('采纳这条注释'), findsNothing);
+    expect(find.text(core.text), findsOneWidget);
+    await enable(tester);
+    await tester.pumpAndSettle();
+    expect(ai.calls, 1);
+    await mount(
+        tester, JudgmentExercisePage(exercise: judgmentExercises.first));
+    await tester.runAsync(() =>
+        CognitivePreferenceStore.instance.update(const CognitivePreferences()));
+    await tester.pumpAndSettle();
+    expect(find.text('改变条件，再作判断'), findsNothing);
+    expect(find.text('叔本华认知风格已关闭'), findsOneWidget);
+    await mount(tester, CognitiveRecapPage(service: service));
+    expect(find.byType(CheckboxListTile), findsNothing);
+    expect(ai.calls, 1);
+    await enable(tester);
+    await waitFor(tester, find.textContaining('这是保存时的选文与判断快照'));
+    await tester.runAsync(() =>
+        CognitivePreferenceStore.instance.update(const CognitivePreferences()));
+    await tester.pumpAndSettle();
+    expect(find.byType(CheckboxListTile), findsNothing);
+    expect(find.text('叔本华认知风格已关闭'), findsOneWidget);
   });
 
   testWidgets(

@@ -95,6 +95,7 @@ jobs:
           flutter analyze --no-pub
           lib/epistemic
           test/cognitive_core_test.dart test/cognitive_extended_test.dart
+          test/cognitive_catalog_test.dart
           test/cognitive_widgets_test.dart test/cognitive_flags_test.dart
           lib/models/quote_insight.dart lib/data/quote_insight_store.dart
           lib/services/quote_comparison_service.dart lib/services/quote_insight_settings.dart
@@ -106,6 +107,7 @@ jobs:
         run: >-
           flutter test --no-pub --reporter expanded
           test/cognitive_core_test.dart test/cognitive_extended_test.dart
+          test/cognitive_catalog_test.dart
           test/cognitive_widgets_test.dart test/cognitive_flags_test.dart
           test/quote_insight_test.dart test/quote_comparison_test.dart
           test/quote_insight_store_test.dart test/quote_insight_widgets_test.dart
