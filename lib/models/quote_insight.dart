@@ -9,6 +9,9 @@ enum ContentKind { quote, example, interpretation, prediction }
 enum SourceStatus { verified, unverified, disputed }
 
 enum QuoteRelation {
+  equal,
+  partition,
+  siblings,
   overlap,
   subset,
   superset,
@@ -163,6 +166,7 @@ class QuoteAnalysisAddon {
   final List<String> concepts;
   final EpistemicSource source;
   final String modelSourceAssessment;
+  final Map<String, dynamic> cognition;
 
   const QuoteAnalysisAddon({
     this.concreteExample = '',
@@ -174,6 +178,7 @@ class QuoteAnalysisAddon {
     this.concepts = const [],
     this.source = const EpistemicSource(),
     this.modelSourceAssessment = '',
+    this.cognition = const {},
   });
 
   // AI interpretation is provisional regardless of the model's confidence.
@@ -191,6 +196,7 @@ class QuoteAnalysisAddon {
     final refs = map['source_refs'];
     final concepts = map['concepts'];
     return QuoteAnalysisAddon(
+      cognition: insightObject(map['cognition']),
       concreteExample: insightText(map, 'concrete_example'),
       commonality: insightText(map, 'commonality'),
       criticalDifference: insightText(map, 'critical_difference'),
@@ -223,6 +229,7 @@ class QuoteAnalysisAddon {
     if (map['version'] != version) return const QuoteAnalysisAddon();
     final parsed = QuoteAnalysisAddon.fromModelJson(map);
     return QuoteAnalysisAddon(
+      cognition: parsed.cognition,
       concreteExample: parsed.concreteExample,
       commonality: parsed.commonality,
       criticalDifference: parsed.criticalDifference,
@@ -244,6 +251,7 @@ class QuoteAnalysisAddon {
         'analysis_basis': analysisBasis,
         'source_refs': sourceRefs,
         'concepts': concepts,
+        'cognition': cognition,
         'epistemic_source': source.toJson(),
         'source_confidence': modelSourceAssessment,
         'epistemic_status': status.name,
@@ -255,7 +263,7 @@ class QuoteComparison {
   final String common, difference, notEquivalent, limitation;
   final QuoteRelation relation;
   final String relationScope, justification, setA, setB, basisA, basisB;
-  final String relationDirection;
+  final String relationDirection, universe;
   final bool groundedInQuotes;
   final String modelInfo;
 
@@ -273,16 +281,22 @@ class QuoteComparison {
       this.basisB = '',
       this.groundedInQuotes = false,
       this.modelInfo = '',
-      this.relationDirection = ''});
+      this.relationDirection = '',
+      this.universe = ''});
 
   EpistemicStatus get status => EpistemicStatus.provisional;
   bool get canDrawSets =>
       const [
+        QuoteRelation.equal,
+        QuoteRelation.partition,
+        QuoteRelation.siblings,
         QuoteRelation.overlap,
         QuoteRelation.subset,
         QuoteRelation.superset,
         QuoteRelation.disjoint
       ].contains(relation) &&
+      (![QuoteRelation.partition, QuoteRelation.siblings].contains(relation) ||
+          universe.isNotEmpty) &&
       relationScope == 'extension' &&
       groundedInQuotes &&
       justification.isNotEmpty &&
@@ -290,6 +304,9 @@ class QuoteComparison {
       setB.isNotEmpty;
 
   String get relationLabel => const {
+        QuoteRelation.equal: '外延重合',
+        QuoteRelation.partition: '互斥且穷尽上位范围',
+        QuoteRelation.siblings: '同属上位范围但未穷尽',
         QuoteRelation.overlap: '部分交集',
         QuoteRelation.subset: 'A 包含于 B',
         QuoteRelation.superset: 'A 包含 B',
@@ -316,6 +333,7 @@ class QuoteComparison {
         'basis_b': basisB,
         'model_info': modelInfo,
         'relation_direction': relationDirection,
+        'universe': universe,
         'epistemic_status': status.name,
       };
 }

@@ -87,12 +87,12 @@ class MovieAnalysisService {
           '区分所给简介、暂定解释、未经核对的情节和模拟类比，不把推测当事实。'
           '${cognitive ? MovieCognition.instructions : ''}',
       prompt: jsonEncode({'analysis_preferences': prompt, 'movie': payload}),
-      maxTokens: 3600,
+      maxTokens: cognitive ? 7000 : 3600,
       expectJson: cognitive,
       temperature: 0.45,
     );
     final trimmed = cognitive
-        ? MovieCognition.parse(text, (payload['overview'] ?? '').toString()).encode()
+        ? MovieCognition.parse(text, (payload['overview'] ?? '').toString(), requireDepth: true).encode()
         : text.trim();
     if (trimmed.isEmpty) {
       throw Exception('AI 返回为空。请检查全局 AI 提供方、模型和 API Key 是否已配置。');
