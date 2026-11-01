@@ -161,48 +161,51 @@ class _JudgmentExercisePageState extends State<JudgmentExercisePage> {
   @override
   Widget build(BuildContext context) {
     final e = widget.exercise;
-    return Scaffold(
-        backgroundColor: const Color(0xfffaf6ee),
-        appBar: AppBar(title: Text(e.title)),
-        body: ListView(padding: const EdgeInsets.all(20), children: [
-          const Text('模拟情境 · 用来练习，不是对个人能力的评分'),
-          const SizedBox(height: 18),
-          Text(e.situation, style: const TextStyle(fontSize: 19, height: 1.7)),
-          SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('改变条件，再作判断'),
-              value: _changed,
-              onChanged: (v) => setState(() {
-                    _changed = v;
-                    _choice = null;
-                  })),
-          if (_changed)
-            Card(
-                color: const Color(0xffe2eee8),
-                child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(e.changedSituation))),
-          for (final choice in e.choices.indexed)
-            Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: OutlinedButton(
-                    onPressed: () => setState(() => _choice = choice.$1),
+    return CognitiveModePage(
+        title: e.title,
+        child: Scaffold(
+            backgroundColor: const Color(0xfffaf6ee),
+            appBar: AppBar(title: Text(e.title)),
+            body: ListView(padding: const EdgeInsets.all(20), children: [
+              const Text('模拟情境 · 用来练习，不是对个人能力的评分'),
+              const SizedBox(height: 18),
+              Text(e.situation,
+                  style: const TextStyle(fontSize: 19, height: 1.7)),
+              SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('改变条件，再作判断'),
+                  value: _changed,
+                  onChanged: (v) => setState(() {
+                        _changed = v;
+                        _choice = null;
+                      })),
+              if (_changed)
+                Card(
+                    color: const Color(0xffe2eee8),
                     child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Text(choice.$2)))),
-          if (_choice != null) ...[
-            const Divider(height: 32),
-            Text(
-                _choice == (_changed ? e.changedPreferred : e.preferred)
-                    ? '这个判断与当前条件相符，仍可随新材料修订。'
-                    : '可以再检查：这一项是否对应当前的目标和条件？',
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
-            Text(e.feedback[_choice!], style: const TextStyle(height: 1.7)),
-            const SizedBox(height: 12),
-            const Text('还缺少什么证据？出现怎样的新材料，你会改变判断？'),
-          ],
-        ]));
+                        padding: const EdgeInsets.all(16),
+                        child: Text(e.changedSituation))),
+              for (final choice in e.choices.indexed)
+                Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: OutlinedButton(
+                        onPressed: () => setState(() => _choice = choice.$1),
+                        child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Text(choice.$2)))),
+              if (_choice != null) ...[
+                const Divider(height: 32),
+                Text(
+                    _choice == (_changed ? e.changedPreferred : e.preferred)
+                        ? '这个判断与当前条件相符，仍可随新材料修订。'
+                        : '可以再检查：这一项是否对应当前的目标和条件？',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 12),
+                Text(e.feedback[_choice!], style: const TextStyle(height: 1.7)),
+                const SizedBox(height: 12),
+                const Text('还缺少什么证据？出现怎样的新材料，你会改变判断？'),
+              ],
+            ])));
   }
 }
 
