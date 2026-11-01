@@ -591,7 +591,9 @@ void main() {
     await mount(tester, const SizedBox());
     await mount(tester, const ConceptExplorer(title: '多义_完整性'));
     await waitFor(tester, find.textContaining('发现多个同名分类'));
-    await tester.tap(find.widgetWithText(ListTile, '分类位置：audit-poly-b'));
+    expect(find.textContaining('audit-poly-'), findsNothing);
+    await tester.tap(
+        find.widgetWithText(ListTile, '上位分类：上位概念_完整性 → 特定体验_完整性 → 具体特征_完整性'));
     await waitFor(tester, find.text('返回上位概念：具体特征_完整性'));
   });
 

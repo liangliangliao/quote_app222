@@ -63,6 +63,7 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
       final parents = parentUid == null
           ? <Map<String, dynamic>>[]
           : await dao.listThoughtNodesByUids({parentUid});
+      final alternatives = await _withClassificationPaths(dao, candidates);
       final id = uid ?? widget.title;
       final store = CognitiveStore();
       final notes = await store.forRecord('concept', id);
@@ -72,7 +73,7 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
       if (mounted)
         setState(() {
           _resolvedUid = uid;
-          _alternatives = candidates.length > 1 ? candidates : [];
+          _alternatives = alternatives;
           _children = children;
           _parents = parents;
           _note =
@@ -84,6 +85,45 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _withClassificationPaths(
+      VisionDao dao, List<Map<String, dynamic>> candidates) async {
+    if (candidates.length < 2) return [];
+    String? parentOf(Map<String, dynamic> row) {
+      final parent = '${row['parent_uid'] ?? ''}'.trim();
+      return parent.isEmpty ? null : parent;
+    }
+
+    final nodes = {for (final row in candidates) '${row['uid']}': row};
+    var frontier = candidates.map(parentOf).whereType<String>().toSet();
+    final requested = <String>{};
+    for (var depth = 0; depth < 32 && frontier.isNotEmpty; depth++) {
+      final missing =
+          frontier.difference(nodes.keys.toSet()).difference(requested);
+      if (missing.isEmpty) break;
+      requested.addAll(missing);
+      final ancestors = await dao.listThoughtNodesByUids(missing);
+      for (final row in ancestors) {
+        nodes['${row['uid']}'] = row;
+      }
+      frontier = ancestors.map(parentOf).whereType<String>().toSet();
+    }
+    return candidates.map((row) {
+      final path = <String>[];
+      final visited = <String>{'${row['uid']}'};
+      var parent = parentOf(row);
+      while (parent != null && path.length < 32 && visited.add(parent)) {
+        final ancestor = nodes[parent];
+        if (ancestor == null) break;
+        path.add('${ancestor['title']}');
+        parent = parentOf(ancestor);
+      }
+      final label = path.isEmpty && parentOf(row) == null
+          ? '根分类'
+          : '上位分类：${path.isEmpty ? '待确认' : path.reversed.join(' → ')}${parent == null ? '' : ' · 路径待核对'}';
+      return {...row, 'classification_path': label};
+    }).toList();
   }
 
   void _selectTab(int tab) {
@@ -238,7 +278,7 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
                 for (final node in _alternatives)
                   ListTile(
                       title: Text('${node['title']}'),
-                      subtitle: Text('分类位置：${node['uid']}'),
+                      subtitle: Text('${node['classification_path']}'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _openNode(node)),
               ],
