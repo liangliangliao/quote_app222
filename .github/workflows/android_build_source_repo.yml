@@ -83,6 +83,8 @@ jobs:
             exit 0
           elif [ "$EVENT_NAME" = "pull_request" ] && [ "$EVENT_ACTION" != "synchronize" ]; then
             changed_files="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          elif [ "$EVENT_NAME" = "push" ] && [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            changed_files="$(git ls-tree -r --name-only "$AFTER_SHA")"
           else
             changed_files="$(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA")"
           fi
