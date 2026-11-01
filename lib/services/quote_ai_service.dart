@@ -354,7 +354,7 @@ class QuoteAiService {
       purpose: 'quote_ai.structured_generation',
       systemPrompt:
           '你是严谨的名言研究、思想分析与现实实践设计助手。只返回一个合法 JSON 对象；不得编造名言、作者、具体出处或历史事实，不确定时必须明确标注“出处待考”。实践活动必须安全、具体、可自愿停止。',
-      maxTokens: 3800,
+      maxTokens: 5400,
       expectJson: true,
       temperature: 0.55,
     );
@@ -434,7 +434,7 @@ ${jsonEncode({'theme': theme, 'description': description})}
 2. 若指定了人物，名言必须确实归属于该人物，不得改选其他作者，并在 author 字段原样返回“本轮指定人物”的名称。多人物轮换由应用负责，本轮只处理当前人物。
 3. 将本轮视为同一任务的连续自动获取：不要重复近期轮次中你通常会给出的名言，也不要选同类请求中最常输出、最泛滥的前三句；结合探索路线编号选择可靠但相对不重复的内容。应用不会发送历史名言正文，也不要求你执行历史列表比对。
 4. 必须忠于可核验的原意。出处不确定时 source 写“出处待考”，source_confidence 写明原因；禁止为了显得完整而编造书名、演讲、年份或章节。
-5. analysis 要解释作者为何这样说及其思想语境；problem_addressed 要说明它试图解决、纠正或应对什么问题。
+5. analysis 要先忠实区分原句命题与解读，再解释思想语境、概念从哪些具体经验抽出共同规定、抽象省略的条件、容易混淆之处及影响当前判断的决定性差异、认识根据与可推翻结论的新材料；不要只做励志扩写，不猜作者心理；problem_addressed 要说明它试图解决、纠正或应对什么问题。
 6. related_person 与 related_thought 要给出最容易由此联想到的另一位人物及其高度相关思想，并说明关键联系或差异。
 7. practice_activities 必须包含 1 至 3 个实践活动，把这句名言中的抽象概念转化为用户能在现实中亲自完成、观察和感受的经验。至少一个活动应当今天就能开始，通常可在 5 至 30 分钟内完成。不要只给建议、观点或阅读清单；必须给出有先后顺序、可以观察到是否完成的动作，以及体验重点和复盘问题。
 8. 实践活动可以准确借鉴古今历史事件或典故，也可以借用电影人物、小说、文学、新闻、神话或艺术作品进行类比、角色模拟与情境想象；必须明确它是史实、作品情节、神话还是虚构模拟，不得把虚构当史实。没有可靠或真正相关的素材时，inspiration 留空，不要硬凑。
@@ -443,6 +443,8 @@ ${jsonEncode({'theme': theme, 'description': description})}
 11. 只返回 JSON，不要 Markdown、代码围栏或额外说明。
 12. 以下解读均为一种可能理解，不冒充作者原意；source_confidence 只是模型自评，不代表已核对。source_status 只能为 unverified 或 disputed，不得声明已核实。source_refs 只能列待核对的资料线索，没有依据就留空。
 13. concrete_example 写一个具体、可观察的生活情境，明确为“示例/模拟”，不得冒充史实；可以复用本次 practice_activities。commonality 与 critical_difference 说明容易混淆的两种行为哪里相似、关键区别何在；boundary 至少给出一个例外、限制或未知。analysis_basis 指明对应原句中的哪些词，不用作者声望代替根据。缺乏把握可留空，不要补造。
+
+14. cognition返回认识展开结构：abstractions包含2–4个{term,definition,observed,retained,omitted,counter_example}，分别写概念定义、对应的具体材料、共同规定、省略的处境和非成员。concept_scopes在适合外延关系时给出[{relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,illustration}]，关系限equal/partition/siblings/overlap/subset/superset/disjoint；basis逐字引原句，构造的分类模型必须illustration:true；不适合就[]，不可强行画圈。此结构复用本次请求，不另行调用模型。
 
 JSON 字段必须完整：
 {
@@ -476,6 +478,7 @@ JSON 字段必须完整：
   "critical_difference": "影响判断的决定性差异",
   "boundary": "至少一个适用限制、反例或不确定条件",
   "analysis_basis": "与原句具体词语的对应依据",
+  "cognition": {"abstractions": [{"term":"核心概念","definition":"含义与成员判准","member_example":"满足判准的具体实例及理由","non_member":"不满足判准的近似实例及理由","observed":"可观察的具体场景，注明是否模拟","retained":"保留的共同规定","omitted":"省略的个别情境","counter_example":"非成员或反例"}], "concept_scopes": []},
   "avatar_search_query": "人物肖像搜索词",
   "avatar_url": "可信的 Wikimedia/Wikipedia 图片直链或空字符串"
 }

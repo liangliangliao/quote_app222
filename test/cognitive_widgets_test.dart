@@ -1,3 +1,4 @@
+import 'package:quote_app/pages/history_page.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -37,6 +38,19 @@ import 'package:quote_app/widgets/thought_taxonomy_mindmap.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'cognitive_core_test.dart' as core;
 
+class _ScopeHistoryDao extends QuoteDao {
+  final List<Map<String, dynamic>> rows;
+  _ScopeHistoryDao(this.rows);
+  @override
+  Future<List<Map<String, dynamic>>> latest(
+          {int limit = 100, int offset = 0, String? q}) async =>
+      rows
+          .where((r) => q == null || '${r['content']}'.contains(q))
+          .skip(offset)
+          .take(limit)
+          .toList();
+}
+
 class _Comparisons extends QuoteComparisonService {
   final List<(ComparisonPurpose, String)> requests = [];
   @override
@@ -75,6 +89,12 @@ void main() {
             ..addFont(
                 Future.value(ByteData.sublistView(font.readAsBytesSync()))))
           .load();
+    await (FontLoader('QuoteXingShu')
+          ..addFont(rootBundle.load('assets/fonts/ZhiMangXing-Regular.ttf')))
+        .load();
+    await (FontLoader('QuoteSignatureLatin')
+          ..addFont(rootBundle.load('assets/fonts/Allura-Regular.ttf')))
+        .load();
     await (FontLoader('MaterialIcons')
           ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf')))
         .load();
@@ -329,6 +349,8 @@ void main() {
             loading: false));
     await mount(tester, view(1));
     await waitFor(tester, find.textContaining('已载入 4 条名言'));
+    await tester.tap(find.text('概念星图'));
+    await tester.pumpAndSettle();
     expect(find.text('成长 3'), findsOneWidget);
     await capture(tester, '03-history-constellation');
     await tester.tap(find.byTooltip('放大关系图'));
@@ -347,6 +369,167 @@ void main() {
     expect(opens, 1);
     await mount(tester, view(3));
     expect(find.textContaining('甲'), findsWidgets);
+  });
+
+  testWidgets(
+      'legacy James records expose a grounded exercise before optional comparison',
+      (tester) async {
+    await enable(tester);
+    final service = _Comparisons();
+    const a = QuoteReference(
+        id: 'wj-short', author: '威廉·詹姆斯', content: '我的经验就是我同意去注意的东西。');
+    const b = QuoteReference(
+        id: 'wj-long',
+        author: '威廉·詹姆斯',
+        content:
+            '“我的经验，就是我同意去注意的东西。只有那些我留意到的事物才塑造我的心灵。”（原文：“My experience is what I agree to attend to.”）');
+    await mount(tester, const Scaffold(body: SizedBox()),
+        width: 390, height: 800);
+    final ctx = tester.element(find.byType(Scaffold));
+    showQuoteComparison(ctx, a, b, service: service);
+    await waitFor(tester, find.text('疑似同段引文'));
+    final diagram = find.byKey(const ValueKey('quote-set-diagram'));
+    expect(diagram.hitTestable(), findsOneWidget);
+    expect(service.requests, isEmpty);
+    await tester.tapAt(tester.getCenter(diagram));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('杯沿的小缺口'), findsOneWidget);
+    await capture(tester, 'real-james-comparison');
+    await tester.tap(find.text('B 句中概念'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('可察觉的细节'), findsWidgets);
+    expect(service.requests, isEmpty);
+  });
+
+  testWidgets(
+      'an unrelated saved concept with no pair still opens as a single scope',
+      (tester) async {
+    await enable(tester);
+    const ref = QuoteReference(
+        id: 'anonymous-review',
+        content: '不知道稿件作者身份的评审仍可依照相同标准评分。',
+        author: '案例');
+    await tester.runAsync(() => QuoteInsightStore().saveAddon(
+        ref,
+        const QuoteAnalysisAddon(cognition: {
+          'abstractions': [
+            {
+              'term': '匿名评审',
+              'definition': '评审时作者身份对评审人隐藏',
+              'observed': '案例中的稿件评分',
+              'retained': '作者身份隐藏',
+              'omitted': '稿件主题',
+              'member_example': '隐去署名后独立评阅稿件',
+              'non_member': '评审人知晓作者身份后打分',
+              'counter_example': '没有公开分数不足以判断是否匿名'
+            }
+          ]
+        })));
+    await mount(
+        tester,
+        const Scaffold(
+            body: QuoteCognitiveReader(
+                quote: ref, topic: '评审', authorLabel: '案例', note: '')));
+    await waitFor(tester, find.text('概念含义圈 · 单一范围'));
+    expect(find.text('隐去署名后独立评阅稿件'), findsOneWidget);
+    await tester.tap(find.text('圈外 · 边界检验'));
+    await tester.pumpAndSettle();
+    expect(find.text('评审人知晓作者身份后打分'), findsOneWidget);
+  });
+
+  testWidgets(
+      'mountain passage opens its overlapping scopes through the home poster',
+      (tester) async {
+    await enable(tester);
+    const ref = QuoteReference(
+        id: 'mountain-prototype',
+        author: 'Tal Ben-Shahar',
+        content: '幸福并非抵达山顶，也不是漫无目的地在山间攀爬。幸福是朝着山顶攀登的体验。');
+    await mount(
+        tester,
+        Scaffold(
+            body: PosterPureFlutter(
+                topic: '幸福与攀登',
+                quote: ref.content,
+                author: ref.author,
+                avatar: '',
+                note: '',
+                quoteReference: ref)),
+        width: 390,
+        height: 800);
+    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+    await waitFor(tester, find.text('概念含义圈 · 部分交集'));
+    final diagram = find.byKey(const ValueKey('quote-set-diagram'));
+    expect(diagram.hitTestable(), findsOneWidget);
+    await tester.tapAt(tester.getCenter(diagram));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('眼前的云海'), findsOneWidget);
+    await capture(tester, 'real-mountain-intersection');
+  });
+
+  testWidgets(
+      'Hegel opens from the poster with sibling concepts and a visible temporal illustration',
+      (tester) async {
+    await enable(tester);
+    const ref = QuoteReference(
+        id: 'hegel-botany',
+        author: '黑格尔',
+        source: '《精神现象学》序言，版本和页码待核对。',
+        content:
+            '“花蕾在花朵绽放时消逝。人们可以说，花朵否定了花蕾。果实出现时，花朵又显得是植物存在的一种不充分形式。果实取代花朵，成为植物的真理。”（据原意翻译）');
+    await mount(
+        tester,
+        Scaffold(
+            body: PosterPureFlutter(
+                topic: '发展中的否定、连续与转化',
+                quote: ref.content,
+                author: '黑格尔 《很长的出处说明》',
+                avatar: '',
+                note: '',
+                quoteReference: ref)),
+        width: 390,
+        height: 800);
+    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+    await waitFor(tester, find.text('概念含义圈 · 同属上位范围但未穷尽'));
+    await capture(tester, 'real-hegel-reading');
+    expect(find.byKey(const ValueKey('quote-set-diagram')).hitTestable(),
+        findsOneWidget);
+    final diagram = find.byKey(const ValueKey('quote-set-diagram'));
+    await tester.tapAt(tester.getCenter(diagram) + const Offset(0, -35));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('再过数周'), findsOneWidget);
+    await tester.ensureVisible(find.text('形态随时间变化 · 植物示意'));
+    await tester.pumpAndSettle();
+    await capture(tester, 'real-hegel-stages');
+  });
+
+  testWidgets(
+      'record extensions are computed from loaded members and link back to records',
+      (tester) async {
+    await enable(tester);
+    final rows = [
+      {'quote_uid': 'scope1', 'content': '我同意去注意的东西进入经验', 'theme': '注意力与经验'},
+      {'quote_uid': 'scope2', 'content': '注意会受到干扰', 'theme': '注意力'},
+      {'quote_uid': 'scope3', 'content': '另一次观察', 'theme': '经验'},
+    ];
+    await mount(tester, HistoryPage(dao: _ScopeHistoryDao(rows)),
+        width: 390, height: 800);
+    await waitFor(tester, find.text('关系图'));
+    await tester.tap(find.text('关系图'));
+    await waitFor(tester, find.text('概念含义圈 · 部分交集'));
+    final diagram = find.byKey(const ValueKey('quote-set-diagram'));
+    await tester.tapAt(tester.getCenter(diagram));
+    await tester.pumpAndSettle();
+    expect(find.text('共同 区域的成员 · 1 条'), findsOneWidget);
+    final member = find.text('我同意去注意的东西进入经验').first;
+    await tester.timedDrag(
+        diagram, const Offset(0, -150), const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(member.hitTestable(), findsOneWidget);
+    await capture(tester, 'real-history-extension');
+    await tester.tap(member);
+    await waitFor(tester, find.byKey(const ValueKey('quote-full-reading')));
+    expect(find.text('我同意去注意的东西进入经验'), findsWidgets);
   });
 
   testWidgets(
@@ -665,6 +848,9 @@ void main() {
                 onLoadMore: () {},
                 hasMore: false,
                 loading: false)));
+    await waitFor(tester, find.text('概念星图'));
+    await tester.tap(find.text('概念星图'));
+    await tester.pumpAndSettle();
     await waitFor(tester, find.text('编号00 1'));
     expect(find.text('编号29 1'), findsNothing);
     await tester.tap(find.byTooltip('下一组概念'));

@@ -17,6 +17,7 @@ import '../epistemic/cognitive_preferences.dart';
 import '../epistemic/cognitive_sheet.dart';
 import '../epistemic/cognitive_store.dart';
 import '../epistemic/cognitive_service.dart';
+import '../epistemic/diary_cognition_panel.dart';
 import 'diary_theme.dart';
 import 'diary_dao.dart';
 import 'tag_picker_page.dart';
@@ -481,7 +482,7 @@ class EntryEditorPageState extends State<EntryEditorPage> {
     if (!_dirty && mounted) setState(() => _dirty = true);
   }
 
-  Future<void> _analyzeSelectedText(int blockIndex, TextSelection range) async {
+  Future<void> _analyzeSelectedText(int blockIndex, TextSelection range, {GroundLens? lens}) async {
     if (blockIndex < 0 || blockIndex >= _blocks.length ||
         !range.isValid || range.isCollapsed) return;
     final block = _blocks[blockIndex];
@@ -492,7 +493,30 @@ class EntryEditorPageState extends State<EntryEditorPage> {
         recordId: _cognitiveRecordId, title: _cachedTitle ?? '日记选文',
         fullText: raw, start: offset + range.start, end: offset + range.end);
     await showCognitiveAnalysis(context, selection: selection, task: CognitiveTask.diary,
-        currentText: () => _serializeBlocksToRaw(), service: _cognitiveService);
+        currentText: () => _serializeBlocksToRaw(), service: _cognitiveService, initialLens: lens);
+  }
+
+  Future<void> _chooseCognitiveText({GroundLens? lens}) async {
+    final candidates = _blocks.indexed.where((e) => e.$2 is _TextBlock &&
+        (e.$2 as _TextBlock).controller.text.trim().isNotEmpty).toList();
+    if (candidates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('先记录具体经历，再选择文字分析。')));
+      return;
+    }
+    final selected = await showDialog<int>(context: context, builder: (ctx) => SimpleDialog(
+      title: Text(lens == null ? '选择本次分析的文字' : '${lens.label} · 选择文字'),
+      children: [
+        const Padding(padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          child: Text('只分析选中的文字块，不读取图片、录音或其他日记。也可返回正文长按，精确选择一句话。')),
+        for (final e in candidates) SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, e.$1),
+          child: Text((e.$2 as _TextBlock).controller.text, maxLines: 5, overflow: TextOverflow.ellipsis)),
+        SimpleDialogOption(onPressed: () => Navigator.pop(ctx), child: const Text('返回正文选择')),
+      ]));
+    if (selected == null || !mounted || selected >= _blocks.length) return;
+    final block = _blocks[selected];
+    if (block is! _TextBlock) return;
+    await _analyzeSelectedText(selected, TextSelection(baseOffset: 0, extentOffset: block.controller.text.length), lens: lens);
   }
 
   int _ensureActiveTextBlock() {
@@ -1934,6 +1958,12 @@ Widget _attachmentsPreview() {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: _buildBlocksEditor(textStyle),
                         ),
+                        if (CognitivePreferenceStore.active)
+                          DiaryCognitionPanel(onAnalyze: _chooseCognitiveText,
+                            onLens: (lens) => _chooseCognitiveText(lens: lens),
+                            onNotes: () => showCognitiveNotes(context, module: 'diary',
+                              recordId: _cognitiveRecordId, currentText: () => _serializeBlocksToRaw(),
+                              store: _cognitiveStore)),
                         const SizedBox(height: 0),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
