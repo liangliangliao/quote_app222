@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../data/quote_insight_store.dart';
+import '../epistemic/concept_analysis.dart';
 import '../models/quote_insight.dart';
 import 'unified_ai_service.dart';
 import '../epistemic/schopenhauer_guidance.dart';
@@ -15,7 +16,7 @@ enum ComparisonPurpose {
 }
 
 class QuoteComparisonService {
-  static const promptVersion = 3;
+  static const promptVersion = 4;
   static final Map<String, Future<QuoteComparison>> _pending = {};
   final UnifiedAiService _ai;
   final QuoteInsightStore _store;
@@ -123,7 +124,8 @@ class QuoteComparisonService {
       forcedModel: config.model,
     );
     if (raw.trim().isEmpty) throw StateError('比较暂不可用，请检查全局 AI 设置或网络后重试');
-    final result = parseResponse(raw, a, b, modelInfo: model);
+    final result =
+        parseResponse(raw, a, b, modelInfo: model, requireReadings: true);
     try {
       await _store.saveComparison(key, result);
     } catch (_) {}
@@ -180,10 +182,12 @@ ${jsonEncode({
 relation_type 仅可为 equal/partition/siblings/overlap/subset/superset/disjoint/analogy/contrast/cause/condition/evidence/unknown。
 equal表示外延重合；partition表示A/B互斥且穷尽论域；siblings表示同属上位范围但互斥且不穷尽，后两者必须填写universe。subset 表示 A 包含于 B，superset 表示 A 包含 B。因果只能作为有条件的假设。
 只有两句明确描述了可定义的对象集合，且原句能直接支持范围关系时，relation_scope 才可为 extension，填写 set_a/set_b、逐字摘自 A/B 的 basis_a/basis_b 和 relation_justification。概念特征相似、修辞类比或不确定时用 contrast/unknown，relation_scope 为 features，不要强行画圈。
+先核对两条是否可能是同一段的节选或不同译文，给出能核对的字句；不要为相近文字硬造思想分歧。
+无论两句之间为何种关系，分别在reading_a和reading_b内为句中概念给出有根据的定义、成员判准、具体例与反例，anchor逐字摘自对应原句。只要能确定一个概念，就可以画单圈。如果有充分材料定义同一论域的两个类，可再提供concept_scopes；用具体成员解释各区域。模拟分类需illustration:true。若连单个概念也无法界定，在该句的reading内给出anchor、missing_evidence（缺的具体条件）和clarifying_question（需要什么观察才可判断），不要编造定义。
 任何关系都要说明限制、可能反例以及还需要什么证据。common和critical_difference必须指明对应词语与推理，不得停留在“都追求幸福”。critical_difference说明哪项差异会改变当前目的下的结论；limitation给出具体改判条件；relation_justification区分经验前提与推理有效性。
 relation_direction 为 A_to_B/B_to_A/unknown，表示因果或条件的前项到后项，或证据支持判断的方向；不能确定时为 unknown，不画箭头。
 只返回 JSON：
-{"common":"相似点", "critical_difference":"决定性差异", "not_equivalent":"不能直接等同的部分", "limitation":"适用条件、反例与未知", "relation_type":"contrast", "relation_scope":"features", "relation_direction":"unknown", "relation_justification":"判断依据与限制", "universe":"", "set_a":"", "set_b":"", "basis_a":"", "basis_b":""}
+{"reading_a":{"anchor":"A原句短摘","abstractions":[{"term":"简短概念","definition":"成员判准","member_example":"满足判准的具体实例及理由","non_member":"不满足判准的近似实例及理由","observed":"具体例子（注明来源或模拟）","retained":"共同规定","omitted":"省略的条件","counter_example":"反例及理由"}],"concept_scopes":[]},"reading_b":{"anchor":"B原句短摘","abstractions":[{"term":"简短概念","definition":"成员判准","member_example":"满足判准的具体实例及理由","non_member":"不满足判准的近似实例及理由","observed":"具体例子","retained":"共同规定","omitted":"省略条件","counter_example":"反例及理由"}],"concept_scopes":[]},"common":"相似点", "critical_difference":"决定性差异", "not_equivalent":"不能直接等同的部分", "limitation":"适用条件、反例与未知", "relation_type":"contrast", "relation_scope":"features", "relation_direction":"unknown", "relation_justification":"判断依据与限制", "universe":"", "set_a":"", "set_b":"", "basis_a":"", "basis_b":""}
 '''
           .trim();
 
@@ -192,6 +196,7 @@ relation_direction 为 A_to_B/B_to_A/unknown，表示因果或条件的前项到
     QuoteReference a,
     QuoteReference b, {
     String modelInfo = '',
+    bool requireReadings = false,
   }) {
     final text = raw
         .trim()
@@ -218,7 +223,31 @@ relation_direction 为 A_to_B/B_to_A/unknown，表示因果或条件的前项到
         basisB.runes.length >= 2 &&
         a.content.contains(basisA) &&
         b.content.contains(basisB);
+    Map<String, dynamic> reading(String key, String original) {
+      final data = insightObject(map[key]);
+      final anchor = insightText(data, 'anchor');
+      final matches = anchor.isNotEmpty &&
+          original.contains(anchor) &&
+          (anchor.runes.length >= 2 || original.trim() == anchor);
+      if (requireReadings) {
+        final terms = ConceptAbstraction.parse(data['abstractions']);
+        final reasoned = terms.any((t) =>
+            [t.observed, t.retained, t.omitted, t.memberExample, t.nonMember]
+                .every((v) => v.isNotEmpty) &&
+            t.memberExample != t.nonMember);
+        final unresolved = insightText(data, 'missing_evidence').isNotEmpty &&
+            insightText(data, 'clarifying_question').isNotEmpty;
+        if (!matches || (!reasoned && !unresolved)) {
+          throw FormatException(
+              '比较缺少${key == 'reading_a' ? ' A ' : ' B '}句的原文根据、成员判准与边界，或具体待查问题。请重新比较。');
+        }
+      }
+      return matches ? data : {};
+    }
+
     return QuoteComparison(
+      readingA: reading('reading_a', a.content),
+      readingB: reading('reading_b', b.content),
       common: insightText(map, 'common'),
       difference: insightText(map, 'critical_difference'),
       notEquivalent: insightText(map, 'not_equivalent'),

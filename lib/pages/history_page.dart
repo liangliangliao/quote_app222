@@ -157,12 +157,10 @@ class _HistoryPageState extends State<HistoryPage> {
     if (CognitivePreferenceStore.active) {
       await showModalBottomSheet<void>(context: context, isScrollControlled: true,
         showDragHandle: true, backgroundColor: const Color(0xfffaf6ee),
-        builder: (_) => SafeArea(top: false, child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .85,
-          child: SingleChildScrollView(padding: const EdgeInsets.all(20),
-            child: SelectionArea(child: QuoteCognitiveReader(
+        builder: (_) => FractionallySizedBox(heightFactor: .96, child: SafeArea(top: false,
+          child: SelectionArea(child: QuoteCognitiveReader(
               quote: QuoteReference.fromRow(quote), topic: '${quote['theme'] ?? ''}',
-              authorLabel: '${quote['author_name'] ?? ''}', note: '${quote['explanation'] ?? ''}'))))));
+              authorLabel: '${quote['author_name'] ?? ''}', note: '${quote['explanation'] ?? ''}')))));
       if (mounted) setState(() => _insightRevision++);
       return;
     }
@@ -495,11 +493,16 @@ class _HistoryPageState extends State<HistoryPage> {
                 if (_selecting && _selected.isEmpty)
                   const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('选择两条名言；可以搜索后继续选择。')),
                 if (_selected.isNotEmpty)
-                  Wrap(spacing: 8, children: _selected.values.indexed.map((entry) => InputChip(
-                    label: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 220),
-                      child: Text('${entry.$1 == 0 ? 'A' : 'B'} · ${entry.$2.content}', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    onDeleted: () => _toggleQuote(entry.$2),
-                  )).toList()),
+                  LayoutBuilder(builder: (context, bounds) {
+                    final compactPair = _selected.length == 2 &&
+                        bounds.maxWidth >= 300 && MediaQuery.textScalerOf(context).scale(14) <= 22;
+                    final labelWidth = compactPair ? (bounds.maxWidth - 8) / 2 - 80 : 220.0;
+                    return Wrap(spacing: 8, children: _selected.values.indexed.map((entry) => InputChip(
+                      label: ConstrainedBox(constraints: BoxConstraints(maxWidth: labelWidth),
+                        child: Text('${entry.$1 == 0 ? 'A' : 'B'} · ${entry.$2.content}', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      onDeleted: () => _toggleQuote(entry.$2),
+                    )).toList());
+                  }),
               ]),
             ),
           // List content with zero top/bottom padding

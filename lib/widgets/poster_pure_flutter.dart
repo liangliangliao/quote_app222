@@ -55,18 +55,16 @@ class PosterPureFlutter extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.white, showDragHandle: true,
-      builder: (context) => SafeArea(top: false, child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * .80,
-        child: SingleChildScrollView(
-          key: const ValueKey('quote-full-reading'),
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-          child: ValueListenableBuilder<CognitivePreferences>(
+      builder: (context) => FractionallySizedBox(heightFactor: .96, child: SafeArea(top: false,
+        child: ValueListenableBuilder<CognitivePreferences>(
             valueListenable: CognitivePreferenceStore.instance,
             builder: (context, prefs, _) => CognitivePreferenceStore.active
               ? SelectionArea(child: QuoteCognitiveReader(
                   quote: quoteReference ?? QuoteReference(id: '', content: quote, author: author),
                   topic: topic, authorLabel: author, note: note, imagePath: aiFramePath))
-              : SelectionArea(child: Column(
+              : SingleChildScrollView(key: const ValueKey('quote-full-reading'),
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                child: SelectionArea(child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (topic.trim().isNotEmpty) ...[
@@ -89,8 +87,7 @@ class PosterPureFlutter extends StatelessWidget {
               ],
               QuoteReadingInsights(quote: quoteReference ?? QuoteReference(id: '', content: quote)),
             ],
-          ))),
-        ),
+          )))),
       )),
     );
   }

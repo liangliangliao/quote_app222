@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'passage_scene.dart';
 import 'package:flutter/material.dart';
 import '../services/quote_frame_ai_service.dart';
 import '../services/quote_frame_theme.dart';
@@ -96,6 +97,7 @@ class _QuoteIntuitiveGalleryState extends State<QuoteIntuitiveGallery> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_path == null) PassageScene(widget.quote),
             if (_path != null)
               InkWell(
                 onTap: () => showDialog<void>(

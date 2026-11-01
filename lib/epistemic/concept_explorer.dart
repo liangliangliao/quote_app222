@@ -3,7 +3,7 @@ import '../data/dao.dart';
 import '../models/quote_insight.dart';
 import '../widgets/quote_comparison_sheet.dart';
 import 'cognitive_models.dart';
-import 'concept_meaning_diagram.dart';
+import 'passage_scope_view.dart';
 import 'cognitive_sheet.dart';
 import 'cognitive_store.dart';
 import 'cognitive_mode.dart';
@@ -393,11 +393,12 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
                 ),
               ],
               if (_tab == 1) ...[
-                if (_note != null)
-                  ConceptAnalysisView(
-                    abstractions: _note!.analysis.abstractions,
-                    scopes: _note!.analysis.scopes,
-                  ),
+                if (CognitivePreferenceStore.instance.value.relations)
+                  PassageScopeView(
+                      text: widget.title,
+                      abstractions: _note?.analysis.abstractions ?? [],
+                      scopes: _note?.analysis.scopes ?? [],
+                      onAnalyze: _analyze),
                 Text(
                   _note?.analysis.boundary ?? '没有充分材料时，不把词语相似或同属一个分类画成外延交集。',
                   style: const TextStyle(height: 1.7),

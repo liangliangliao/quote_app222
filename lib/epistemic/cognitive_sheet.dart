@@ -9,6 +9,7 @@ import 'cognitive_mode.dart';
 import 'cognitive_evidence_view.dart';
 import 'cognitive_usage.dart';
 import 'concept_meaning_diagram.dart';
+import 'passage_scope_view.dart';
 import '../models/quote_insight.dart';
 
 Future<void> showCognitiveAnalysis(
@@ -262,6 +263,9 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                     ),
                   ],
                 ),
+                if (widget.task == CognitiveTask.concept && note != null && prefs.relations)
+                  PassageScopeView(text: widget.selection.text, scopes: note.analysis.scopes,
+                    abstractions: note.analysis.abstractions),
                 Card(
                   key: _originalKey,
                   child: Padding(
@@ -441,7 +445,7 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                   ],
                   ConceptAnalysisView(
                     abstractions: note.analysis.abstractions,
-                    scopes: note.analysis.scopes,
+                    scopes: widget.task == CognitiveTask.concept ? const [] : note.analysis.scopes,
                   ),
                   for (final example in note.analysis.examples)
                     _section(

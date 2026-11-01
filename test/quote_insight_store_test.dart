@@ -40,6 +40,25 @@ class _FakeAi extends UnifiedAiService {
     expect(prompt, contains(first.content));
     expect(prompt, contains(second.content));
     return jsonEncode({
+      'reading_a': {
+        'anchor': '坚持目标',
+        'abstractions': [
+          {
+            'term': '坚持目标',
+            'definition': '做法虽可调整，所追求的目标仍然相同',
+            'observed': '原句把目标与方法区分开',
+            'retained': '目标延续',
+            'omitted': '具体做法',
+            'member_example': '路线改变但仍去同一目的地',
+            'non_member': '更换了目的地'
+          }
+        ]
+      },
+      'reading_b': {
+        'anchor': '坚持原来的方法',
+        'missing_evidence': '缺少这次行动的具体条件',
+        'clarifying_question': '行动者是在坚持什么目标，以及哪种做法？'
+      },
       'common': '都希望持续行动',
       'critical_difference': '是否随新信息调整方法',
       'not_equivalent': '坚持目标不等于坚持方法',

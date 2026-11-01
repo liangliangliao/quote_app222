@@ -9,6 +9,8 @@ import 'cognitive_store.dart';
 import 'cognitive_models.dart';
 import 'cognitive_mode.dart';
 import 'quote_concept_catalog.dart';
+import 'reading_scope.dart';
+import 'concept_meaning_diagram.dart';
 import '../widgets/quote_history_avatar.dart';
 
 class QuoteConceptGroup {
@@ -28,9 +30,7 @@ List<QuoteConceptGroup> groupQuoteConcepts(
     final ref = QuoteReference.fromRow(row);
     final concepts = addons[ref.contentKey]?.concepts ?? [];
     final theme = (row['theme'] ?? '').toString().trim();
-    final labels = concepts.isNotEmpty
-        ? concepts.toSet()
-        : <String>{theme.isEmpty ? '未分类' : theme};
+    final labels = indexTerms(theme, concepts, ref.content);
     for (final label in labels) {
       grouped.putIfAbsent(label, () => []).add(row);
       if (concepts.isNotEmpty) explicit.add(label);
@@ -80,6 +80,7 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
   String? _selected;
   String _conceptSearch = '';
   int _conceptPage = 0;
+  bool _stars = false;
   String? _addonError;
   double _zoom = .60;
   int _generation = 0;
@@ -225,20 +226,25 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const Text(
-                  '概念关系 · 从共相到具体名言',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
+                if (prefs.relations)
+                  Wrap(spacing: 8, children: [
+                    ChoiceChip(
+                        label: const Text('概念含义圈'),
+                        selected: !_stars,
+                        onSelected: (_) => setState(() => _stars = false)),
+                    ChoiceChip(
+                        label: const Text('概念星图'),
+                        selected: _stars,
+                        onSelected: (_) => setState(() => _stars = true)),
+                  ]),
+                Text('已载入 ${widget.rows.length} 条名言。',
+                    style: const TextStyle(fontSize: 12)),
+                if (prefs.relations && !_stars)
+                  _RecordScopeView(
+                      groups: groups.where((g) => g.title != '未分类').toList(),
+                      onOpen: widget.onOpen),
+                if (_stars) const Text('连线表示同一条收录中的概念共现。'),
                 const SizedBox(height: 8),
-                Text(
-                  '已载入 ${widget.rows.length} 条名言。星图聚焦所选概念及相邻节点；连线仅表示概念共现，不证明因果或外延交集。',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xffbdcbd0),
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 10),
                 if (_addonError != null)
                   TextButton.icon(
                     onPressed: _load,
@@ -313,7 +319,7 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
                     ),
                   ],
                 ),
-                if (prefs.relations && selected != null) ...[
+                if (prefs.relations && _stars && selected != null) ...[
                   Row(
                     children: [
                       const Expanded(
@@ -403,10 +409,16 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
   Widget _graph(List<QuoteConceptGroup> available, QuoteConceptGroup selected) {
     // Focus one concept and at most six neighbours; all loaded concepts remain
     // reachable through the chips/search above. Do not shrink 24 labels to dots.
-    final groups = [
-      selected,
-      ...available.where((g) => g.title != selected.title),
-    ].take(7).toList();
+    final members = selected.rows.toSet();
+    final neighbours = available
+        .where((g) => g.title != selected.title)
+        .map((g) => (g, g.rows.where(members.contains).length))
+        .toList()
+      ..sort((a, b) {
+        final order = b.$2.compareTo(a.$2);
+        return order == 0 ? a.$1.title.compareTo(b.$1.title) : order;
+      });
+    final groups = [selected, ...neighbours.take(6).map((pair) => pair.$1)];
     double diameter(QuoteConceptGroup g) =>
         100 + 35 * math.sqrt(g.rows.length / widget.rows.length);
     final points = [
@@ -626,4 +638,136 @@ class _ConstellationPainter extends CustomPainter {
   @override
   bool shouldRepaint(_ConstellationPainter old) =>
       old.connections.toString() != connections.toString();
+}
+
+/// A finite domain makes membership inspectable, including disjoint sets.
+/// Never infer a universal philosophical relation from a local collection.
+class _RecordScopeView extends StatefulWidget {
+  final List<QuoteConceptGroup> groups;
+  final ValueChanged<Map<String, dynamic>> onOpen;
+  const _RecordScopeView({required this.groups, required this.onOpen});
+  @override
+  State<_RecordScopeView> createState() => _RecordScopeViewState();
+}
+
+class _RecordScopeViewState extends State<_RecordScopeView> {
+  String? left, right, region;
+  @override
+  Widget build(BuildContext context) {
+    final groups = widget.groups;
+    if (groups.isEmpty) return const Text('载入的名言还没有主题或概念标注。');
+    final a = groups.where((g) => g.title == left).firstOrNull ?? groups.first;
+    Widget members(List<Map<String, dynamic>> rows) => Column(children: [
+          for (final row in rows.take(3))
+            ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(QuoteReference.fromRow(row).content,
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => widget.onOpen(row)),
+          if (rows.length > 3)
+            ExpansionTile(title: Text('其余 ${rows.length - 3} 条收录'), children: [
+              for (final row in rows.skip(3))
+                ListTile(
+                    title: Text(QuoteReference.fromRow(row).content,
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    onTap: () => widget.onOpen(row))
+            ])
+        ]);
+    if (groups.length == 1)
+      return Card(
+          child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(children: [
+                const Text('已载入收录中的单一范围'),
+                CircleAvatar(
+                    radius: 56,
+                    child: Text(a.title, textAlign: TextAlign.center)),
+                Text('属于此分类的收录 · ${a.rows.length} 条'),
+                members(a.rows)
+              ])));
+    final aIds = a.rows.toSet();
+    final candidates = groups.where((g) => g != a).toList();
+    final b = candidates.where((g) => g.title == right).firstOrNull ??
+        candidates
+            .where((g) => g.rows.any((r) => aIds.contains(r)))
+            .firstOrNull ??
+        candidates.first;
+    final bIds = b.rows.toSet();
+    final shared = a.rows.where((r) => bIds.contains(r)).toList();
+    final onlyA = a.rows.where((r) => !bIds.contains(r)).toList();
+    final onlyB = b.rows.where((r) => !aIds.contains(r)).toList();
+    final relation = shared.isEmpty
+        ? QuoteRelation.disjoint
+        : onlyA.isEmpty && onlyB.isEmpty
+            ? QuoteRelation.equal
+            : onlyA.isEmpty
+                ? QuoteRelation.subset
+                : onlyB.isEmpty
+                    ? QuoteRelation.superset
+                    : QuoteRelation.overlap;
+    final regions = {'共同': shared, 'A': onlyA, 'B': onlyB};
+    final active = regions[region]?.isNotEmpty == true
+        ? region!
+        : shared.isNotEmpty
+            ? '共同'
+            : 'A';
+    Widget selector(String label, String value,
+            Iterable<QuoteConceptGroup> choices, ValueChanged<String> select) =>
+        Expanded(
+            child: DropdownButton<String>(
+                isExpanded: true,
+                value: value,
+                items: [
+                  for (final choice in choices)
+                    DropdownMenuItem(
+                        value: choice.title,
+                        child: Text('$label  ${choice.title}',
+                            overflow: TextOverflow.ellipsis))
+                ],
+                onChanged: (v) {
+                  if (v != null)
+                    setState(() {
+                      select(v);
+                      region = null;
+                    });
+                }));
+    return Theme(
+        data: ThemeData.light(useMaterial3: true).copyWith(
+            textTheme: ThemeData.light().textTheme.apply(
+                fontFamily:
+                    Theme.of(context).textTheme.bodyMedium?.fontFamily)),
+        child: Card(
+            color: const Color(0xfffcf7eb),
+            child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('收录范围',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('按本次载入记录的主题和概念标注归类。点图中的区域可以查阅成员名言。',
+                          style: TextStyle(fontSize: 12)),
+                      Row(children: [
+                        selector('A', a.title, groups, (v) => left = v),
+                        const SizedBox(width: 8),
+                        selector('B', b.title, candidates, (v) => right = v)
+                      ]),
+                      ConceptMeaningDiagram(
+                          key: ValueKey(
+                              [a.title, b.title, relation.name].join('|')),
+                          relation: relation,
+                          setA: a.title,
+                          setB: b.title,
+                          universe: '当前已载入的名言收录',
+                          onlyA: '仅归入「${a.title}」的 ${onlyA.length} 条收录',
+                          onlyB: '仅归入「${b.title}」的 ${onlyB.length} 条收录',
+                          intersection: '同时归入两个分类的 ${shared.length} 条收录',
+                          onRegion: (v) => setState(() => region = v)),
+                      const Divider(),
+                      Text('$active 区域的成员 · ${regions[active]!.length} 条'),
+                      members(regions[active]!),
+                    ]))));
+  }
 }

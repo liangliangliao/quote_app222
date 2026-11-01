@@ -4,6 +4,12 @@ import '../models/quote_insight.dart';
 import '../services/quote_comparison_service.dart';
 import '../epistemic/cognitive_preferences.dart';
 import '../epistemic/cognitive_mode.dart';
+import '../epistemic/cognitive_models.dart';
+import '../epistemic/cognitive_sheet.dart';
+import '../epistemic/cognitive_store.dart';
+import '../epistemic/passage_scope_view.dart';
+import '../epistemic/reading_scope.dart';
+import '../data/quote_insight_store.dart';
 import '../epistemic/concept_meaning_diagram.dart';
 
 Future<void> showQuoteComparison(
@@ -18,10 +24,10 @@ Future<void> showQuoteComparison(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        top: false,
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .85,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: .96,
+        child: SafeArea(
+          top: false,
           child: QuoteComparisonSheet(
             a: a,
             b: b,
@@ -58,12 +64,128 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
   final _conditions = TextEditingController();
   String _appliedConditions = '';
   int _tab = 0;
+  bool _left = true, _deferred = false;
+  final _readings = <String, CognitiveAnalysis>{};
+
+  Future<void> _start() async {
+    CognitivePreferenceStore.instance.load();
+    if (CognitivePreferenceStore.active) {
+      _loadReadings();
+      if (similarRecordWording(widget.a, widget.b)) {
+        setState(() {
+          _deferred = true;
+          _busy = false;
+        });
+        return;
+      }
+    }
+    await _compare();
+  }
+
+  String _subject(QuoteReference ref) {
+    final id = ref.id.isEmpty ? ref.contentKey : ref.id;
+    return widget.recordLabel == '概念' && id.startsWith('concept:')
+        ? id.substring(8)
+        : id;
+  }
+
+  String get _module => widget.recordLabel == '概念' ? 'concept' : 'quote';
+
+  Future<void> _loadReadings() async {
+    for (final ref in [widget.a, widget.b]) {
+      final id = _subject(ref);
+      try {
+        final addon = await QuoteInsightStore().readAddon(ref);
+        final base = CognitiveAnalysis.fromJson(addon.cognition, ref.content);
+        final notes = await CognitiveStore().forRecord(_module, id);
+        final note = notes
+            .where((n) =>
+                n.task == CognitiveTask.concept &&
+                n.selection.matches(ref.content) &&
+                (n.analysis.scopes.isNotEmpty ||
+                    n.analysis.abstractions.isNotEmpty))
+            .firstOrNull;
+        if (!mounted) return;
+        setState(() => _readings[ref.contentKey] = note?.analysis ?? base);
+      } catch (_) {/* Old records may have no locally stored analysis. */}
+    }
+  }
+
+  Future<void> _analyzeScope(QuoteReference ref) async {
+    await showCognitiveAnalysis(context,
+        task: CognitiveTask.concept,
+        selection: CognitiveSelection.fromText(
+            module: _module,
+            recordId: _subject(ref),
+            title: ref.author,
+            fullText: ref.content));
+    if (mounted) await _loadReadings();
+  }
+
+  Widget _passagePanel() {
+    final ref = _left ? widget.a : widget.b;
+    final reading = _left ? _result?.readingA : _result?.readingB;
+    final fresh = CognitiveAnalysis.fromJson(reading, ref.content);
+    final saved = _readings[ref.contentKey];
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      LayoutBuilder(builder: (context, bounds) {
+        final sideBySide = bounds.maxWidth >= 270 &&
+            MediaQuery.textScalerOf(context).scale(14) <= 22;
+        return Wrap(spacing: 8, runSpacing: 6, children: [
+          for (final isA in [true, false])
+            SizedBox(
+                width: sideBySide ? (bounds.maxWidth - 8) / 2 : bounds.maxWidth,
+                child: Semantics(
+                    selected: _left == isA,
+                    button: true,
+                    child: Material(
+                        color: _left == isA
+                            ? const Color(0xffefe2c8)
+                            : const Color(0xfffffcf6),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                                color: _left == isA
+                                    ? const Color(0xffa78345)
+                                    : const Color(0xffddd2bf))),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                            onTap: () => setState(() => _left = isA),
+                            child: Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(isA ? 'A 句中概念' : 'B 句中概念',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold)),
+                                      Text((isA ? widget.a : widget.b).content,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis),
+                                    ])))))),
+        ]);
+      }),
+      if (reading != null &&
+          insightText(reading, 'missing_evidence').isNotEmpty)
+        Text(
+            '待查条件　${insightText(reading, 'missing_evidence')}\n${insightText(reading, 'clarifying_question')}'),
+      PassageScopeView(
+          key: ValueKey(ref.contentKey),
+          text: ref.content,
+          scopes: fresh.scopes.isNotEmpty ? fresh.scopes : saved?.scopes ?? [],
+          abstractions: fresh.abstractions.isNotEmpty
+              ? fresh.abstractions
+              : saved?.abstractions ?? [],
+          onAnalyze: () => _analyzeScope(ref)),
+    ]);
+  }
 
   @override
   void initState() {
     super.initState();
-    CognitivePreferenceStore.instance.load();
-    _compare();
+    _start();
   }
 
   @override
@@ -75,6 +197,7 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
   Future<void> _compare() async {
     setState(() {
       _busy = true;
+      _deferred = false;
       _message = null;
       _result = null;
       _appliedConditions = _conditions.text.trim();
@@ -87,6 +210,8 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
         _appliedConditions,
       );
       if (mounted) setState(() => _result = result);
+    } on FormatException catch (error) {
+      if (mounted) setState(() => _message = error.message);
     } catch (_) {
       if (mounted)
         setState(() => _message = '暂时无法比较。请检查网络和全局 AI 设置后重试；原句仍可阅读。');
@@ -193,26 +318,33 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
                   _quoteCard('A', widget.a),
                   _quoteCard('B', widget.b),
                 ] else ...[
-                  LayoutBuilder(
-                    builder: (context, box) => box.maxWidth < 340
-                        ? Column(
-                            children: [
-                              _quoteCard('A', widget.a),
-                              _quoteCard('B', widget.b),
-                            ],
-                          )
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: _quoteCard('A', widget.a)),
-                              const Padding(
-                                padding: EdgeInsets.all(4),
-                                child: Text('⇄'),
-                              ),
-                              Expanded(child: _quoteCard('B', widget.b)),
-                            ],
-                          ),
-                  ),
+                  if (similarRecordWording(widget.a, widget.b))
+                    const ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.library_books_outlined),
+                        title: Text('疑似同段引文'),
+                        subtitle: Text('两条收录有较长的相同措辞，可展开核对节选和译文差异。')),
+                  if (prefs.relations)
+                    if (_result?.canDrawSets == true)
+                      QuoteRelationView(result: _result!)
+                    else
+                      _passagePanel(),
+                  if (_deferred)
+                    OutlinedButton(
+                        onPressed: _compare, child: const Text('继续比较两种表述')),
+                  ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      expansionAnimationStyle: cognitiveExpansionStyle(context),
+                      title: const Text('核对 A、B 原文与出处'),
+                      subtitle: Text(
+                          'A　${widget.a.content}\nB　${widget.b.content}'
+                              .replaceAll(RegExp(r'\s+'), ' '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      children: [
+                        _quoteCard('A', widget.a),
+                        _quoteCard('B', widget.b)
+                      ]),
                   const Text('判断目的',
                       style: TextStyle(fontWeight: FontWeight.w600)),
                   Wrap(
@@ -271,14 +403,15 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Text(_message!),
                   ),
-                if (!_busy && _result == null)
+                if (!_busy && !_deferred && _result == null)
                   OutlinedButton.icon(
                     onPressed: _compare,
                     icon: const Icon(Icons.refresh),
                     label: const Text('重新比较'),
                   ),
                 if (_result case final result?) ...[
-                  if (!CognitivePreferenceStore.active || prefs.relations)
+                  if (!CognitivePreferenceStore.active ||
+                      (prefs.relations && !result.canDrawSets))
                     QuoteRelationView(result: result),
                   const SizedBox(height: 14),
                   const Text(
@@ -400,7 +533,7 @@ class QuoteRelationView extends StatelessWidget {
           '${forward ? 'B（判断）← A（所引依据）' : 'A（判断）← B（所引依据）'}\n这是对论证的理解；作者声望不能代替证据。';
     } else {
       text =
-          '${relation == QuoteRelation.contrast ? '并列对照' : '并列对照 · ${result.relationLabel}'}\n通过上面的共同点与差异理解两句名言；外延或方向尚不能可靠确定时，不绘制圆圈或箭头。';
+          '${relation == QuoteRelation.contrast ? '并列对照' : '并列对照 · ${result.relationLabel}'}\n${result.common}\n\n关键差异　${result.difference}';
     }
     return Card(
       key: const ValueKey('quote-relation-cards'),

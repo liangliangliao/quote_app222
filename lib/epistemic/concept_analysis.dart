@@ -2,7 +2,14 @@ import '../models/quote_insight.dart';
 
 /// Optional additions. Legacy notes remain readable without these fields.
 class ConceptAbstraction {
-  final String term, definition, observed, retained, omitted, counterExample;
+  final String term,
+      definition,
+      observed,
+      retained,
+      omitted,
+      counterExample,
+      memberExample,
+      nonMember;
   const ConceptAbstraction({
     required this.term,
     required this.definition,
@@ -10,6 +17,8 @@ class ConceptAbstraction {
     required this.retained,
     required this.omitted,
     required this.counterExample,
+    this.memberExample = '',
+    this.nonMember = '',
   });
 
   static List<ConceptAbstraction> parse(dynamic raw) => [
@@ -17,6 +26,9 @@ class ConceptAbstraction {
           if (insightText(insightObject(value), 'term').isNotEmpty &&
               insightText(insightObject(value), 'definition').isNotEmpty)
             ConceptAbstraction(
+              memberExample:
+                  insightText(insightObject(value), 'member_example'),
+              nonMember: insightText(insightObject(value), 'non_member'),
               term: insightText(insightObject(value), 'term'),
               definition: insightText(insightObject(value), 'definition'),
               observed: insightText(insightObject(value), 'observed'),
@@ -28,6 +40,8 @@ class ConceptAbstraction {
       ];
   Map<String, dynamic> toJson() => {
         'term': term,
+        'member_example': memberExample,
+        'non_member': nonMember,
         'definition': definition,
         'observed': observed,
         'retained': retained,
@@ -50,7 +64,8 @@ class ConceptScope {
       justification,
       intersection,
       onlyA,
-      onlyB;
+      onlyB,
+      otherMember;
   final bool illustration;
   const ConceptScope({
     required this.relation,
@@ -64,6 +79,7 @@ class ConceptScope {
     this.intersection = '',
     this.onlyA = '',
     this.onlyB = '',
+    this.otherMember = '',
     this.illustration = false,
   });
 
@@ -107,6 +123,7 @@ class ConceptScope {
       intersection: insightText(m, 'intersection'),
       onlyA: insightText(m, 'only_a'),
       onlyB: insightText(m, 'only_b'),
+      otherMember: insightText(m, 'other_member'),
       illustration: simulated,
     );
   }
@@ -124,6 +141,7 @@ class ConceptScope {
         'intersection': intersection,
         'only_a': onlyA,
         'only_b': onlyB,
+        if (otherMember.isNotEmpty) 'other_member': otherMember,
         'illustration': illustration,
       };
 }

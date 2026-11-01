@@ -16,6 +16,7 @@ import 'concept_explorer.dart';
 import 'cognitive_usage.dart';
 import 'concept_meaning_diagram.dart';
 import 'quote_intuitive_gallery.dart';
+import 'passage_scope_view.dart';
 
 class QuoteCognitiveReader extends StatefulWidget {
   final QuoteReference quote;
@@ -153,6 +154,15 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
           final detail = _conceptNote?.analysis ??
               CognitiveAnalysis.fromJson(
                   _addon.cognition, widget.quote.content);
+          final saved = CognitiveAnalysis.fromJson(
+              _addon.cognition, widget.quote.content);
+          final scopePanel = PassageScopeView(
+              text: widget.quote.content,
+              scopes: detail.scopes.isNotEmpty ? detail.scopes : saved.scopes,
+              abstractions: detail.abstractions.isNotEmpty
+                  ? detail.abstractions
+                  : saved.abstractions,
+              onAnalyze: _expandConcept);
           final concepts = _conceptNote?.analysis.concepts.isNotEmpty == true
               ? _conceptNote!.analysis.concepts
               : _addon.concepts;
@@ -180,23 +190,54 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                Text(widget.quote.content, style: quoteStyle),
+                if (enabled && widget.quote.content.runes.length > 48)
+                  ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text(widget.quote.content,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: quoteStyle.copyWith(fontSize: 17)),
+                      subtitle: const Text('展开引文'),
+                      children: [
+                        SelectableText(widget.quote.content, style: quoteStyle)
+                      ])
+                else
+                  Text(widget.quote.content, style: quoteStyle),
                 if (widget.authorLabel.trim().isNotEmpty) ...[
                   const SizedBox(height: 18),
                   QuoteAuthorSignature(
-                    widget.authorLabel,
+                    enabled
+                        ? (widget.quote.author.isNotEmpty
+                                ? widget.quote.author
+                                : widget.authorLabel)
+                            .split('《')
+                            .first
+                            .trim()
+                        : widget.authorLabel,
                     textAlign: TextAlign.right,
                     style: const TextStyle(fontSize: 15, height: 1.5),
                   ),
                 ],
                 if (enabled) ...[
-                  const SizedBox(height: 20),
+                  if (widget.quote.source.isNotEmpty &&
+                      widget.quote.source != '出处待考')
+                    ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        title: const Text('出处与译文说明',
+                            style: TextStyle(fontSize: 13)),
+                        children: [SelectableText(widget.quote.source)]),
+                  const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
                     runSpacing: 4,
                     children: [
                       for (final tab in ['直观', '概念', '比较', '判断', '应用'].indexed)
                         ChoiceChip(
+                          showCheckmark: false,
+                          visualDensity: VisualDensity.compact,
+                          labelPadding:
+                              const EdgeInsets.symmetric(horizontal: 3),
                           selectedColor: const Color(0xffe9d8b9),
                           backgroundColor: const Color(0xfffffcf6),
                           side: const BorderSide(color: Color(0xffded4c5)),
@@ -217,6 +258,7 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                         ),
                     ],
                   ),
+                  if (prefs.relations && (_tab == 0 || _tab == 1)) scopePanel,
                   if (_tab == 0) ...[
                     QuoteIntuitiveGallery(
                       topic: widget.topic,
@@ -255,7 +297,7 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                         detail.scopes.isNotEmpty)
                       ConceptAnalysisView(
                         abstractions: detail.abstractions,
-                        scopes: detail.scopes,
+                        scopes: const [],
                       ),
                     QuoteVisualExplanation(
                       key: ValueKey('visual-explanation-$_artRevision'),
@@ -268,7 +310,7 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                         detail.scopes.isNotEmpty)
                       ConceptAnalysisView(
                         abstractions: detail.abstractions,
-                        scopes: detail.scopes,
+                        scopes: const [],
                       ),
                     _block(
                       '从经验到概念',

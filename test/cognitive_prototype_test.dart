@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/epistemic/concept_analysis.dart';
+import 'package:quote_app/epistemic/reading_scope.dart';
 import 'package:quote_app/epistemic/concept_meaning_diagram.dart';
 import 'package:quote_app/epistemic/cognitive_models.dart';
 import 'package:quote_app/epistemic/cognitive_service.dart';
@@ -80,6 +81,22 @@ void main() {
         ConceptScope.parse({...scope(), 'illustration': false}, '感恩也可以伴随问题解决'),
         isNotNull);
     expect(ConceptScope.parse(scope(), '')!.illustration, isTrue);
+  });
+
+  test('offline readings use wording rather than broad topic matches', () {
+    for (final text in [
+      'When we appreciate the good, the good appreciates.',
+      '幸福是朝着山顶攀登的体验。'
+    ]) {
+      final scope = passageScope(text)!;
+      expect(scope.relation, QuoteRelation.overlap);
+      expect(scope.intersection, isNotEmpty);
+      expect(scope.onlyA, isNotEmpty);
+      expect(scope.onlyB, isNotEmpty);
+      expect(scope.illustration, isTrue);
+    }
+    expect(passageScope('请注意，我不同意这项经验总结。'), isNull);
+    expect(passageScope('花蕾、花朵和果实是本次展览的三个主题。'), isNull);
   });
 
   test('final JSON contracts include the fields enforced by depth validation',

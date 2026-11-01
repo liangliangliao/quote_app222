@@ -48,6 +48,25 @@ class _DeliveryAi extends UnifiedAiService {
   }) async {
     calls++;
     return jsonEncode({
+      'reading_a': {
+        'anchor': '坚持目标',
+        'abstractions': [
+          {
+            'term': '坚持目标',
+            'definition': '做法虽可调整，所追求的目标仍然相同',
+            'observed': '原句把目标与方法区分开',
+            'retained': '目标延续',
+            'omitted': '具体做法',
+            'member_example': '路线改变但仍去同一目的地',
+            'non_member': '更换了目的地'
+          }
+        ]
+      },
+      'reading_b': {
+        'anchor': '继续努力',
+        'missing_evidence': '缺少这次行动的具体条件',
+        'clarifying_question': '行动者是在坚持什么目标，以及哪种做法？'
+      },
       'common': '两句都关注面对困难时如何持续行动。',
       'critical_difference': '第一句允许根据新信息调整方法；第二句仍需辨明坚持的是目标还是方法。',
       'not_equivalent': '保持目标与重复同一种方法不能直接等同。',

@@ -9,7 +9,8 @@ import 'cognitive_mode.dart';
 /// Labels stay in normal Flutter widgets (text scaling / screen readers).
 class ConceptMeaningDiagram extends StatefulWidget {
   final QuoteRelation relation;
-  final String setA, setB, intersection, onlyA, onlyB, universe;
+  final String setA, setB, intersection, onlyA, onlyB, universe, otherMember;
+  final ValueChanged<String>? onRegion;
   const ConceptMeaningDiagram({
     super.key,
     required this.relation,
@@ -18,7 +19,9 @@ class ConceptMeaningDiagram extends StatefulWidget {
     this.intersection = '',
     this.onlyA = '',
     this.onlyB = '',
+    this.otherMember = '',
     this.universe = '',
+    this.onRegion,
   });
   @override
   State<ConceptMeaningDiagram> createState() => _ConceptMeaningDiagramState();
@@ -26,6 +29,20 @@ class ConceptMeaningDiagram extends StatefulWidget {
 
 class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
   String? _region;
+  void _select(String region) {
+    setState(() => _region = region);
+    widget.onRegion?.call(region);
+  }
+
+  @override
+  void didUpdateWidget(ConceptMeaningDiagram old) {
+    super.didUpdateWidget(old);
+    if (old.setA != widget.setA ||
+        old.setB != widget.setB ||
+        old.relation != widget.relation ||
+        old.universe != widget.universe) _region = null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final overlap = widget.relation == QuoteRelation.overlap;
@@ -50,24 +67,33 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
-        Text('A：${widget.setA}\nB：${widget.setB}',
-            style: const TextStyle(height: 1.6)),
         if (widget.universe.isNotEmpty)
           Text('论域：${widget.universe}', style: const TextStyle(fontSize: 12)),
         Semantics(
           label: '概念外延关系。A：${widget.setA}。B：${widget.setB}。$label。',
           child: ExcludeSemantics(
-            child: SizedBox(
-              height: 190,
-              child: CustomPaint(
-                key: const ValueKey('quote-set-diagram'),
-                painter: _MeaningPainter(
-                    widget.relation,
-                    Theme.of(context).textTheme.bodyMedium?.fontFamily,
-                    widget.setA,
-                    widget.setB),
-              ),
-            ),
+            child: LayoutBuilder(builder: (context, box) {
+              final size = Size(box.maxWidth, 190);
+              final geometry = _CircleMap(size, widget.relation);
+              return GestureDetector(
+                onTapUp: (tap) {
+                  final region = geometry.regionAt(tap.localPosition);
+                  if (region != null) _select(region);
+                },
+                child: SizedBox(
+                    width: size.width,
+                    height: size.height,
+                    child: CustomPaint(
+                      key: const ValueKey('quote-set-diagram'),
+                      painter: _MeaningPainter(
+                          widget.relation,
+                          Theme.of(context).textTheme.bodyMedium?.fontFamily,
+                          widget.setA,
+                          widget.setB,
+                          _region),
+                    )),
+              );
+            }),
           ),
         ),
         Wrap(
@@ -75,7 +101,7 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
           runSpacing: 8,
           children: [
             if (!subset && !equal)
-              _chip('A', 'A 独有范围', const Color(0xff966b32), widget.onlyA),
+              _chip('A', 'A 独有范围', const Color(0xff966b32)),
             if (overlap || nested || equal)
               _chip(
                   '共同',
@@ -86,16 +112,18 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
                           : superset
                               ? 'B 的全部范围'
                               : '共同范围',
-                  const Color(0xff596d87),
-                  widget.intersection),
+                  const Color(0xff596d87)),
+            if (widget.relation == QuoteRelation.siblings)
+              _chip('其余', '上位圈其余范围', const Color(0xff71614d)),
             if (!superset && !equal)
-              _chip('B', 'B 独有范围', const Color(0xff426e91), widget.onlyB),
+              _chip('B', 'B 独有范围', const Color(0xff426e91)),
           ],
         ),
         if (_region != null)
           Padding(
             padding: const EdgeInsets.only(top: 10),
-            child: Text(_region!, style: const TextStyle(height: 1.6)),
+            child: Text('$_region：${_detail(_region!)}',
+                style: const TextStyle(height: 1.6)),
           ),
         const Padding(
           padding: EdgeInsets.only(top: 8),
@@ -108,49 +136,100 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
     );
   }
 
-  Widget _chip(String region, String label, Color color, String detail) =>
-      ActionChip(
+  Widget _chip(String region, String label, Color color) => ActionChip(
         avatar: CircleAvatar(
           backgroundColor: color.withAlpha(35),
-          child: Text(region == '共同' ? '∩' : region,
+          child: Text(
+              region == '共同'
+                  ? '∩'
+                  : region == '其余'
+                      ? '○'
+                      : region,
               style: TextStyle(fontSize: 12, color: color)),
         ),
         label: Text(label),
-        onPressed: () => setState(() {
-          _region = detail.isEmpty
-              ? '$region：$label。成员实例尚未补充，不能据图推断具体个案。'
-              : '$region：$detail';
-        }),
+        onPressed: () => _select(region),
       );
+
+  String _detail(String region) {
+    if (region == '其余')
+      return widget.otherMember.isNotEmpty
+          ? widget.otherMember
+          : '仍属于「${widget.universe}」且不满足 A、B 两项判准的成员。';
+    final value = region == 'A'
+        ? widget.onlyA
+        : region == 'B'
+            ? widget.onlyB
+            : widget.intersection;
+    return value.isEmpty ? '这个区域尚待补充具体成员。' : value;
+  }
+}
+
+class _CircleMap {
+  final Size size;
+  final QuoteRelation relation;
+  _CircleMap(this.size, this.relation);
+  double get r => math.min(size.width / 4.5, 82.0);
+  Offset get center => Offset(size.width / 2, size.height / 2);
+  bool get nested =>
+      relation == QuoteRelation.subset || relation == QuoteRelation.superset;
+  double get displacement => switch (relation) {
+        QuoteRelation.equal ||
+        QuoteRelation.subset ||
+        QuoteRelation.superset =>
+          0,
+        QuoteRelation.siblings => .48,
+        QuoteRelation.partition => .5,
+        QuoteRelation.disjoint => 1.13,
+        _ => .58,
+      };
+  Offset get a => center.translate(-r * displacement, 0);
+  Offset get b => center.translate(r * displacement, 0);
+  double get ra =>
+      r *
+      (relation == QuoteRelation.siblings
+          ? .39
+          : relation == QuoteRelation.subset
+              ? .52
+              : 1);
+  double get rb =>
+      r *
+      (relation == QuoteRelation.siblings
+          ? .39
+          : relation == QuoteRelation.superset
+              ? .52
+              : 1);
+  String? regionAt(Offset point) {
+    if (relation == QuoteRelation.partition) {
+      if ((center - point).distance > r * 1.08) return null;
+      return point.dx < center.dx ? 'A' : 'B';
+    }
+    final inA = (point - a).distance <= ra, inB = (point - b).distance <= rb;
+    if (!inA &&
+        !inB &&
+        relation == QuoteRelation.siblings &&
+        (point - center).distance <= r * 1.08) return '其余';
+    return inA && inB
+        ? '共同'
+        : inA
+            ? 'A'
+            : inB
+                ? 'B'
+                : null;
+  }
 }
 
 class _MeaningPainter extends CustomPainter {
   final QuoteRelation relation;
-  final String? fontFamily;
+  final String? fontFamily, selected;
   final String setA, setB;
-  const _MeaningPainter(this.relation, this.fontFamily, this.setA, this.setB);
+  const _MeaningPainter(
+      this.relation, this.fontFamily, this.setA, this.setB, this.selected);
   @override
   void paint(Canvas canvas, Size size) {
-    final r = math.min(size.width / 4.5, 82.0);
-    final center = Offset(size.width / 2, size.height / 2);
-    var a = center.translate(-r * .58, 0), b = center.translate(r * .58, 0);
-    var ra = r, rb = r;
-    if (relation == QuoteRelation.equal) {
-      a = center;
-      b = center;
-    } else if (relation == QuoteRelation.disjoint) {
-      a = center.translate(-r * 1.13, 0);
-      b = center.translate(r * 1.13, 0);
-    } else if (relation == QuoteRelation.subset ||
-        relation == QuoteRelation.superset) {
-      a = center;
-      b = center;
-      if (relation == QuoteRelation.subset) {
-        ra *= .52;
-      } else {
-        rb *= .52;
-      }
-    }
+    final map = _CircleMap(size, relation);
+    final r = map.r, center = map.center;
+    final a = map.a, b = map.b, ra = map.ra, rb = map.rb;
     void circle(Offset c, double radius, Color color) {
       canvas.drawCircle(
         c,
@@ -174,12 +253,7 @@ class _MeaningPainter extends CustomPainter {
         relation == QuoteRelation.partition;
     if (parent) {
       circle(center, r * 1.08, const Color(0xffb3ab9e));
-      if (relation == QuoteRelation.siblings) {
-        a = center.translate(-r * .48, 0);
-        b = center.translate(r * .48, 0);
-        ra = r * .39;
-        rb = r * .39;
-      } else {
+      if (relation == QuoteRelation.partition) {
         final rect = Rect.fromCircle(center: center, radius: r * 1.08);
         canvas.drawArc(rect, math.pi / 2, math.pi, true,
             Paint()..color = const Color(0xffefbb68).withAlpha(80));
@@ -189,8 +263,6 @@ class _MeaningPainter extends CustomPainter {
             center.translate(0, -r * 1.08),
             center.translate(0, r * 1.08),
             Paint()..color = const Color(0xffa39785));
-        a = center.translate(-r * .5, 0);
-        b = center.translate(r * .5, 0);
       }
     }
     if (relation == QuoteRelation.partition) {
@@ -201,6 +273,34 @@ class _MeaningPainter extends CustomPainter {
     } else {
       circle(a, ra, const Color(0xffefbb68));
       circle(b, rb, const Color(0xff7fb0d5));
+    }
+    if (selected != null) {
+      final enclosing = Path()
+        ..addOval(Rect.fromCircle(center: center, radius: r * 1.08));
+      final left = Path()..addOval(Rect.fromCircle(center: a, radius: ra));
+      final right = Path()..addOval(Rect.fromCircle(center: b, radius: rb));
+      final Path active;
+      if (relation == QuoteRelation.partition) {
+        final half = Path()
+          ..addRect(Rect.fromLTRB(selected == 'A' ? 0 : center.dx, 0,
+              selected == 'A' ? center.dx : size.width, size.height));
+        active = Path.combine(PathOperation.intersect, enclosing, half);
+      } else {
+        active = switch (selected) {
+          '共同' => Path.combine(PathOperation.intersect, left, right),
+          'A' => Path.combine(PathOperation.difference, left, right),
+          'B' => Path.combine(PathOperation.difference, right, left),
+          _ => Path.combine(PathOperation.difference, enclosing,
+              Path.combine(PathOperation.union, left, right)),
+        };
+      }
+      canvas.drawPath(active, Paint()..color = const Color(0x285c4d78));
+      canvas.drawPath(
+          active,
+          Paint()
+            ..color = const Color(0xff716284)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.0);
     }
     void label(String text, Offset offset, {double? maxWidth}) {
       final painter = TextPainter(
@@ -228,7 +328,8 @@ class _MeaningPainter extends CustomPainter {
       label('$setA = $setB', center, maxWidth: r * 1.5);
     } else if (ra != rb) {
       label(ra < rb ? setA : setB, center);
-      label(ra < rb ? setB : setA, center.translate(0, -r * .78));
+      label(ra < rb ? setB : setA, center.translate(0, -r * .75),
+          maxWidth: r * 1.55);
     } else {
       final shift = parent ? 0.0 : r * .3;
       label(setA, a.translate(-shift, 0), maxWidth: r * .78);
@@ -241,6 +342,7 @@ class _MeaningPainter extends CustomPainter {
   @override
   bool shouldRepaint(_MeaningPainter old) =>
       old.relation != relation ||
+      old.selected != selected ||
       old.fontFamily != fontFamily ||
       old.setA != setA ||
       old.setB != setB;
@@ -313,6 +415,7 @@ class ConceptAnalysisView extends StatelessWidget {
                         setA: scope.setA,
                         setB: scope.setB,
                         intersection: scope.intersection,
+                        otherMember: scope.otherMember,
                         onlyA: scope.onlyA,
                         onlyB: scope.onlyB,
                         universe: scope.universe,

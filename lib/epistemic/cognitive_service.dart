@@ -6,7 +6,7 @@ import 'cognitive_store.dart';
 import 'schopenhauer_guidance.dart';
 
 class CognitiveService {
-  static const promptVersion = 3;
+  static const promptVersion = 4;
   static const maxReviewCharacters = 12000;
   final UnifiedAiService ai;
   final CognitiveStore store;
@@ -197,7 +197,7 @@ evidence_refs 只引用 selected_text 中逐字存在的短摘录，说明它支
 abstractions:[{term,definition,observed,retained,omitted,counter_example}]：围绕本次材料的2–4个关键概念，给出含义、可观察材料、保留的共同规定、省略的个别细节、非成员/反例。不同层级不混作同义词；原文没有的观察明确是模拟。
 concept_scopes:[{relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,illustration}]：仅在同一论域可定义成员资格时返回。relation_type只允许equal/partition/siblings/overlap/subset/superset/disjoint；equal为外延重合，partition为A/B互斥且穷尽论域，siblings为互斥但未穷尽共同上位范围；subset表示A包含于B；superset表示A包含B。basis须逐字引用选文。若为帮助理解而构造的分类示意必须illustration:true，解释该关系是定义下的模拟模型，不声称原文已经证明。交集/独有区域各写具体成员例子，排斥/包含时不虚构不存在区域。无法恰当定义时返回空数组，并在boundary解释应使用何种对照。
 summary直接回应用户本次问题；common与difference要明确比较对象；difference说清差异为什么影响这个目的下的判断；basis把具体引用、推理环节与尚缺前提区分；questions给出能区分替代解释的实际观察。diary的lenses逐项区分已有信息/假设/需要补充的材料。
-返回：{"abstractions":[{"term":"当前关键概念","definition":"含义与成员判准","observed":"输入中的具体材料或明确标记的模拟","retained":"保留的共同规定","omitted":"省略的个别条件","counter_example":"不属于该概念的具体反例"}],"concept_scopes":[],"summary":"一种暂定理解","concepts":["抽象概念"],"common":"共同规定","difference":"关键差异","boundary":"条件与局限","counter_example":"可能反例或未知","basis":"与选文具体词语的对应，不替代外部核对","unknown":"尚不能确定什么","questions":["可检验的问题"],"evidence_refs":[{"excerpt":"逐字摘自选文的依据","explanation":"只支持到哪一步"}],"examples":[{"situation":"模拟情境","connection":"对应的概念","boundary":"遗漏或失效条件"}],"spans":[{"text":"逐字摘自选文","kind":"reported_event/feeling/interpretation/judgment/evidence/prediction/unresolved","reason":"分类是暂定理解"}],"lenses":{"time":"时间信息或未知","space":"处境或未知","cause":"可能条件与其他解释","evidence":"所依据的选文","motive":"明确表达的意愿或未知"}}
+返回：{"abstractions":[{"term":"当前关键概念","definition":"含义与成员判准","member_example":"满足判准的具体实例及理由","non_member":"不满足判准的近似实例及理由","observed":"输入中的具体材料或明确标记的模拟","retained":"保留的共同规定","omitted":"省略的个别条件","counter_example":"不属于该概念的具体反例"}],"concept_scopes":[],"summary":"一种暂定理解","concepts":["抽象概念"],"common":"共同规定","difference":"关键差异","boundary":"条件与局限","counter_example":"可能反例或未知","basis":"与选文具体词语的对应，不替代外部核对","unknown":"尚不能确定什么","questions":["可检验的问题"],"evidence_refs":[{"excerpt":"逐字摘自选文的依据","explanation":"只支持到哪一步"}],"examples":[{"situation":"模拟情境","connection":"对应的概念","boundary":"遗漏或失效条件"}],"spans":[{"text":"逐字摘自选文","kind":"reported_event/feeling/interpretation/judgment/evidence/prediction/unresolved","reason":"分类是暂定理解"}],"lenses":{"time":"时间信息或未知","space":"处境或未知","cause":"可能条件与其他解释","evidence":"所依据的选文","motive":"明确表达的意愿或未知"}}
 ''';
   }
 
