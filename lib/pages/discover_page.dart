@@ -57,7 +57,6 @@ import '../zhaojian_host/zhaojian_host_page.dart';
 import '../evidence_growth/evidence_growth_discover_entry.dart';
 import '../evidence_growth/evidence_growth_home_page.dart';
 import '../self_os/self_os_discover_entry.dart';
-import '../epistemic/cognitive_training.dart';
 import '../epistemic/cognitive_scope_hint.dart';
 import '../epistemic/cognitive_mode.dart';
 import '../epistemic/cognitive_models.dart';
@@ -2596,7 +2595,6 @@ Widget _buildEmotionPieChart() {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   children: [
-                    const CognitiveTrainingPanel(),
                     _buildDiscoverEntry(
                       icon: Icons.insights_outlined,
                       title: '当下心情与情绪分析',

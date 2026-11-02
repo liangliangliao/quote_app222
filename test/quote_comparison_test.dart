@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:quote_app/epistemic/semantic_scope.dart';
+import 'semantic_scope_test.dart' show unresolvedMap;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/models/quote_insight.dart';
 import 'package:quote_app/services/quote_comparison_service.dart';
@@ -46,6 +48,57 @@ void main() {
         QuoteComparisonService.parseResponse(jsonEncode(reliable), a, b)
             .canDrawSets,
         isFalse);
+  });
+
+  test('per-passage concepts survive caching only with their own extract', () {
+    final valid = {
+      'anchor': '每个学者',
+      'abstractions': [
+        {'term': '学者', 'definition': '从事研究的人'}
+      ]
+    };
+    final data = response()..addAll({'reading_a': valid, 'reading_b': valid});
+    final result = QuoteComparisonService.parseResponse(jsonEncode(data), a, b);
+    expect(result.readingA, valid);
+    expect(result.readingB, isEmpty);
+    final restored =
+        QuoteComparisonService.parseResponse(jsonEncode(result.toJson()), a, b);
+    expect(restored.readingA, valid);
+    expect(restored.canDrawSets, isFalse);
+  });
+
+  test('new comparisons reject shallow results and cross-passage evidence', () {
+    final data = response()
+      ..addAll({
+        'semantic_map': unresolvedMap(
+            [ScopeSource('A', a.content), ScopeSource('B', b.content)]),
+        'reading_a': {
+          'anchor': '每个学者',
+          'missing_evidence': '学者的定义',
+          'clarifying_question': '以职业还是活动为准？'
+        },
+        'reading_b': {
+          'anchor': '学习者',
+          'abstractions': [
+            {'term': '学习者', 'definition': '从事学习的人'}
+          ]
+        }
+      });
+    expect(
+        () => QuoteComparisonService.parseResponse(jsonEncode(data), a, b,
+            requireReadings: true),
+        throwsFormatException);
+    data['reading_b'] = {...data['reading_a'] as Map, 'anchor': '每个学者'};
+    expect(
+        () => QuoteComparisonService.parseResponse(jsonEncode(data), a, b,
+            requireReadings: true),
+        throwsFormatException);
+    data['reading_b']['anchor'] = '学习者';
+    expect(
+        QuoteComparisonService.parseResponse(jsonEncode(data), a, b,
+                requireReadings: true)
+            .readingB['missing_evidence'],
+        isNotEmpty);
   });
 
   test('causal and evidence relations never become circles', () {

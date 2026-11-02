@@ -38,7 +38,8 @@ class MovieCardItem extends StatefulWidget {
 
 class _MovieCardItemState extends State<MovieCardItem> {
   final MovieAnalysisService _analysisService = MovieAnalysisService();
-  final MovieExternalWatchService _externalWatchService = const MovieExternalWatchService();
+  final MovieExternalWatchService _externalWatchService =
+      const MovieExternalWatchService();
   bool _overviewOverflow = false;
   bool _analyzing = false;
 
@@ -84,48 +85,84 @@ class _MovieCardItemState extends State<MovieCardItem> {
     bool allowReanalyze = false,
   }) async {
     if (!mounted) return;
-    await showDialog<void>(
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title.isEmpty ? '电影深度分析' : '《$title》深度分析'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (saved) ...[
-                  Text(
-                    savedAt == null || savedAt.isEmpty ? '本地已保存最近一次分析结果' : '本地已保存最近一次分析结果：$savedAt',
-                    style: const TextStyle(fontSize: 12, color: Colors.black54, height: 1.4),
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: const Color(0xfffaf6ee),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: SizedBox(
+          height: MediaQuery.sizeOf(ctx).height * .9,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title.isEmpty ? '电影深度分析' : '《$title》深度分析',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭分析',
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (saved)
+                        Text(
+                          savedAt == null || savedAt.isEmpty
+                              ? '本地已保存最近一次分析结果'
+                              : '本地已保存最近一次分析结果：$savedAt',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      MovieCognitionView(text: text),
+                    ],
                   ),
-                  const SizedBox(height: 10),
-                ],
-                MovieCognitionView(text: text),
-              ],
-            ),
+                ),
+              ),
+              if (allowReanalyze)
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _runMovieAnalysis(title, forceReanalyze: true);
+                    },
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('按新方法重新分析并覆盖'),
+                  ),
+                ),
+            ],
           ),
         ),
-        actions: [
-          if (allowReanalyze)
-            TextButton.icon(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                _runMovieAnalysis(title, forceReanalyze: true);
-              },
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('重新分析并覆盖'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
       ),
     );
   }
 
-  Future<void> _runMovieAnalysis(String title, {bool forceReanalyze = false}) async {
+  Future<void> _runMovieAnalysis(
+    String title, {
+    bool forceReanalyze = false,
+  }) async {
     if (_analyzing) return;
     if (!forceReanalyze) {
       try {
@@ -137,7 +174,9 @@ class _MovieCardItemState extends State<MovieCardItem> {
             title: title,
             text: savedText,
             saved: true,
-            savedAt: _formatSavedAt(saved?['updated_at'] ?? saved?['created_at']),
+            savedAt: _formatSavedAt(
+              saved?['updated_at'] ?? saved?['created_at'],
+            ),
             allowReanalyze: true,
           );
           return;
@@ -170,7 +209,6 @@ class _MovieCardItemState extends State<MovieCardItem> {
       if (mounted) setState(() => _analyzing = false);
     }
   }
-
 
   Future<void> _openExternalSite({
     required MovieExternalWatchSite site,
@@ -221,8 +259,8 @@ class _MovieCardItemState extends State<MovieCardItem> {
                       Text(
                         '外部网站搜索观看入口',
                         style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -265,14 +303,19 @@ class _MovieCardItemState extends State<MovieCardItem> {
   Widget build(BuildContext context) {
     final movie = widget.movie;
     final title = (movie['title'] ?? movie['name'] ?? '').toString();
-    final originalTitle = (movie['original_title'] ?? movie['original_name'] ?? '').toString();
+    final originalTitle =
+        (movie['original_title'] ?? movie['original_name'] ?? '').toString();
     final overview = (movie['overview'] ?? '').toString();
-    final releaseDate = (movie['release_date'] ?? movie['first_air_date'] ?? '').toString();
+    final releaseDate = (movie['release_date'] ?? movie['first_air_date'] ?? '')
+        .toString();
     final voteAverage = movie['vote_average'];
     final voteCount = movie['vote_count'];
 
     final posterPath = movie['poster_path'];
-    final posterUrl = TMDbService.buildPosterUrl(posterPath?.toString(), size: 'w342');
+    final posterUrl = TMDbService.buildPosterUrl(
+      posterPath?.toString(),
+      size: 'w342',
+    );
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -315,7 +358,10 @@ class _MovieCardItemState extends State<MovieCardItem> {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -340,21 +386,40 @@ class _MovieCardItemState extends State<MovieCardItem> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.calendar_today, size: 14, color: Colors.black45),
+                              const Icon(
+                                Icons.calendar_today,
+                                size: 14,
+                                color: Colors.black45,
+                              ),
                               const SizedBox(width: 4),
-                              Text(releaseDate, style: const TextStyle(fontSize: 12, color: Colors.black45)),
+                              Text(
+                                releaseDate,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black45,
+                                ),
+                              ),
                             ],
                           ),
                         ],
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.star, size: 14, color: Colors.amber),
+                            const Icon(
+                              Icons.star,
+                              size: 14,
+                              color: Colors.amber,
+                            ),
                             const SizedBox(width: 4),
                             Text(
-                              (voteAverage != null ? (voteAverage as num).toStringAsFixed(1) : '-') +
+                              (voteAverage != null
+                                      ? (voteAverage as num).toStringAsFixed(1)
+                                      : '-') +
                                   ' (${voteCount ?? '-'})',
-                              style: const TextStyle(fontSize: 12, color: Colors.black45),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black45,
+                              ),
                             ),
                           ],
                         ),
@@ -371,7 +436,9 @@ class _MovieCardItemState extends State<MovieCardItem> {
                   if (widget.showFavorite)
                     IconButton(
                       icon: Icon(
-                        widget.isFavorite ? Icons.favorite : Icons.favorite_border,
+                        widget.isFavorite
+                            ? Icons.favorite
+                            : Icons.favorite_border,
                         color: widget.isFavorite ? Colors.red : Colors.grey,
                       ),
                       onPressed: widget.onToggleFavorite,
@@ -379,19 +446,28 @@ class _MovieCardItemState extends State<MovieCardItem> {
                   if (_overviewOverflow)
                     TextButton(
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 0,
+                        ),
                         minimumSize: const Size(0, 28),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       onPressed: () => _showFullOverview(title, overview),
                       child: const Text(
                         '查看',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   TextButton.icon(
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 0,
+                      ),
                       minimumSize: const Size(0, 30),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -403,22 +479,37 @@ class _MovieCardItemState extends State<MovieCardItem> {
                     icon: const Icon(Icons.play_circle_outline, size: 14),
                     label: const Text(
                       '观看',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   TextButton.icon(
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 0,
+                      ),
                       minimumSize: const Size(0, 30),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    onPressed: _analyzing ? null : () => _runMovieAnalysis(title),
+                    onPressed: _analyzing
+                        ? null
+                        : () => _runMovieAnalysis(title),
                     icon: _analyzing
-                        ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Icon(Icons.auto_awesome, size: 14),
                     label: Text(
                       _analyzing ? '分析中' : '分析',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],

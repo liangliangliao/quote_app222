@@ -1,3 +1,4 @@
+import 'package:quote_app/pages/history_page.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -36,6 +37,23 @@ import 'package:quote_app/widgets/quote_comparison_sheet.dart';
 import 'package:quote_app/widgets/thought_taxonomy_mindmap.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'cognitive_core_test.dart' as core;
+import 'semantic_scope_test.dart' as semantic;
+import 'package:quote_app/epistemic/semantic_scope.dart';
+import 'package:quote_app/epistemic/semantic_scope_service.dart';
+import 'package:quote_app/epistemic/concept_analysis.dart';
+
+class _ScopeHistoryDao extends QuoteDao {
+  final List<Map<String, dynamic>> rows;
+  _ScopeHistoryDao(this.rows);
+  @override
+  Future<List<Map<String, dynamic>>> latest(
+          {int limit = 100, int offset = 0, String? q}) async =>
+      rows
+          .where((r) => q == null || '${r['content']}'.contains(q))
+          .skip(offset)
+          .take(limit)
+          .toList();
+}
 
 class _Comparisons extends QuoteComparisonService {
   final List<(ComparisonPurpose, String)> requests = [];
@@ -44,11 +62,63 @@ class _Comparisons extends QuoteComparisonService {
       ComparisonPurpose purpose, String conditions) async {
     requests.add((purpose, conditions));
     return QuoteComparison(
+        semanticMap: semantic.unresolvedMap(
+            [ScopeSource('A', a.content), ScopeSource('B', b.content)]),
         common: '共同关注持续行动',
         difference: purpose.label,
         notEquivalent: '目标不等于方法',
         limitation: conditions.isEmpty ? '条件尚待补充' : conditions,
         relation: QuoteRelation.contrast);
+  }
+}
+
+class _ConceptPairComparisons extends QuoteComparisonService {
+  @override
+  Future<QuoteComparison> compareForPurpose(QuoteReference a, QuoteReference b,
+      ComparisonPurpose purpose, String conditions) async {
+    final map = semantic.unresolvedMap(
+        [ScopeSource('A', a.content), ScopeSource('B', b.content)]);
+    map['relations'][0] = {
+      'placement': 'A',
+      'status': 'text_claim',
+      'statement': '原句把同一主体对同一对象的轻视与恨区分开，必须固定比较尺度；这展示原句的主张。',
+      'references': [
+        {'source': 'A', 'excerpt': a.content}
+      ],
+      'scope': {
+        'relation_type': 'siblings',
+        'relation_scope': 'extension',
+        'universe': '同一主体对同一对象的态度状态',
+        'set_a': '轻视对方的状态',
+        'set_b': '恨对方的状态',
+        'criterion_a': '按原句的轻视判准作比较',
+        'criterion_b': '按原句的恨判准作比较',
+        'basis': a.content,
+        'justification': '按原句条件，两者不直接相容，且未穷尽全部态度状态。',
+        'only_a': '模拟把对方看低而尚未恨',
+        'only_b': '模拟把对方视为同等而恨',
+        'other_member': '模拟暂未轻视也未恨，尚未作评价'
+      }
+    };
+    map['grounds'] = [
+      {
+        'kind': 'cause',
+        'from': '欣赏生活中的美好增加',
+        'to': '发现的美好增加',
+        'link': '原句的条件性变化主张，仍缺少独立因果证据',
+        'status': 'text_claim',
+        'references': [
+          {'source': 'B', 'excerpt': b.content}
+        ]
+      }
+    ];
+    return QuoteComparison(
+        common: '都涉及对对象的态度',
+        difference: 'A讨论相对评价与恨的条件，B讨论注意与发现',
+        notEquivalent: '轻视与欣赏分属不同判断',
+        limitation: '须界定同一主体、时刻和比较尺度',
+        relation: QuoteRelation.contrast,
+        semanticMap: map);
   }
 }
 
@@ -75,6 +145,12 @@ void main() {
             ..addFont(
                 Future.value(ByteData.sublistView(font.readAsBytesSync()))))
           .load();
+    await (FontLoader('QuoteXingShu')
+          ..addFont(rootBundle.load('assets/fonts/ZhiMangXing-Regular.ttf')))
+        .load();
+    await (FontLoader('QuoteSignatureLatin')
+          ..addFont(rootBundle.load('assets/fonts/Allura-Regular.ttf')))
+        .load();
     await (FontLoader('MaterialIcons')
           ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf')))
         .load();
@@ -85,6 +161,20 @@ void main() {
     await db.close();
     await dir.delete(recursive: true);
   });
+  Future<void> settle(WidgetTester tester) async {
+    for (var i = 0; i < 100; i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump(const Duration(milliseconds: 16));
+      if (find.byType(LinearProgressIndicator).evaluate().isEmpty &&
+          find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+        await tester.pumpAndSettle();
+        return;
+      }
+    }
+    await tester.pumpAndSettle();
+  }
+
   Future<void> mount(WidgetTester tester, Widget home,
       {double width = 430,
       double scale = 1,
@@ -107,7 +197,7 @@ void main() {
     await tester.pump();
     if (find.byType(LinearProgressIndicator).evaluate().isEmpty &&
         find.byType(CircularProgressIndicator).evaluate().isEmpty) {
-      await tester.pumpAndSettle();
+      await settle(tester);
     }
   }
 
@@ -119,7 +209,7 @@ void main() {
       if (finder.evaluate().isNotEmpty &&
           find.byType(LinearProgressIndicator).evaluate().isEmpty &&
           find.byType(CircularProgressIndicator).evaluate().isEmpty) {
-        await tester.pumpAndSettle();
+        await settle(tester);
         return;
       }
     }
@@ -193,10 +283,10 @@ void main() {
     expect(find.text('模拟：遇到封路，改换路线继续前进。'), findsOneWidget);
     await capture(tester, '02-reader-intuition');
     await tester.tap(find.text('概念'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('坚持'), findsOneWidget);
     Navigator.of(tester.element(find.text('直观'))).pop();
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
     await tester.tap(find.byKey(const ValueKey('quote-read-more')));
@@ -248,24 +338,24 @@ void main() {
         .first;
     expect(tester.widget<AbsorbPointer>(readOnlyGate).absorbing, isTrue);
     await enable(tester);
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(tester.widget<AbsorbPointer>(readOnlyGate).absorbing, isFalse);
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(tester.widget<AbsorbPointer>(readOnlyGate).absorbing, isTrue);
     await enable(tester);
-    await tester.pumpAndSettle();
+    await settle(tester);
     final state =
         tester.state<EditableTextState>(find.byType(EditableText).first);
     state.widget.focusNode.requestFocus();
-    await tester.pumpAndSettle();
+    await settle(tester);
     state.widget.controller.selection = TextSelection(
         baseOffset: full.indexOf(core.text),
         extentOffset: full.indexOf(core.text) + core.text.length);
     await tester.pump();
     expect(state.showToolbar(), isTrue);
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.tap(find.text('区分事实与解释'));
     await waitFor(tester, find.text('AI 暂定理解 · 可修改或拒绝'));
     expect(ai.calls, 1);
@@ -273,7 +363,7 @@ void main() {
     expect(find.byType(DropdownButton<StatementKind>), findsNWidgets(4));
     await capture(tester, '05-diary-classification');
     await tester.tap(find.byType(DropdownButton<StatementKind>).first);
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.tap(find.text('暂定判断').last);
     await waitFor(tester, find.text('撤销上一次分类修改'));
     final edited =
@@ -283,7 +373,7 @@ void main() {
     await tester.tap(find.text('撤销上一次分类修改'));
     await tester
         .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 80)));
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.scrollUntilVisible(find.text('采纳这条注释'), 300,
         scrollable: find
             .descendant(
@@ -329,10 +419,12 @@ void main() {
             loading: false));
     await mount(tester, view(1));
     await waitFor(tester, find.textContaining('已载入 4 条名言'));
+    await tester.tap(find.text('概念星图'));
+    await settle(tester);
     expect(find.text('成长 3'), findsOneWidget);
     await capture(tester, '03-history-constellation');
-    await tester.tap(find.byTooltip('放大关系图'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.text('成长 3'));
+    await waitFor(tester, find.text('分析概念关系并绘图'));
     await tester.scrollUntilVisible(find.byTooltip('加入比较').first, 240,
         scrollable: find
             .descendant(
@@ -350,6 +442,229 @@ void main() {
   });
 
   testWidgets(
+      'duplicate excerpts do not acquire invented circles before semantic analysis',
+      (tester) async {
+    await enable(tester);
+    final service = _Comparisons();
+    const a =
+        QuoteReference(id: 'wj-a', author: '詹姆斯', content: '我的经验就是我同意去注意的东西。');
+    const b = QuoteReference(
+        id: 'wj-b', author: '詹姆斯', content: '我的经验就是我同意去注意的东西。只有留意的事物才塑造心灵。');
+    await mount(tester,
+        Scaffold(body: QuoteComparisonSheet(a: a, b: b, service: service)));
+    await waitFor(tester, find.text('疑似同段引文'));
+    expect(service.requests, isEmpty);
+    expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
+    expect(find.text('分析概念关系并绘图'), findsOneWidget);
+    await tester.tap(find.text('继续比较两种表述'));
+    await settle(tester);
+    expect(service.requests.length, 1);
+    expect(find.textContaining('跨材料'), findsWidgets);
+  });
+
+  testWidgets(
+      'an unrelated saved concept with no pair still opens as a single scope',
+      (tester) async {
+    await enable(tester);
+    const ref = QuoteReference(
+        id: 'anonymous-review',
+        content: '不知道稿件作者身份的评审仍可依照相同标准评分。',
+        author: '案例');
+    await tester.runAsync(() => QuoteInsightStore().saveAddon(
+        ref,
+        const QuoteAnalysisAddon(cognition: {
+          'abstractions': [
+            {
+              'term': '匿名评审',
+              'definition': '评审时作者身份对评审人隐藏',
+              'observed': '案例中的稿件评分',
+              'retained': '作者身份隐藏',
+              'omitted': '稿件主题',
+              'member_example': '隐去署名后独立评阅稿件',
+              'non_member': '评审人知晓作者身份后打分',
+              'counter_example': '没有公开分数不足以判断是否匿名'
+            }
+          ]
+        })));
+    await mount(
+        tester,
+        const Scaffold(
+            body: QuoteCognitiveReader(
+                quote: ref, topic: '评审', authorLabel: '案例', note: '')));
+    await waitFor(tester, find.text('分析概念关系并绘图'));
+    expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
+    expect(find.text('概念含义圈 · 单一范围'), findsNothing);
+  });
+
+  Future<void> seedSemantic(
+      WidgetTester tester, QuoteReference ref, ConceptScope scope) async {
+    final sources = [ScopeSource('A', ref.content)];
+    final answer = {
+      'relations': [
+        {
+          'placement': 'A',
+          'status': 'text_claim',
+          'statement': scope.justification,
+          'references': [
+            {'source': 'A', 'excerpt': ref.content}
+          ],
+          'scope': {...scope.toJson(), 'basis': ref.content}
+        }
+      ],
+      'grounds': []
+    };
+    await tester.runAsync(() =>
+        SemanticScopeService(ai: semantic.SemanticFakeAi(answer))
+            .analyze(sources, '分析整句中的概念及其关系'));
+  }
+
+  testWidgets(
+      'mountain passage opens its overlapping scopes through the home poster',
+      (tester) async {
+    await enable(tester);
+    const ref = QuoteReference(
+        id: 'mountain-prototype',
+        author: 'Tal Ben-Shahar',
+        content: '幸福并非抵达山顶，也不是漫无目的地在山间攀爬。幸福是朝着山顶攀登的体验。');
+    await seedSemantic(
+        tester,
+        ref,
+        const ConceptScope(
+            relation: QuoteRelation.overlap,
+            universe: '围绕登山目标的经历片段',
+            setA: '朝目标前进',
+            setB: '享受当下',
+            criterionA: '行动推进既定登山目标',
+            criterionB: '当事人体验到眼前乐趣',
+            basis: '',
+            justification: '目标前进与当下愉快各有独有范围，也可同时发生。',
+            intersection: '模拟登山中向上行进，同时欣赏眼前的云海',
+            onlyA: '模拟冒雨赶路但感到难受',
+            onlyB: '模拟停步赏景而未向前行进'));
+    await mount(
+        tester,
+        Scaffold(
+            body: PosterPureFlutter(
+                topic: '幸福与攀登',
+                quote: ref.content,
+                author: ref.author,
+                avatar: '',
+                note: '',
+                quoteReference: ref)),
+        width: 390,
+        height: 800);
+    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+    await waitFor(tester, find.text('概念含义圈 · 部分交集'));
+    final diagram = find.byKey(const ValueKey('quote-set-diagram'));
+    expect(diagram.hitTestable(), findsOneWidget);
+    await tester.tapAt(tester.getCenter(diagram));
+    await settle(tester);
+    expect(find.textContaining('眼前的云海'), findsOneWidget);
+    await capture(tester, 'real-mountain-intersection');
+  });
+
+  testWidgets(
+      'Hegel opens from the poster with sibling concepts and a visible temporal illustration',
+      (tester) async {
+    await enable(tester);
+    const ref = QuoteReference(
+        id: 'hegel-botany',
+        author: '黑格尔',
+        source: '《精神现象学》序言，版本和页码待核对。',
+        content:
+            '“花蕾在花朵绽放时消逝。人们可以说，花朵否定了花蕾。果实出现时，花朵又显得是植物存在的一种不充分形式。果实取代花朵，成为植物的真理。”（据原意翻译）');
+    await seedSemantic(
+        tester,
+        ref,
+        const ConceptScope(
+            relation: QuoteRelation.siblings,
+            universe: '同一植物在观察时刻的局部形态',
+            setA: '花蕾',
+            setB: '开放的花',
+            criterionA: '尚未开放的花蕾',
+            criterionB: '花瓣已经开放',
+            basis: '',
+            justification: '按同一时刻的形态判准区分，果实也属于该上位范围。',
+            onlyA: '模拟观察到花瓣合拢的花蕾',
+            onlyB: '模拟观察到花瓣展开',
+            otherMember: '再过数周，同一枝条结出果实'));
+    await mount(
+        tester,
+        Scaffold(
+            body: PosterPureFlutter(
+                topic: '发展中的否定、连续与转化',
+                quote: ref.content,
+                author: '黑格尔 《很长的出处说明》',
+                avatar: '',
+                note: '',
+                quoteReference: ref)),
+        width: 390,
+        height: 800);
+    await tester.tap(find.byKey(const ValueKey('quote-read-more')));
+    await waitFor(tester, find.text('概念含义圈 · 同属上位范围但未穷尽'));
+    await capture(tester, 'real-hegel-reading');
+    expect(find.byKey(const ValueKey('quote-set-diagram')).hitTestable(),
+        findsOneWidget);
+    final diagram = find.byKey(const ValueKey('quote-set-diagram'));
+    await tester.tapAt(tester.getCenter(diagram) + const Offset(0, -35));
+    await settle(tester);
+    expect(find.textContaining('再过数周'), findsOneWidget);
+    await tester.ensureVisible(find.text('形态随时间变化 · 植物示意'));
+    await settle(tester);
+    await capture(tester, 'real-hegel-stages');
+  });
+
+  testWidgets(
+      'archive tag containment cannot imply that meaning contains responsibility',
+      (tester) async {
+    await enable(tester);
+    final rows = [
+      {'quote_uid': 'r1', 'content': '意义与责任', 'theme': '意义、责任'},
+      {'quote_uid': 'r2', 'content': '意义的其他讨论', 'theme': '意义'},
+    ];
+    await mount(tester, HistoryPage(dao: _ScopeHistoryDao(rows)),
+        width: 390, height: 800);
+    await waitFor(tester, find.text('关系图'));
+    await tester.tap(find.text('关系图'));
+    await waitFor(tester, find.text('意义 2'));
+    await tester.tap(find.text('意义 2'));
+    await tester.tap(find.text('责任 1'));
+    await waitFor(tester, find.text('分析概念关系并绘图'));
+    expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
+    expect(find.text('概念含义圈 · A 包含 B'), findsNothing);
+    expect(find.text('分析概念关系并绘图'), findsOneWidget);
+    await capture(tester, 'history-awaits-semantic-analysis');
+  });
+
+  testWidgets(
+      'actual comparison keeps A B and cross concept analysis with typed ground diagrams',
+      (tester) async {
+    await enable(tester);
+    const a = QuoteReference(
+        id: 'contempt', content: '只要人还在轻视某人，就还不会恨他；只有当他把对方看作同等时，才会恨。');
+    const b =
+        QuoteReference(id: 'gratitude', content: '我们越是欣赏生活中的美好，就越会发现更多美好。');
+    await mount(
+        tester,
+        Scaffold(
+            body: QuoteComparisonSheet(
+                a: a, b: b, service: _ConceptPairComparisons())),
+        width: 390,
+        height: 850);
+    await waitFor(tester, find.text('概念含义圈 · 同属上位范围但未穷尽'));
+    expect(find.text('B 句内　待确定'), findsOneWidget);
+    expect(find.text('跨材料　待确定'), findsOneWidget);
+    await capture(tester, 'semantic-pair-A');
+    await tester.tap(find.text('跨材料　待确定'));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
+    expect(find.textContaining('尚不能推出外延关系'), findsOneWidget);
+    await tester.ensureVisible(find.text('生成根据 · 因果条件'));
+    await settle(tester);
+    await capture(tester, 'semantic-pair-ground');
+  });
+
+  testWidgets(
       'comparison goals request a distinct analysis and legacy mode restores all sections',
       (tester) async {
     await enable(tester);
@@ -363,18 +678,18 @@ void main() {
                 service: service)));
     await waitFor(tester, find.text('判断目的'));
     await tester.tap(find.text('选择行动'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(service.requests.last.$1, ComparisonPurpose.action);
     await tester.tap(find.text('改变情境或条件'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.enterText(find.byType(TextField), '面对不可逆操作');
     await tester.ensureVisible(find.text('按此情境重新比较'));
     await tester.tap(find.text('按此情境重新比较'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(service.requests.last.$2, '面对不可逆操作');
     await tester.runAsync(() => CognitivePreferenceStore.instance
         .update(const CognitivePreferences(enabled: true, reduceMotion: true)));
-    await tester.pumpAndSettle();
+    await settle(tester);
     for (final tile
         in tester.widgetList<ExpansionTile>(find.byType(ExpansionTile))) {
       expect(tile.expansionAnimationStyle?.duration, Duration.zero);
@@ -382,7 +697,7 @@ void main() {
     await capture(tester, '04-comparison-purpose');
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('判断目的'), findsNothing);
     expect(find.text('不能直接等同的部分'), findsOneWidget);
   });
@@ -401,17 +716,17 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.runAsync(() => CognitivePreferenceStore.instance
         .update(const CognitivePreferences(enabled: true, prompts: false)));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('识别共同点'), findsNothing);
     expect(find.text('选取记录，回顾认识的变化'), findsOneWidget);
     await mount(tester, JudgmentExercisePage(exercise: judgmentExercises[1]));
     await tester.tap(find.text('用时短，暂选甲路'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.textContaining('与当前条件相符'), findsOneWidget);
     await tester.tap(find.byType(SwitchListTile));
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.tap(find.text('坡度与身体条件，暂选乙路'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.textContaining('与当前条件相符'), findsOneWidget);
     await capture(tester, '09-training-conditions');
   });
@@ -440,18 +755,18 @@ void main() {
             body: SingleChildScrollView(
                 child: MovieCognitionView(text: movie.encode()))));
     await tester.tap(find.text('现实关联'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('模拟情境 · 非影片事实'), findsOneWidget);
     await capture(tester, '07-movie-analogy');
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('情节'), findsNothing);
     expect(find.text('保留的完整电影解读'), findsOneWidget);
     expect(tester.widget<SelectableText>(find.byType(SelectableText)).style,
         const TextStyle(fontSize: 14, height: 1.55));
     await enable(tester);
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('情节'), findsOneWidget);
   });
 
@@ -518,21 +833,21 @@ void main() {
     await waitFor(tester, find.text('过程中的幸福'));
     expect(find.byType(SelectableText), findsNothing);
     await tester.tap(find.text('过程中的幸福'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.byType(ConceptExplorer), findsNothing);
     await enable(tester);
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(
         find.widgetWithText(SelectableText, '这一次的体验需要核查适用范围。'), findsOneWidget);
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.byType(SelectableText), findsNothing);
     await tester.tap(find.text('过程中的幸福'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.byType(ConceptExplorer), findsNothing);
     await enable(tester);
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.tap(find.text('过程中的幸福'));
     await waitFor(tester, find.text('具体表现 · 模拟示例'));
     expect(find.text('返回上位概念：幸福'), findsOneWidget);
@@ -540,10 +855,10 @@ void main() {
     await tester.tap(find.text('返回上位概念：幸福'));
     await waitFor(tester, find.widgetWithText(ListTile, '过程中的幸福'));
     await tester.tap(find.text('含义关系'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('从当前分支选择两个概念'), findsOneWidget);
     await tester.tap(find.text('从当前分支选择两个概念'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(
         tester
             .widget<FilledButton>(find.widgetWithText(FilledButton, '比较所选概念'))
@@ -593,11 +908,11 @@ void main() {
     await capture(tester, '06-concept-resolved-hierarchy');
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('叔本华认知风格已关闭'), findsOneWidget);
     expect(find.text('具体特征_完整性'), findsNothing);
     await enable(tester);
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('具体特征_完整性'), findsOneWidget);
     await mount(tester, const SizedBox());
     await mount(tester, const ConceptExplorer(title: '多义_完整性'));
@@ -665,12 +980,13 @@ void main() {
                 onLoadMore: () {},
                 hasMore: false,
                 loading: false)));
+    await waitFor(tester, find.text('概念星图'));
+    await tester.tap(find.text('概念星图'));
+    await settle(tester);
     await waitFor(tester, find.text('编号00 1'));
-    expect(find.text('编号29 1'), findsNothing);
-    await tester.tap(find.byTooltip('下一组概念'));
-    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('编号29 1'));
     await tester.tap(find.text('编号29 1'));
-    await tester.pumpAndSettle();
+    await waitFor(tester, find.text('分析概念关系并绘图'));
     await tester.scrollUntilVisible(find.text('星图名言29'), 350,
         scrollable: find
             .descendant(
@@ -683,13 +999,13 @@ void main() {
         .ensureVisible(find.byKey(const ValueKey('history-concept-search')));
     await tester.enterText(
         find.byKey(const ValueKey('history-concept-search')), '编号29');
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('编号29 1'), findsOneWidget);
     expect(find.text('编号24 1'), findsNothing);
     await capture(tester, '03-history-search-all-concepts');
     await tester.enterText(
         find.byKey(const ValueKey('history-concept-search')), '不存在的概念');
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.textContaining('暂无匹配概念'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -719,17 +1035,17 @@ void main() {
     expect(ai.calls, 1);
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('采纳这条注释'), findsNothing);
     expect(find.text(core.text), findsOneWidget);
     await enable(tester);
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(ai.calls, 1);
     await mount(
         tester, JudgmentExercisePage(exercise: judgmentExercises.first));
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('改变条件，再作判断'), findsNothing);
     expect(find.text('叔本华认知风格已关闭'), findsOneWidget);
     await mount(tester, CognitiveRecapPage(service: service));
@@ -739,7 +1055,7 @@ void main() {
     await waitFor(tester, find.textContaining('这是保存时的选文与判断快照'));
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.byType(CheckboxListTile), findsNothing);
     expect(find.text('叔本华认知风格已关闭'), findsOneWidget);
   });
@@ -775,21 +1091,21 @@ void main() {
     final notesBefore = await tester.runAsync(() => db
         .query('app_kv', where: 'key GLOB ?', whereArgs: ['cognition.note.*']));
     await tester.tap(find.text('看看这句话的适用范围'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('以后永远找不到工作。'), findsOneWidget);
     expect(find.textContaining('可能反例：是否有过一次不同的结果'), findsOneWidget);
     await capture(tester, '11-discovery-local-scope');
     await tester.runAsync(() =>
         CognitivePreferenceStore.instance.update(const CognitivePreferences()));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('叔本华认知风格已关闭'), findsOneWidget);
     Navigator.of(tester.element(find.text('叔本华认知风格已关闭'))).pop();
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(
         tester.widget<TextField>(find.byType(TextField).first).controller!.text,
         original);
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(saved!.thought, original);
     final notesAfter = await tester.runAsync(() => db
         .query('app_kv', where: 'key GLOB ?', whereArgs: ['cognition.note.*']));
@@ -835,7 +1151,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('判断依据'), 250,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('判断依据'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('仅能定位这次经历'), findsOneWidget);
     expect(find.text('原文对应 · 尚未外部核实'), findsOneWidget);
     final tile = tester.widget<ExpansionTile>(
@@ -845,7 +1161,7 @@ void main() {
     await capture(tester, '12-selected-grounding');
     await tester.runAsync(() => CognitivePreferenceStore.instance
         .update(const CognitivePreferences(enabled: true, grounds: false)));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('判断依据'), findsNothing);
   });
 
@@ -867,7 +1183,7 @@ void main() {
     await tester.tap(find.text('保存本次理解与修订笔记'));
     await waitFor(tester, find.text('记录中的暂定理解 · 可修改或拒绝'));
     await tester.tap(find.byTooltip('关闭分析'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     await mount(
         tester, card('第二次调整方法后完成。', '调整方法后可以改善结果。', evidence: '第二次调整方法后完成。'));
     await tester.tap(find.text('保存本次理解与修订笔记'));
@@ -892,7 +1208,7 @@ void main() {
     await tester.tap(find.text('回退到此前判断'));
     await tester
         .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 80)));
-    await tester.pumpAndSettle();
+    await settle(tester);
     notes = await tester.runAsync(
         () => CognitiveStore().forRecord('record-ui', 'one-business-record'));
     expect(notes!.single.revisions.length, 2);
@@ -966,7 +1282,7 @@ void main() {
         scale: 1.8);
     expect(find.textContaining('路线变化对应方法调整'), findsNothing);
     await tester.tap(find.text('画面如何对应原句'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.textContaining('不能证明因果'), findsOneWidget);
     await tester.tap(find.textContaining('“调整方法”'));
     await tester.pump();
@@ -1022,13 +1338,13 @@ void main() {
     await tester.scrollUntilVisible(find.text('选择经历-R · 日记'), -250,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('选择经历-R · 日记'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.tap(find.text('查看将发送的完整内容').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.scrollUntilVisible(find.text('将发送的定位与依据'), 200,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('将发送的定位与依据'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.textContaining('记录定位：diary / recap-picked'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('仅分析所选 1 条记录'), 350,
         scrollable: find.byType(Scrollable).first);
@@ -1038,7 +1354,7 @@ void main() {
     expect(ai.lastPrompt, contains('主动选择的经历-R'));
     expect(ai.lastPrompt, isNot(contains('未选中的私密资料-R')));
     await tester.tap(find.byTooltip('关闭分析'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.runAsync(() => CognitiveStore()
         .save(item('recap-long', '超长快照-R', List.filled(13000, '字').join())));
     await tester.tap(find.byTooltip('刷新可选记录'));
@@ -1047,7 +1363,7 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await waitFor(tester, find.text('超长快照-R · 日记'));
     await tester.tap(find.text('超长快照-R · 日记'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.textContaining('请减少条数或改选较短注释'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('仅分析所选 1 条记录'), 300,
         scrollable: find.byType(Scrollable).first);
@@ -1101,7 +1417,7 @@ void main() {
     await enable(tester);
     await waitFor(tester, find.text('是否也存在一次例外？'));
     await tester.tap(find.byTooltip('今天不再提示'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('是否也存在一次例外？'), findsNothing);
     await mount(
         tester,
@@ -1112,7 +1428,7 @@ void main() {
                 text: '我总是如此。')));
     await tester
         .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 80)));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('是否也存在一次例外？'), findsNothing);
   });
 
@@ -1150,7 +1466,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('新证据与修订'), 400,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('新证据与修订'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.enterText(
         find.widgetWithText(TextField, '具体的新材料或反例'), '调整方法后完成了下一次尝试。');
     await tester.enterText(
@@ -1167,7 +1483,7 @@ void main() {
     await tester.tap(find.text('回退到此前判断'));
     await tester
         .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 80)));
-    await tester.pumpAndSettle();
+    await settle(tester);
     saved = (await tester.runAsync(
             () => CognitiveStore().forRecord('reflection-test', 'revision')))!
         .single;
@@ -1185,6 +1501,7 @@ void main() {
     expect(find.textContaining('位置已失效'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('采纳这条注释'), 400,
         scrollable: find.byType(Scrollable).first);
+    await settle(tester);
     expect(
         tester
             .widget<FilledButton>(find.widgetWithText(FilledButton, '采纳这条注释'))
