@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:quote_app/epistemic/semantic_scope.dart';
+import 'semantic_scope_test.dart' show unresolvedMap;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/data/quote_insight_store.dart';
@@ -40,6 +42,8 @@ class _FakeAi extends UnifiedAiService {
     expect(prompt, contains(first.content));
     expect(prompt, contains(second.content));
     return jsonEncode({
+      'semantic_map': unresolvedMap(
+          [ScopeSource('A', first.content), ScopeSource('B', second.content)]),
       'reading_a': {
         'anchor': '坚持目标',
         'abstractions': [

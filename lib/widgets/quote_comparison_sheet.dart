@@ -4,12 +4,9 @@ import '../models/quote_insight.dart';
 import '../services/quote_comparison_service.dart';
 import '../epistemic/cognitive_preferences.dart';
 import '../epistemic/cognitive_mode.dart';
-import '../epistemic/cognitive_models.dart';
-import '../epistemic/cognitive_sheet.dart';
-import '../epistemic/cognitive_store.dart';
-import '../epistemic/passage_scope_view.dart';
+import '../epistemic/semantic_scope.dart';
+import '../epistemic/semantic_scope_view.dart';
 import '../epistemic/reading_scope.dart';
-import '../data/quote_insight_store.dart';
 import '../epistemic/concept_meaning_diagram.dart';
 
 Future<void> showQuoteComparison(
@@ -64,13 +61,11 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
   final _conditions = TextEditingController();
   String _appliedConditions = '';
   int _tab = 0;
-  bool _left = true, _deferred = false;
-  final _readings = <String, CognitiveAnalysis>{};
+  bool _deferred = false;
 
   Future<void> _start() async {
     CognitivePreferenceStore.instance.load();
     if (CognitivePreferenceStore.active) {
-      _loadReadings();
       if (similarRecordWording(widget.a, widget.b)) {
         setState(() {
           _deferred = true;
@@ -82,104 +77,23 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
     await _compare();
   }
 
-  String _subject(QuoteReference ref) {
-    final id = ref.id.isEmpty ? ref.contentKey : ref.id;
-    return widget.recordLabel == '概念' && id.startsWith('concept:')
-        ? id.substring(8)
-        : id;
-  }
-
-  String get _module => widget.recordLabel == '概念' ? 'concept' : 'quote';
-
-  Future<void> _loadReadings() async {
-    for (final ref in [widget.a, widget.b]) {
-      final id = _subject(ref);
+  Widget _semanticPanel() {
+    final sources = [
+      ScopeSource('A', widget.a.content),
+      ScopeSource('B', widget.b.content)
+    ];
+    SemanticScope? initial;
+    if (_result?.semanticMap.isNotEmpty == true) {
       try {
-        final addon = await QuoteInsightStore().readAddon(ref);
-        final base = CognitiveAnalysis.fromJson(addon.cognition, ref.content);
-        final notes = await CognitiveStore().forRecord(_module, id);
-        final note = notes
-            .where((n) =>
-                n.task == CognitiveTask.concept &&
-                n.selection.matches(ref.content) &&
-                (n.analysis.scopes.isNotEmpty ||
-                    n.analysis.abstractions.isNotEmpty))
-            .firstOrNull;
-        if (!mounted) return;
-        setState(() => _readings[ref.contentKey] = note?.analysis ?? base);
-      } catch (_) {/* Old records may have no locally stored analysis. */}
+        initial = SemanticScope.parse(_result!.semanticMap, sources,
+            model: _result!.modelInfo);
+      } catch (_) {}
     }
-  }
-
-  Future<void> _analyzeScope(QuoteReference ref) async {
-    await showCognitiveAnalysis(context,
-        task: CognitiveTask.concept,
-        selection: CognitiveSelection.fromText(
-            module: _module,
-            recordId: _subject(ref),
-            title: ref.author,
-            fullText: ref.content));
-    if (mounted) await _loadReadings();
-  }
-
-  Widget _passagePanel() {
-    final ref = _left ? widget.a : widget.b;
-    final reading = _left ? _result?.readingA : _result?.readingB;
-    final fresh = CognitiveAnalysis.fromJson(reading, ref.content);
-    final saved = _readings[ref.contentKey];
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      LayoutBuilder(builder: (context, bounds) {
-        final sideBySide = bounds.maxWidth >= 270 &&
-            MediaQuery.textScalerOf(context).scale(14) <= 22;
-        return Wrap(spacing: 8, runSpacing: 6, children: [
-          for (final isA in [true, false])
-            SizedBox(
-                width: sideBySide ? (bounds.maxWidth - 8) / 2 : bounds.maxWidth,
-                child: Semantics(
-                    selected: _left == isA,
-                    button: true,
-                    child: Material(
-                        color: _left == isA
-                            ? const Color(0xffefe2c8)
-                            : const Color(0xfffffcf6),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(
-                                color: _left == isA
-                                    ? const Color(0xffa78345)
-                                    : const Color(0xffddd2bf))),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                            onTap: () => setState(() => _left = isA),
-                            child: Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(isA ? 'A 句中概念' : 'B 句中概念',
-                                          style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold)),
-                                      Text((isA ? widget.a : widget.b).content,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis),
-                                    ])))))),
-        ]);
-      }),
-      if (reading != null &&
-          insightText(reading, 'missing_evidence').isNotEmpty)
-        Text(
-            '待查条件　${insightText(reading, 'missing_evidence')}\n${insightText(reading, 'clarifying_question')}'),
-      PassageScopeView(
-          key: ValueKey(ref.contentKey),
-          text: ref.content,
-          scopes: fresh.scopes.isNotEmpty ? fresh.scopes : saved?.scopes ?? [],
-          abstractions: fresh.abstractions.isNotEmpty
-              ? fresh.abstractions
-              : saved?.abstractions ?? [],
-          onAnalyze: () => _analyzeScope(ref)),
-    ]);
+    return SemanticScopePanel(
+        key: ValueKey([widget.a.contentKey, widget.b.contentKey].join('|')),
+        sources: sources,
+        focus: widget.recordLabel == '概念' ? '主题概念比较' : '分别分析 A、B 句内概念及跨句关系',
+        initial: initial);
   }
 
   @override
@@ -324,11 +238,12 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
                         leading: Icon(Icons.library_books_outlined),
                         title: Text('疑似同段引文'),
                         subtitle: Text('两条收录有较长的相同措辞，可展开核对节选和译文差异。')),
-                  if (prefs.relations)
-                    if (_result?.canDrawSets == true)
-                      QuoteRelationView(result: _result!)
-                    else
-                      _passagePanel(),
+                  Text('A　${widget.a.content}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 6),
+                  Text('B　${widget.b.content}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  if (prefs.relations) _semanticPanel(),
                   if (_deferred)
                     OutlinedButton(
                         onPressed: _compare, child: const Text('继续比较两种表述')),
@@ -410,8 +325,7 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
                     label: const Text('重新比较'),
                   ),
                 if (_result case final result?) ...[
-                  if (!CognitivePreferenceStore.active ||
-                      (prefs.relations && !result.canDrawSets))
+                  if (!CognitivePreferenceStore.active)
                     QuoteRelationView(result: result),
                   const SizedBox(height: 14),
                   const Text(

@@ -3,7 +3,8 @@ import '../data/dao.dart';
 import '../models/quote_insight.dart';
 import '../widgets/quote_comparison_sheet.dart';
 import 'cognitive_models.dart';
-import 'passage_scope_view.dart';
+import 'semantic_scope.dart';
+import 'semantic_scope_view.dart';
 import 'cognitive_sheet.dart';
 import 'cognitive_store.dart';
 import 'cognitive_mode.dart';
@@ -394,11 +395,9 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
               ],
               if (_tab == 1) ...[
                 if (CognitivePreferenceStore.instance.value.relations)
-                  PassageScopeView(
-                      text: widget.title,
-                      abstractions: _note?.analysis.abstractions ?? [],
-                      scopes: _note?.analysis.scopes ?? [],
-                      onAnalyze: _analyze),
+                  SemanticScopePanel(sources: [
+                    ScopeSource('A', '主题概念　${widget.title}\n${_selection.text}',title:widget.title)
+                  ], focus: '主题概念的含义与相关概念关系'),
                 Text(
                   _note?.analysis.boundary ?? '没有充分材料时，不把词语相似或同属一个分类画成外延交集。',
                   style: const TextStyle(height: 1.7),

@@ -264,7 +264,7 @@ class QuoteComparison {
   final QuoteRelation relation;
   final String relationScope, justification, setA, setB, basisA, basisB;
   final String relationDirection, universe;
-  final Map<String, dynamic> readingA, readingB;
+  final Map<String, dynamic> readingA, readingB, semanticMap;
   final bool groundedInQuotes;
   final String modelInfo;
 
@@ -282,6 +282,7 @@ class QuoteComparison {
       this.basisB = '',
       this.groundedInQuotes = false,
       this.modelInfo = '',
+      this.semanticMap = const {},
       this.readingA = const {},
       this.readingB = const {},
       this.relationDirection = '',
@@ -335,6 +336,7 @@ class QuoteComparison {
         'basis_a': basisA,
         'basis_b': basisB,
         'model_info': modelInfo,
+        'semantic_map': semanticMap,
         'reading_a': readingA,
         'reading_b': readingB,
         'relation_direction': relationDirection,

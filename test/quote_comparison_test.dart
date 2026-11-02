@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:quote_app/epistemic/semantic_scope.dart';
+import 'semantic_scope_test.dart' show unresolvedMap;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/models/quote_insight.dart';
 import 'package:quote_app/services/quote_comparison_service.dart';
@@ -68,6 +70,8 @@ void main() {
   test('new comparisons reject shallow results and cross-passage evidence', () {
     final data = response()
       ..addAll({
+        'semantic_map': unresolvedMap(
+            [ScopeSource('A', a.content), ScopeSource('B', b.content)]),
         'reading_a': {
           'anchor': '每个学者',
           'missing_evidence': '学者的定义',

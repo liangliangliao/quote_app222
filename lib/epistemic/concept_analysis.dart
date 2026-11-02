@@ -50,6 +50,13 @@ class ConceptAbstraction {
       };
 }
 
+class ScopePart {
+  final String term, criterion, example;
+  const ScopePart(this.term, this.criterion, this.example);
+  Map<String, dynamic> toJson() =>
+      {'term': term, 'criterion': criterion, 'example': example};
+}
+
 /// A proposed set model, never a proof that the quote is universally true.
 /// Simulated classifications have an explicit identity separate from claims
 /// anchored in the selected text. Invalid relationships are not drawn.
@@ -67,6 +74,7 @@ class ConceptScope {
       onlyB,
       otherMember;
   final bool illustration;
+  final List<ScopePart> parts;
   const ConceptScope({
     required this.relation,
     required this.universe,
@@ -81,6 +89,7 @@ class ConceptScope {
     this.onlyB = '',
     this.otherMember = '',
     this.illustration = false,
+    this.parts = const [],
   });
 
   static ConceptScope? parse(dynamic raw, String original) {
@@ -112,6 +121,13 @@ class ConceptScope {
       return null;
     }
     return ConceptScope(
+      parts: [
+        for (final raw in m['parts'] is List ? m['parts'] as List : const [])
+          ScopePart(
+              insightText(insightObject(raw), 'term'),
+              insightText(insightObject(raw), 'criterion'),
+              insightText(insightObject(raw), 'example'))
+      ],
       relation: relation!,
       universe: insightText(m, 'universe'),
       setA: insightText(m, 'set_a'),
@@ -129,6 +145,7 @@ class ConceptScope {
   }
 
   Map<String, dynamic> toJson() => {
+        if (parts.isNotEmpty) 'parts': parts.map((p) => p.toJson()).toList(),
         'relation_type': relation.name,
         'relation_scope': 'extension',
         'universe': universe,

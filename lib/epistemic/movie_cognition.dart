@@ -5,6 +5,8 @@ import 'cognitive_models.dart';
 import 'cognitive_preferences.dart';
 import 'cognitive_mode.dart';
 import 'concept_meaning_diagram.dart';
+import 'semantic_scope.dart';
+import 'semantic_scope_view.dart';
 
 /// Persisted inside the existing analysis text column; legacy text stays readable.
 class MovieCognition {
@@ -229,9 +231,10 @@ class _MovieCognitionViewState extends State<MovieCognitionView> {
           ),
         ],
         if (_tab == 1) ...[
+          SemanticScopePanel(sources:[ScopeSource('A',m.overview.isEmpty?m.narrative:m.overview)],focus:'从影片材料分析概念关系及根据'),
           ConceptAnalysisView(
             abstractions: m.cognition?.abstractions ?? [],
-            scopes: m.cognition?.scopes ?? [],
+            scopes: const [],
           ),
           Wrap(
             spacing: 6,

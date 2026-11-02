@@ -263,9 +263,13 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                     ),
                   ],
                 ),
-                if (widget.task == CognitiveTask.concept && note != null && prefs.relations)
-                  PassageScopeView(text: widget.selection.text, scopes: note.analysis.scopes,
-                    abstractions: note.analysis.abstractions),
+                if (widget.task == CognitiveTask.concept &&
+                    note != null &&
+                    prefs.relations)
+                  PassageScopeView(
+                      text: widget.selection.text,
+                      scopes: note.analysis.scopes,
+                      abstractions: note.analysis.abstractions),
                 Card(
                   key: _originalKey,
                   child: Padding(
@@ -443,9 +447,11 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                           .toList(),
                     ),
                   ],
+                  if (widget.task != CognitiveTask.concept && prefs.relations)
+                    PassageScopeView(text: widget.selection.text),
                   ConceptAnalysisView(
                     abstractions: note.analysis.abstractions,
-                    scopes: widget.task == CognitiveTask.concept ? const [] : note.analysis.scopes,
+                    scopes: const [],
                   ),
                   for (final example in note.analysis.examples)
                     _section(

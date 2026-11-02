@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:quote_app/epistemic/semantic_scope.dart';
+import 'semantic_scope_test.dart' show unresolvedMap;
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -48,6 +50,10 @@ class _DeliveryAi extends UnifiedAiService {
   }) async {
     calls++;
     return jsonEncode({
+      'semantic_map': unresolvedMap(const [
+        ScopeSource('A', '坚持目标，也要根据新信息调整方法。'),
+        ScopeSource('B', '遇到困难时，继续努力。')
+      ]),
       'reading_a': {
         'anchor': '坚持目标',
         'abstractions': [

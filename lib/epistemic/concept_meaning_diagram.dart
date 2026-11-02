@@ -11,6 +11,7 @@ class ConceptMeaningDiagram extends StatefulWidget {
   final QuoteRelation relation;
   final String setA, setB, intersection, onlyA, onlyB, universe, otherMember;
   final ValueChanged<String>? onRegion;
+  final List<ScopePart> parts;
   const ConceptMeaningDiagram({
     super.key,
     required this.relation,
@@ -22,6 +23,7 @@ class ConceptMeaningDiagram extends StatefulWidget {
     this.otherMember = '',
     this.universe = '',
     this.onRegion,
+    this.parts = const [],
   });
   @override
   State<ConceptMeaningDiagram> createState() => _ConceptMeaningDiagramState();
@@ -74,7 +76,8 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
           child: ExcludeSemantics(
             child: LayoutBuilder(builder: (context, box) {
               final size = Size(box.maxWidth, 190);
-              final geometry = _CircleMap(size, widget.relation);
+              final geometry =
+                  _CircleMap(size, widget.relation, widget.parts.length);
               return GestureDetector(
                 onTapUp: (tap) {
                   final region = geometry.regionAt(tap.localPosition);
@@ -90,7 +93,10 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
                           Theme.of(context).textTheme.bodyMedium?.fontFamily,
                           widget.setA,
                           widget.setB,
-                          _region),
+                          _region,
+                          widget.parts,
+                          MediaQuery.textScalerOf(context).scale(14),
+                          widget.universe),
                     )),
               );
             }),
@@ -100,7 +106,15 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            if (!subset && !equal)
+            if (widget.relation == QuoteRelation.partition &&
+                widget.parts.isNotEmpty)
+              for (final part in widget.parts.indexed)
+                _chip('P${part.$1}', '${part.$1 + 1}　${part.$2.term}',
+                    const Color(0xff596d87)),
+            if (!subset &&
+                !equal &&
+                !(widget.relation == QuoteRelation.partition &&
+                    widget.parts.isNotEmpty))
               _chip('A', 'A 独有范围', const Color(0xff966b32)),
             if (overlap || nested || equal)
               _chip(
@@ -115,7 +129,10 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
                   const Color(0xff596d87)),
             if (widget.relation == QuoteRelation.siblings)
               _chip('其余', '上位圈其余范围', const Color(0xff71614d)),
-            if (!superset && !equal)
+            if (!superset &&
+                !equal &&
+                !(widget.relation == QuoteRelation.partition &&
+                    widget.parts.isNotEmpty))
               _chip('B', 'B 独有范围', const Color(0xff426e91)),
           ],
         ),
@@ -152,6 +169,11 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
       );
 
   String _detail(String region) {
+    if (region.startsWith('P')) {
+      final i = int.tryParse(region.substring(1));
+      if (i != null && i >= 0 && i < widget.parts.length)
+        return '${widget.parts[i].criterion}\n${widget.parts[i].example}';
+    }
     if (region == '其余')
       return widget.otherMember.isNotEmpty
           ? widget.otherMember
@@ -168,7 +190,8 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
 class _CircleMap {
   final Size size;
   final QuoteRelation relation;
-  _CircleMap(this.size, this.relation);
+  final int parts;
+  _CircleMap(this.size, this.relation, [this.parts = 0]);
   double get r => math.min(size.width / 4.5, 82.0);
   Offset get center => Offset(size.width / 2, size.height / 2);
   bool get nested =>
@@ -202,6 +225,13 @@ class _CircleMap {
   String? regionAt(Offset point) {
     if (relation == QuoteRelation.partition) {
       if ((center - point).distance > r * 1.08) return null;
+      if (parts > 0) {
+        final angle = (math.atan2(point.dy - center.dy, point.dx - center.dx) +
+                math.pi / 2 +
+                2 * math.pi) %
+            (2 * math.pi);
+        return 'P${(angle / (2 * math.pi) * parts).floor().clamp(0, parts - 1)}';
+      }
       return point.dx < center.dx ? 'A' : 'B';
     }
     final inA = (point - a).distance <= ra, inB = (point - b).distance <= rb;
@@ -222,12 +252,14 @@ class _CircleMap {
 class _MeaningPainter extends CustomPainter {
   final QuoteRelation relation;
   final String? fontFamily, selected;
-  final String setA, setB;
-  const _MeaningPainter(
-      this.relation, this.fontFamily, this.setA, this.setB, this.selected);
+  final String setA, setB, universe;
+  final List<ScopePart> parts;
+  final double fontSize;
+  const _MeaningPainter(this.relation, this.fontFamily, this.setA, this.setB,
+      this.selected, this.parts, this.fontSize, this.universe);
   @override
   void paint(Canvas canvas, Size size) {
-    final map = _CircleMap(size, relation);
+    final map = _CircleMap(size, relation, parts.length);
     final r = map.r, center = map.center;
     final a = map.a, b = map.b, ra = map.ra, rb = map.rb;
     void circle(Offset c, double radius, Color color) {
@@ -255,18 +287,33 @@ class _MeaningPainter extends CustomPainter {
       circle(center, r * 1.08, const Color(0xffb3ab9e));
       if (relation == QuoteRelation.partition) {
         final rect = Rect.fromCircle(center: center, radius: r * 1.08);
-        canvas.drawArc(rect, math.pi / 2, math.pi, true,
-            Paint()..color = const Color(0xffefbb68).withAlpha(80));
-        canvas.drawArc(rect, -math.pi / 2, math.pi, true,
-            Paint()..color = const Color(0xff7fb0d5).withAlpha(80));
-        canvas.drawLine(
-            center.translate(0, -r * 1.08),
-            center.translate(0, r * 1.08),
-            Paint()..color = const Color(0xffa39785));
+        final n = parts.isEmpty ? 2 : parts.length;
+        for (var i = 0; i < n; i++) {
+          final start = -math.pi / 2 + i * 2 * math.pi / n;
+          canvas.drawArc(
+              rect,
+              start,
+              2 * math.pi / n,
+              true,
+              Paint()
+                ..color = [
+                  const Color(0xffefbb68),
+                  const Color(0xff7fb0d5),
+                  const Color(0xffb3a0cd),
+                  const Color(0xffa4bdac)
+                ][i % 4]
+                    .withAlpha(100));
+          canvas.drawLine(
+              center,
+              center + Offset(math.cos(start), math.sin(start)) * r * 1.08,
+              Paint()..color = const Color(0xffa39785));
+        }
       }
     }
     if (relation == QuoteRelation.partition) {
       // The two half-discs above exhaust the stated universe.
+    } else if (relation == QuoteRelation.equal) {
+      circle(center, r, const Color(0xff7fb0d5));
     } else if (ra < rb) {
       circle(b, rb, const Color(0xff7fb0d5));
       circle(a, ra, const Color(0xffefbb68));
@@ -281,10 +328,18 @@ class _MeaningPainter extends CustomPainter {
       final right = Path()..addOval(Rect.fromCircle(center: b, radius: rb));
       final Path active;
       if (relation == QuoteRelation.partition) {
-        final half = Path()
-          ..addRect(Rect.fromLTRB(selected == 'A' ? 0 : center.dx, 0,
-              selected == 'A' ? center.dx : size.width, size.height));
-        active = Path.combine(PathOperation.intersect, enclosing, half);
+        final count = parts.isEmpty ? 2 : parts.length;
+        final i = selected!.startsWith('P')
+            ? int.tryParse(selected!.substring(1)) ?? 0
+            : selected == 'A'
+                ? 0
+                : 1;
+        final activeStart = -math.pi / 2 + i * 2 * math.pi / count;
+        active = Path()
+          ..moveTo(center.dx, center.dy)
+          ..arcTo(Rect.fromCircle(center: center, radius: r * 1.08),
+              activeStart, 2 * math.pi / count, false)
+          ..close();
       } else {
         active = switch (selected) {
           '共同' => Path.combine(PathOperation.intersect, left, right),
@@ -308,7 +363,7 @@ class _MeaningPainter extends CustomPainter {
           text: text,
           style: TextStyle(
             fontFamily: fontFamily,
-            fontSize: 14,
+            fontSize: fontSize.clamp(12, 22),
             fontWeight: FontWeight.w600,
             color: Color(0xff3b3935),
           ),
@@ -324,7 +379,16 @@ class _MeaningPainter extends CustomPainter {
       );
     }
 
-    if (relation == QuoteRelation.equal) {
+    if (relation == QuoteRelation.siblings)
+      label(universe, center.translate(0, -r * .78), maxWidth: r * 1.45);
+    if (relation == QuoteRelation.partition && parts.isNotEmpty) {
+      for (var i = 0; i < parts.length; i++) {
+        final angle = -math.pi / 2 + (i + .5) * 2 * math.pi / parts.length;
+        label('${i + 1}',
+            center + Offset(math.cos(angle), math.sin(angle)) * r * .55,
+            maxWidth: r * .6);
+      }
+    } else if (relation == QuoteRelation.equal) {
       label('$setA = $setB', center, maxWidth: r * 1.5);
     } else if (ra != rb) {
       label(ra < rb ? setA : setB, center);
@@ -343,6 +407,8 @@ class _MeaningPainter extends CustomPainter {
   bool shouldRepaint(_MeaningPainter old) =>
       old.relation != relation ||
       old.selected != selected ||
+      old.parts != parts ||
+      old.fontSize != fontSize ||
       old.fontFamily != fontFamily ||
       old.setA != setA ||
       old.setB != setB;
@@ -419,6 +485,7 @@ class ConceptAnalysisView extends StatelessWidget {
                         onlyA: scope.onlyA,
                         onlyB: scope.onlyB,
                         universe: scope.universe,
+                        parts: scope.parts,
                       ),
                       ExpansionTile(
                         expansionAnimationStyle:
