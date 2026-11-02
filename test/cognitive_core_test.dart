@@ -129,6 +129,32 @@ void main() {
         throwsFormatException);
   });
 
+  test('selected text grounds the abstraction path but not its empirical truth', () {
+    final sample = response()
+      ..['epistemic_path'] = {
+        'proposition': '一次未参加不能确定未来全部结果',
+        'shared_feature': '这些陈述都涉及计划与结果',
+        'particular_differences': '尚未参加与被拒绝不是同一事件',
+        'abstraction_loss': '具体环境、时间和动机未提供',
+        'judgment_purpose': '判断是否能推断长期能力',
+        'ground_limit': '只知道用户报告的这次未参加',
+        'quote_excerpt': '今天没去面试',
+        'relation_mode': 'epistemic_ground',
+      };
+    final analysis = CognitiveService.parse(
+        jsonEncode(sample), selection(), CognitiveTask.diary);
+    final path = analysis.epistemicPath;
+    expect(path.proposition, contains('不能确定'));
+    expect(path.quoteExcerpt, '今天没去面试');
+    expect(path.relationMode, 'epistemic_ground');
+    final restored = CognitiveAnalysis.fromJson(analysis.toJson(), text);
+    expect(restored.epistemicPath.abstractionLoss, path.abstractionLoss);
+    expect(CognitiveService.buildPrompt(selection(), CognitiveTask.concept),
+        contains('内涵'));
+    expect(CognitiveService.buildPrompt(selection(), CognitiveTask.concept),
+        contains('外延'));
+  });
+
   test(
       'annotation cache, acceptance, editing, rollback and deletion never touch the diary row',
       () async {
