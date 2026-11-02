@@ -38,6 +38,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
   String? _aiEmbodiedGoal;
   String? _aiRealLifeScene;
   List<String> _aiPracticeFocus = const <String>[];
+  List<String> _aiPracticeGaps = const <String>[];
   String? _aiError;
   String? _aiSafetyNotice;
   int _aiDurationMinutes = 8;
@@ -96,6 +97,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
       _aiEmbodiedGoal = null;
       _aiRealLifeScene = null;
       _aiPracticeFocus = const <String>[];
+      _aiPracticeGaps = const <String>[];
       _aiSaved = false;
     });
     try {
@@ -122,6 +124,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
         _aiEmbodiedGoal = result?.embodiedGoal;
         _aiRealLifeScene = result?.realLifeScene;
         _aiPracticeFocus = result?.practiceFocus ?? const <String>[];
+        _aiPracticeGaps = result?.practiceGaps ?? const <String>[];
         _aiError = result == null
             ? '本次暂未生成引导，可以重试或先使用本地练习。'
             : null;
@@ -163,6 +166,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
     _aiEmbodiedGoal = null;
     _aiRealLifeScene = null;
     _aiPracticeFocus = const <String>[];
+    _aiPracticeGaps = const <String>[];
     _aiError = null;
     final safety = _aiService.assessUserInput(_descriptionController.text);
     _aiSafetyNotice = safety.isNormal ? null : safety.message;
@@ -388,6 +392,25 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
                   Text(_aiSession!.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 4),
                   Text('${exceedsTarget ? '目标$targetLabel · ' : ''}预计${_aiSession!.durationLabel} · ${_aiSession!.type} · 专家生成', style: const TextStyle(color: Colors.black54)),
+                  if (_aiPracticeGaps.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text('这次引导可能还未充分展开：${_aiPracticeGaps.join('、')}。可先阅读正文，再决定是否重新生成。',
+                        style: const TextStyle(height: 1.5, color: Color(0xFF8A5900))),
+                  ],
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('阅读完整引导', style: TextStyle(fontSize: 13)),
+                    children: [
+                      for (final step in _aiSession!.steps)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(step.text, style: const TextStyle(height: 1.7)),
+                          ),
+                        ),
+                    ],
+                  ),
                   if (exceedsTarget) ...[
                     const SizedBox(height: 8),
                     Text('已保留完整引导与必要的体验留白。你可以选择完整版本，或重新生成$targetLabel版本；实际时长会随语音节奏略有变化。', style: const TextStyle(height: 1.45)),

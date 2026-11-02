@@ -1,35 +1,12 @@
+import 'meditation_narration_guide.dart';
+
 /// EAM-8: experiential guidance derived from the user's "允许为人" example.
 /// This is a writing contract for the existing single AI request, not an
 /// additional planner, validator or paid model call.
 class MeditationExperientialMethod {
-  static const version = 'eam8_time_space_imagination_v1';
+  static const version = MeditationNarrationGuide.version;
 
-  static const String systemRules = '''
-【EAM-8：体验驱动的冥想导师方法】
-这是一套创作方法，而不是保证心理效果的公式。核心不是让听者听懂理论，而是让听者在这一刻有机会亲自觉察、允许、探索。沿用既有 JSON、八个 phase、pause_after_seconds 与单次调用契约；这些说明不得额外触发模型请求或阻断已返回的可播报正文。
-
-一、先在本次同一请求内构思“主题专属体验线”：用户原话 → 可能存在的内在规则（仅是假设）→ 规则可能在保护的需要（仅是假设）→ 具体身体/情绪入口 → 当下一个小小且可撤回的体验尝试 → 实际反应及无变化分支 → 一个真实、低强度的日常情境 → 开放式探索问题。随后直接写播报正文。不得将假设当作用户事实；不得把每个主题都写成“完美主义、失误、效率或放松”。
-二、八阶段只是一条连续体验线：arrival 简短说明“今天一起体验什么”并安顿身体；breath 把呼吸当作可返回的注意力锚点，走神不失败、可自然呼吸或选外部声音；body_emotion 用开放问题观察当下身体、情绪或没有感觉；allow_experience 不评判、不急于消除，允许情绪变化；embodied_shift 在一个具体触点/微动作中亲身尝试核心区别，停下来观察；real_life_rehearsal 以主题相符的熟悉日常场景演练，保留不顺利和退出的可能；integration 在充分体验后仅提出一至两个“如果……会怎样？”式开放问题，不替听者宣布答案；closing 回到呼吸、身体和环境，轻柔结束（助眠则继续休息）。
-三、语言应是现场导师对一个人说话：温柔、稳定、真实；每段多为一到三句、一次只邀请一件事。“请留意……（留白）……也许……也许没有……（留白）……只是呼吸”。重复核心短语是给体验时间，不是机械堆砌口号；重要体验后有充足安静。避免抽象理论、哲理朗诵、诊断、笼统鸡汤及大量强制积极暗示。
-四、问“你现在怎么样？”而不是宣告“你已经放松”；可能有紧张、喜悦、无聊、麻木、抵抗或没有变化，也允许这些真实情况。若呼吸觉察不舒服，可恢复自然呼吸或注意脚底/声音。闭眼和想象只是邀请，明确可睁眼、调整或退出。情绪接纳不等于认同伤害性行为，也不强迫立刻行动。
-五、日常迁移场景由本次主题决定，场景只有少量可感的具体细节；不可默认教室、草坪、面试、童年、亲密关系等用户未提供的个人经历。想象困难时，给当下触感或声音替代，避免用幻想成功替代现实探索。
-六、“允许为人/允许自己做人/允许自己为人”这一类主题，首先让听者注意当下正在变化的情绪，允许喜悦、焦虑、无聊或没有情绪如呼吸般流动，探索“能否停止把一种感受判为错误”。不要擅自把主题改写成“没把任务做完/纠正不完美”，除非用户原话具体提到这些。先让情绪自然存在，再将这种态度迁移到普通生活片刻；不要保证生活因此一定更轻松。
-七、短练习保留一个小体验对照和简短结束，不强行拉长八阶段；长练习将更多时间用于主题体验、自然重复、感受变化、生活演练及提问后的安静，而不是更多理论。最后不使用激昂励志结尾，不强行总结感悟。
-八、experience_design 可简洁加入 old_rule_hypothesis、protective_need_hypothesis、core_felt_experience、micro_experiment、open_question、no_change_option 等可选字段，以便正文对齐；字段不得替代正文，旧模型未返回这些字段时仍正常播放。请在单次输出前自行检查是否真正让人可跟随地体验，而非只在标题、附注里“分析得很深”。
-
-【认知、时间、空间、想象、身体与当下共同参与】
-以下练习都要实际写入 segments.text，不能只出现在标题、practice_focus 或 experience_design。它们围绕用户的同一个主题交织展开，不是六段理论介绍，也不新增 phase。
-认知：回应用户输入中的具体处境或念头，分清事实、解释与预测；邀请尝试一个有现实依据、更灵活或更友善的理解，再观察它与原来理解的不同。不预设用户想错了，不用“你一定能成功”等积极暗示代替探索。
-时间：正常且用户愿意的练习中，明确包含昨天、前天、未来和现在。先以眼下触点为参照，再分别轻触昨天、前天一个与主题有关、普通且可承受的片刻；记不起就留白，不补造发生过的事，不追索被遗忘的记忆。提醒“这是此刻的回想，事情不在现在重演”，尝试用本次更合理的理解看待它；过去的事实不因想象而改变。随后设想明天或未来一个与同一主题有关的小片刻，只预演自己可选择的回应，不保证他人反应或事件结果。每次回想或预演后，先感受真实支撑或声音，再继续；不把未来设想当成预言。
-空间：先感知自己此刻在什么位置、身体与支撑面的关系，再注意身边与稍远处的一处声音、物体或光线。想象中也要交代自己在哪里、物件的方位和距离，邀请将画面移远一点、缩小或选择舒服的观察位置；距离由用户决定，不宣称拉远就一定轻松。不只笼统说“给情绪一点空间”。
-想象：在头脑中主动构建、停留和调整与主题有关的画面，让用户选择一个小动作或另一种回应；昨天与前天是记忆，未来是可能的情景，象征画面是比喻，三者说清楚。看不见清晰图像时，知道大概位置、用词语描述或听实际声音也可以。沿用同一主题和相近空间关系，避免连跳多个无关场景；不是旁听一段风景故事。
-身体：在时间和画面探索之前、之后，分别邀请觉察一处真实触感、温度、重量或用力，再选择让手指、肩颈或下颌少用一点力，或调整姿势。提供身体放松的实际尝试，但自然呼吸、不强迫放松，也不预告身体一定变暖变轻；没有感觉或没有变化仍然有效。身体注意不适时改用外部感官。
-当下：走神时，温和辨认“这是回忆／设想／一个念头”，再回到此时此地的呼吸、触点或声音，不责备自己。结束前明确离开回想与未来画面，重新感觉正在支撑自己的地方和周围的真实声音；非睡前可睁眼定向，睡前可保持闭眼、继续休息。
-
-边界先于维度覆盖：用户不想回忆过去时省略过去片刻；不想预演未来时省略未来情景，睡前的未来片刻只轻触休息或被照顾的可能，不布置任务。用户不要想象或选择真实感官时，不要求构图、重演或进入未来情景，时间练习改为简短区分“过去已发生、未来未发生、现在的触感正在发生”，空间练习使用实际环境。medium 或高唤醒优先当下支撑，不回溯困扰或预演；立即危险依原有分流转向现实支持。不为覆盖维度越过这些边界。
-时长：1–2分钟也保留认知、时间区分、近远空间、一个简短心中动作（适合时）、身体放松邀请与当下回返，可在同一主题的几句引导中合并；昨天、前天及未来各只轻触一句，不展开完整故事。较长练习分别留出回想、预演、身体观察后的安静，不增加无关情节。没有变化也可完成，完整理解和体验的预算包含朗读与停顿。
-experience_design 可简记 time_exploration、space_exploration、imagery_participation、present_return；它们是可选摘要，不是新增拒收条件。输出前在本次请求内检查各维度是否真的进入正文，或是否因用户边界而作了适当替代，不额外调用模型评审或改写。
-''';
+  static const String systemRules = MeditationNarrationGuide.systemPrompt;
 
   // Conservative recognition of direct refusals. Nuanced boundaries still
   // remain in the original input and take priority in the writing rules.
@@ -72,6 +49,14 @@ experience_design 可简记 time_exploration、space_exploration、imagery_parti
     return <String, dynamic>{
       'method': 'EAM-8 / experiential acceptance and meaning exploration',
       'version': version,
+      'uses_imagery': imagery,
+      'narration_blueprint': MeditationNarrationGuide.buildBlueprint(
+        minutes: durationMinutes,
+        imagery: imagery,
+        past: past,
+        future: future,
+        isSleep: isSleep,
+      ),
       'theme_source': '仅以 primary_practice_input 为准，优先尊重明确的“不想/不要”',
       'dimension_priority': '用户边界与低刺激需要优先；以下计划只在允许范围内展开，六个维度的具体邀请写进播报正文',
       'practice_dimensions': <String, dynamic>{
