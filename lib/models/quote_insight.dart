@@ -152,6 +152,82 @@ class QuoteReference {
       };
 }
 
+/// An optional and revisable reading path, never independent proof.
+/// The selected quotation is language data, not a directly observed event.
+/// Keep extensional relations separate from intension, analogy and causality.
+class QuoteEpistemicPath {
+  final String proposition;
+  final String sharedFeature;
+  final String particularDifferences;
+  final String abstractionLoss;
+  final String judgmentPurpose;
+  final String groundLimit;
+  final String quoteExcerpt;
+  final String relationMode;
+
+  const QuoteEpistemicPath({
+    this.proposition = '',
+    this.sharedFeature = '',
+    this.particularDifferences = '',
+    this.abstractionLoss = '',
+    this.judgmentPurpose = '',
+    this.groundLimit = '',
+    this.quoteExcerpt = '',
+    this.relationMode = 'unresolved',
+  });
+
+  bool get hasContent =>
+      proposition.isNotEmpty ||
+      sharedFeature.isNotEmpty ||
+      particularDifferences.isNotEmpty ||
+      abstractionLoss.isNotEmpty;
+
+  String get relationLabel => const {
+        'extension': '外延：对象范围',
+        'intension': '内涵：概念规定',
+        'analogy': '类比：相似结构',
+        'causal_hypothesis': '因果假设：需要检验',
+        'epistemic_ground': '认识根据：判断理由',
+        'unresolved': '关系类型尚待确定',
+      }[relationMode] ?? '关系类型尚待确定';
+
+  factory QuoteEpistemicPath.fromJson(dynamic input,
+      {String originalText = ''}) {
+    final m = insightObject(input);
+    final type = insightText(m, 'relation_mode');
+    const allowed = {
+      'extension', 'intension', 'analogy', 'causal_hypothesis',
+      'epistemic_ground', 'unresolved'
+    };
+    final excerpt = insightText(m, 'quote_excerpt');
+    // A model excerpt can locate text but does not verify its truth.
+    final anchored = excerpt.length >= 2 &&
+        excerpt.length <= 240 &&
+        (originalText.isEmpty || originalText.contains(excerpt));
+    return QuoteEpistemicPath(
+      proposition: insightText(m, 'proposition'),
+      sharedFeature: insightText(m, 'shared_feature'),
+      particularDifferences: insightText(m, 'particular_differences'),
+      abstractionLoss: insightText(m, 'abstraction_loss'),
+      judgmentPurpose: insightText(m, 'judgment_purpose'),
+      groundLimit: insightText(m, 'ground_limit'),
+      quoteExcerpt: anchored ? excerpt : '',
+      relationMode: allowed.contains(type) ? type : 'unresolved',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'proposition': proposition,
+        'shared_feature': sharedFeature,
+        'particular_differences': particularDifferences,
+        'abstraction_loss': abstractionLoss,
+        'judgment_purpose': judgmentPurpose,
+        'ground_limit': groundLimit,
+        'quote_excerpt': quoteExcerpt,
+        'relation_mode': relationMode,
+      };
+}
+
 class QuoteAnalysisAddon {
   static const version = 1;
   final String concreteExample,
@@ -163,6 +239,7 @@ class QuoteAnalysisAddon {
   final List<String> concepts;
   final EpistemicSource source;
   final String modelSourceAssessment;
+  final QuoteEpistemicPath epistemicPath;
 
   const QuoteAnalysisAddon({
     this.concreteExample = '',
@@ -174,6 +251,7 @@ class QuoteAnalysisAddon {
     this.concepts = const [],
     this.source = const EpistemicSource(),
     this.modelSourceAssessment = '',
+    this.epistemicPath = const QuoteEpistemicPath(),
   });
 
   // AI interpretation is provisional regardless of the model's confidence.
@@ -183,10 +261,11 @@ class QuoteAnalysisAddon {
       concreteExample.isNotEmpty ||
       commonality.isNotEmpty ||
       criticalDifference.isNotEmpty ||
-      boundary.isNotEmpty;
+      boundary.isNotEmpty ||
+      epistemicPath.hasContent;
 
   factory QuoteAnalysisAddon.fromModelJson(dynamic value,
-      {String source = ''}) {
+      {String source = '', String originalQuote = ''}) {
     final map = insightObject(value);
     final refs = map['source_refs'];
     final concepts = map['concepts'];
@@ -215,6 +294,8 @@ class QuoteAnalysisAddon {
       source: EpistemicSource.fromModelJson(map['epistemic_source'] ?? map,
           fallbackLocator: source),
       modelSourceAssessment: insightText(map, 'source_confidence'),
+      epistemicPath: QuoteEpistemicPath.fromJson(map['epistemic_path'],
+          originalText: originalQuote),
     );
   }
 
@@ -232,6 +313,7 @@ class QuoteAnalysisAddon {
       concepts: parsed.concepts,
       source: EpistemicSource.fromStoredJson(map['epistemic_source']),
       modelSourceAssessment: parsed.modelSourceAssessment,
+      epistemicPath: parsed.epistemicPath,
     );
   }
 
@@ -246,6 +328,7 @@ class QuoteAnalysisAddon {
         'concepts': concepts,
         'epistemic_source': source.toJson(),
         'source_confidence': modelSourceAssessment,
+        'epistemic_path': epistemicPath.toJson(),
         'epistemic_status': status.name,
         'content_kind': contentKind.name,
       };
