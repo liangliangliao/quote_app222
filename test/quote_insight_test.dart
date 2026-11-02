@@ -51,6 +51,35 @@ void main() {
     expect(saved.boundary, '还需考虑风险');
   });
 
+  test('epistemic path distinguishes proposition and concept; forged locators vanish', () {
+    const quote = '坚持目标，也要根据新信息调整方法。';
+    final addon = QuoteAnalysisAddon.fromModelJson({
+      'epistemic_path': {
+        'proposition': '目标可以保持，具体方法可以调整',
+        'shared_feature': '两种行动都指向同一个目标',
+        'particular_differences': '方法改变而目标未变',
+        'abstraction_loss': '具体路线、资源和风险尚未说明',
+        'judgment_purpose': '判断原方法是否仍可行',
+        'ground_limit': '文字不能证明所有坚持都有好结果',
+        'quote_excerpt': '根据新信息调整方法',
+        'relation_mode': 'intension',
+      },
+    }, originalQuote: quote);
+    expect(addon.epistemicPath.hasContent, isTrue);
+    expect(addon.epistemicPath.quoteExcerpt, '根据新信息调整方法');
+    final saved = QuoteAnalysisAddon.fromStoredJson(addon.toJson());
+    expect(saved.epistemicPath.proposition, addon.epistemicPath.proposition);
+    expect(saved.epistemicPath.relationMode, 'intension');
+
+    final forged = QuoteEpistemicPath.fromJson({
+      'proposition': 'AI 声称该论点已由实验验证',
+      'quote_excerpt': '研究者已经证实了因果关系',
+      'relation_mode': 'confirmed_cause',
+    }, originalText: quote);
+    expect(forged.quoteExcerpt, isEmpty);
+    expect(forged.relationMode, 'unresolved');
+  });
+
   test('identity survives shuffle and pinning but changes with quote content',
       () {
     final first = QuoteReference.fromRow({
