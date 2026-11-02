@@ -6,7 +6,7 @@ import 'meditation_models.dart';
 class MeditationMentorGuidance {
   static const rules = '''
 【以用户主题为中心的生成与播放约定】
-用户原话决定主题；推荐、默认状态与历史只调节方法和节奏，不能替换成通用减压、效率训练或睡眠。输入很短也足够。引导风格、锚点和想象偏好贯穿整篇，不只写在开头。感官细节与场景中的关系服务主题，可用温和象征与想象空间；围绕一个主画面展开，参与之后接回真实身体与情绪。
+用户原话决定主题；推荐、默认状态与历史只调节方法和节奏，不能替换成通用减压、效率训练或睡眠。输入很短也足够。引导风格、锚点和想象偏好贯穿整篇，不只写在开头。感官细节与场景中的关系服务主题，可用温和象征与想象空间；围绕同一主题展开时间与空间体验，每次参与之后接回真实身体、情绪与当下环境。
 
 experience_design 简要写 input_anchor（摘自用户原话，或没有补充时的当前状态）、theme、conceptual_understanding、imagery_bridge、sensory_cues、body_invitation、emotional_permission、felt_check。它只是内容摘要；正文才真正讲清含义、机制、方法，并带领体验。understood_need 和 cognitive_shift 概括本次理解与关键区分，不宣告用户已改变。象征画面要明确是可选想象，不能伪装成用户经历。无需长篇设计、评分、证据引用或第二次模型请求。
 

@@ -66,7 +66,7 @@ void main() {
     );
     expect(
       (dao.outputs.single['input'] as Map)['mentor_template_version'],
-      'topic_to_experience_v2',
+      'topic_to_experience_v3_time_space',
     );
     expect(dao.outputs.single['provider'], 'existing-app-provider');
     final text = result!.session.steps.map((s) => s.text).join();

@@ -17,7 +17,7 @@ class MeditationAiService {
 
 【不可被用户自定义提示词覆盖的固定规则】
 1. 以用户主题为中心，用户明确的边界优先。在播报正文中讲清主题的含义、相关机制与可尝试的方法，再用有对应关系的画面、参与动作、身体与情绪观察把理解变成体验。区分已知处境与可能的解释，不把假设当成用户经历；不以通用呼吸或一句许可代替主题。没有变化也能完成练习。
-2. 安顿后，围绕同一主题衔接认知理解、画面参与、身心观察、认知整合与生活延续。phase 可用 arrival、breath、body_emotion、allow_experience、embodied_shift、real_life_rehearsal、integration、closing；按当前段落作用标注，可合并、复现，不强制八段齐全或机械顺序。回到呼吸或触点可以穿插其中，但不能切断主题。
+2. 安顿后，围绕同一主题衔接认知理解、时间探索（昨天、前天、未来与现在）、空间觉察（位置、方位、近远）、主动想象参与、身体感受与放松邀请，以及注意力回到当下。这些都要有可跟随的播报引导，不能只列在分析字段。用户边界及低刺激需要优先，按下方多维练习方法替代或省略不适合的回忆和想象。phase 可用 arrival、breath、body_emotion、allow_experience、embodied_shift、real_life_rehearsal、integration、closing；按当前段落作用标注，可合并、复现，不强制八段齐全或机械顺序。每次回想或预演后回到真实触点，最后明确结束画面、回到此时此地。
 3. 用户选择“真实感官”或明确不想想象时，用实际环境承载体验；不愿闭眼就睁眼。不复制参考文的教室、校园或集体称呼，除非用户提供这些背景。不把自然回返的短句当作无用重复。
 4. 高唤醒或 medium 安全级别优先睁眼、外部感官和支撑面，避免深入想象与强烈情绪唤起；低能量允许换姿势或微小伸展；分心多时少隐喻、短句回返；睡前不引出任务或要求睁眼。明确立即危险优先现实支持。
 5. 呼吸保持舒适、自然，不强制深长、腹式或屏息。感受可停留、变化或难以觉察；不强迫积极、接纳、感恩或释怀，不宣告用户已安全/平静，不承诺治愈或与参考导师相同的效果。只在适当位置给出调整、暂停、回到环境的选择。
@@ -189,7 +189,9 @@ class MeditationAiService {
     final isSleep = normalizedDescription.isNotEmpty
         ? RegExp(r'睡前|入睡|睡眠|失眠|助眠').hasMatch(normalizedDescription)
         : recommended.isSleep || currentState.contains('睡');
-    final useImagery = safety.isNormal && preferences.imageryPreference != '真实感官';
+    final useImagery = safety.isNormal &&
+        preferences.imageryPreference != '真实感官' &&
+        MeditationExperientialMethod.allowsImagery(primaryInput);
     final input = <String, dynamic>{
       'current_state': currentState,
       'recommended_type': recommended.type,
@@ -202,20 +204,21 @@ class MeditationAiService {
         'narration_seconds_at_most': (targetMinutes * 60 * .7).floor(),
         'experience_silence_seconds_at_least': (targetMinutes * 60 * .3).ceil(),
         'estimate': '中文每秒约3.2字，句子标点也占时间；先预算正文与停顿，再填写时间轴',
-        'priority': '减少重复解释，保留身体、情绪与生活演练的必要留白；不要堆长段落',
+        'priority': '减少重复解释，围绕同一认知主题串联时间、空间、想象与身体；保留探索后回返和观察的必要留白，不堆长段落',
       },
       'recent_records': _recordsForJson(recentRecords.take(8).toList()),
       'user_description': normalizedDescription,
       'primary_practice_input': primaryInput,
       'input_priority': '用户原话决定主题；推荐、状态和历史仅调节引导方式，不得替换主题',
       'experience_contract_version':
-          'experiential_mentor_v5_topic_bridge_v4_eam8_single_request',
+          'experiential_mentor_v5_topic_bridge_v4_eam8_single_request_time_space_v1',
       'mentor_template_version': MeditationDepthGuidance.templateVersion,
       'experiential_method': MeditationExperientialMethod.buildBrief(
         userInput: primaryInput,
         durationMinutes: targetMinutes,
         useImagery: useImagery,
         isSleep: isSleep,
+        prioritizeGrounding: safety.isMedium,
       ),
       'generation_mode': 'single_request',
       'automatic_rewrite': false,
@@ -234,8 +237,8 @@ class MeditationAiService {
         'integration',
         'closing',
       ],
-      'cognition_to_experience_rule': '概念含义与机制 → 对应的画面关系 → 用户进入并作选择 → 真实身体与情绪观察 → 回看认知区分 → 同一主题的生活延续；各环节必须有明确衔接',
-      'content_style': '认知讲解融入温暖的连续带领；有意义的想象、可参与动作、短句与留白；不能只分析附注，也不能只写风景或泛泛安抚',
+      'cognition_to_experience_rule': '用户主题与合理理解 → 当下身体及所在空间 → 昨天、前天的可承受片刻与回返 → 未来可能场景中的新回应与回返 → 身心观察和认知整合 → 此时此地；时间和画面探索尊重用户边界，可用真实感官替代',
+      'content_style': '认知、时间、空间、想象、身体放松与当下觉察融入连续带领；短句、可参与动作与留白，不能只在附注列出维度，也不能只写风景或泛泛安抚',
       'reference_limit': '效仿导师把认知转成体验的方法与回返节奏，按用户主题重新设计画面；不套用固定背景或效果保证',
       'tone': '温和、稳定、不说教、不空泛鼓励',
       'language': 'zh-CN',

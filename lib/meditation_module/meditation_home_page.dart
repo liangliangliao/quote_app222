@@ -276,7 +276,7 @@ class _MeditationModulePageState extends State<MeditationModulePage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '写下你想体验的主题或此刻的处境。导师会以身体安顿、呼吸、情绪觉察、允许体验、生活演练和开放提问，引导你亲身探索；不会要求你必须放松或变积极。',
+            '写下你想体验的主题或此刻的处境。导师会结合认知引导、昨天与前天的回想、未来情景想象、远近空间觉察、身体感受与放松，陪你一次次回到当下。你可以选择真实感官，或说明不想回忆、想象的内容。',
             style: TextStyle(color: Colors.black.withOpacity(0.62), height: 1.45),
           ),
           const SizedBox(height: 12),
