@@ -354,9 +354,9 @@ class QuoteAiService {
       purpose: 'quote_ai.structured_generation',
       systemPrompt:
           '你是严谨的名言研究、思想分析与现实实践设计助手。只返回一个合法 JSON 对象；不得编造名言、作者、具体出处或历史事实，不确定时必须明确标注“出处待考”。实践活动必须安全、具体、可自愿停止。',
-      maxTokens: 3800,
+      maxTokens: 4200,
       expectJson: true,
-      temperature: 0.55,
+      temperature: 0.4,
     );
     if (raw.trim().isEmpty) {
       throw StateError('全局 AI 当前不可用或未完成配置');
@@ -442,7 +442,8 @@ ${jsonEncode({'theme': theme, 'description': description})}
 10. avatar_search_query 返回适合在维基百科检索人物肖像的名称（优先通行中文名，可附原文名）。avatar_url 只有在确信是 Wikimedia/Wikipedia 的人物肖像直链时才填写，否则留空。
 11. 只返回 JSON，不要 Markdown、代码围栏或额外说明。
 12. 以下解读均为一种可能理解，不冒充作者原意；source_confidence 只是模型自评，不代表已核对。source_status 只能为 unverified 或 disputed，不得声明已核实。source_refs 只能列待核对的资料线索，没有依据就留空。
-13. concrete_example 写一个具体、可观察的生活情境，明确为“示例/模拟”，不得冒充史实；可以复用本次 practice_activities。commonality 与 critical_difference 说明容易混淆的两种行为哪里相似、关键区别何在；boundary 至少给出一个例外、限制或未知。analysis_basis 指明对应原句中的哪些词，不用作者声望代替根据。缺乏把握可留空，不要补造。
+13. epistemic_path 必须使第9节的抽象/直观与判断力原则实际发挥作用。proposition 是原句断言的完整判断，不能是主题词；shared_feature 是不同对象可被同一概念把握的共同规定（共相）；particular_differences 是不应抹除的殊相；abstraction_loss 是概括时遗失的关键经验细节；judgment_purpose 是这一判断目的下的决定性差异；ground_limit 明确哪些根据只来自原句、哪些事实推断缺少外部证据；quote_excerpt 逐字摘自 quote；relation_mode 只能是 extension/intension/analogy/causal_hypothesis/epistemic_ground/unresolved。外延包含/相交必须有可定义的成员资格；比喻仅作为类比，不能说成逻辑集合或因果定律。若原句不能支持，写“尚不确定”，不要强行补全。
+14. concrete_example 写一个具体、可观察的生活情境，明确为“示例/模拟”，不得冒充史实；可以复用本次 practice_activities。commonality 与 critical_difference 说明容易混淆的两种行为哪里相似、关键区别何在；boundary 至少给出一个例外、限制或未知。analysis_basis 指明对应原句中的哪些词，不用作者声望代替根据。缺乏把握可留空，不要补造。
 
 JSON 字段必须完整：
 {
@@ -455,6 +456,16 @@ JSON 字段必须完整：
   "problem_addressed": "试图解决或应对的问题",
   "related_person": "相关人物",
   "related_thought": "相关人物的思想及联系",
+  "epistemic_path": {
+    "proposition": "原句真正断言的命题",
+    "shared_feature": "抽象形成时保留的共同规定",
+    "particular_differences": "仍有差异的具体对象或行为",
+    "abstraction_loss": "概念概括省略的经验细节",
+    "judgment_purpose": "在何种考察目的下哪些差异关键",
+    "ground_limit": "选文根据支持到哪一步、还缺什么独立依据",
+    "quote_excerpt": "逐字来自 quote 的短摘录",
+    "relation_mode": "intension"
+  },
   "practice_activities": [
     {
       "title": "实践活动名称",
@@ -595,7 +606,8 @@ JSON 字段必须完整：
       avatarPath: '',
       selectedFigure: selectedFigure,
       nextCursor: nextCursor,
-      readingAddon: QuoteAnalysisAddon.fromModelJson(addonFields, source: source),
+      readingAddon: QuoteAnalysisAddon.fromModelJson(addonFields,
+          source: source, originalQuote: content),
     );
   }
 
