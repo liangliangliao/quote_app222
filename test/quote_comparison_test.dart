@@ -48,6 +48,29 @@ void main() {
         isFalse);
   });
 
+  test('semantic similarity without explicit set membership cannot draw circles', () {
+    const first = QuoteReference(
+        id: 'x', content: '成长让人拥有更多的可能性。');
+    const second = QuoteReference(
+        id: 'y', content: '成长也可能带来痛苦。');
+    final map = response()
+      ..addAll({
+        'relation_type': 'overlap',
+        'relation_scope': 'extension',
+        'set_a': '成长',
+        'set_b': '痛苦',
+        'basis_a': '成长让人拥有更多的可能性',
+        'basis_b': '成长也可能带来痛苦',
+        'relation_justification': '两句话都提及成长',
+      });
+    final result = QuoteComparisonService.parseResponse(
+        jsonEncode(map), first, second);
+    expect(result.canDrawSets, isFalse);
+    expect(result.status, EpistemicStatus.provisional);
+    expect(QuoteComparisonService.buildPrompt(first, second),
+        contains('成员资格'));
+  });
+
   test('causal and evidence relations never become circles', () {
     for (final type in [
       'cause',
