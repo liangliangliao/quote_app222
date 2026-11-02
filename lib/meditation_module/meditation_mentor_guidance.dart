@@ -1,27 +1,11 @@
 import 'dart:math' as math;
 
 import 'meditation_models.dart';
+import 'meditation_narration_guide.dart';
 
 /// Writing and local playback guidance; it never calls a provider.
 class MeditationMentorGuidance {
-  static const rules = '''
-【以用户主题为中心的生成与播放约定】
-用户原话决定主题；推荐、默认状态与历史只调节方法和节奏，不能替换成通用减压、效率训练或睡眠。输入很短也足够。引导风格、锚点和想象偏好贯穿整篇，不只写在开头。感官细节与场景中的关系服务主题，可用温和象征与想象空间；围绕一个主画面展开，参与之后接回真实身体与情绪。
-
-experience_design 简要写 input_anchor（摘自用户原话，或没有补充时的当前状态）、theme、conceptual_understanding、imagery_bridge、sensory_cues、body_invitation、emotional_permission、felt_check。它只是内容摘要；正文才真正讲清含义、机制、方法，并带领体验。understood_need 和 cognitive_shift 概括本次理解与关键区分，不宣告用户已改变。象征画面要明确是可选想象，不能伪装成用户经历。无需长篇设计、评分、证据引用或第二次模型请求。
-
-每段通常一到三句，只承担一个主要邀请。先邀请，留白后再观察；问题和代答不能挤在同一段。pause_after_seconds 是说完后的安静体验秒数，不放进 text。1–2 分钟可用 1–4 秒；较长练习通常 6–20 秒，提问、身体和情绪觉察后比过渡句多留一点时间，不能每句机械停同样久。
-
-把抽象主题变成一次可选择、可观察的体验。输入“允许自己为人”时，优先邀请观察当下情绪（也允许没有明显情绪），体验焦虑、无聊、喜悦或困惑可以自然变化，尝试暂时不评判它们；呼吸只是可返回的锚点。若用户明确谈到失误/完美主义，才进一步设计相应的小尝试；不要擅自把“允许为人”改写成未完成任务或工作效率训练。其它主题则从用户原话寻找独有的身体入口和生活场景，不套用同一个实验。
-
-情绪可以尚未出现、仍然紧张、没有改变，也可以难以命名。允许这些实际反应；不宣布“你现在已经放松/安全/释怀”，不要求必须产生温暖、感恩、眼泪或某种标准感觉。没有变化也能完成练习。想象和身体注意过强时，可睁眼看一个普通物体或听周围声音；medium 安全级别或用户选择“真实感官”时使用真实环境，避免深入想象或重新唤起困扰场景。
-
-在同一次请求的 JSON 中简要包含 experience_design：input_anchor（从用户原话摘取的短语；无补充输入时从当前状态摘取）、theme（本次主题）、sensory_cues（至少两个具体感官线索）、body_invitation（可执行的身体邀请）、emotional_permission（允许怎样的实际反应）、felt_check（尝试后邀请观察什么）。这些是设计依据，不会朗读给用户；对应引导必须真正写进 segments.text。正常练习用可选想象或可感的日常物件画面接回真实身体；低刺激练习用真实感官替代。开场和核心体验回应用户主题，可以自然转述，不为了校验反复念出 input_anchor。段数、字数和结束位置是创作建议；以完整体验和可播放的语音留白预算为准。
-
-给关键开放问题之后足够留白：只有体验过后才问“如果真的允许……会怎样？”，不提前宣布它会让人生更轻松。每个 segment 必须有整数 pause_after_seconds，代表这句说完后的安静体验时间，不能写进朗读文字。1–2 分钟练习可用 1–4 秒短留白，3 分钟起通常用 6–20 秒；身体、情绪、想象后的留白比说明更重要。用短段和足够的停顿适配目标时长，不靠长篇说理或空白分钟凑时长。最后以当下环境和一个很小、可选择的生活延续收束；睡前可以只是继续休息，不引出任务。
-
-总时长包含朗读和留白。参考提供的字数、段数与 duration_budget 分配，短练习可合并环节，不凑八段；较长练习把时间交给同一主题的理解、画面参与、身心觉察与整合，不用旁支分析或无意义重复填满。start_seconds 从 0 递增，并留出结尾停顿。保留必要的认知解释与体验衔接，优先精简重复说明。辅助字段、阶段和写作建议不构成返回内容的拒收条件。
-''';
+  static const rules = MeditationNarrationGuide.systemPrompt;
 
   static int speechSeconds(String text) {
     final chinese = RegExp(r'[\u3400-\u9fff]').allMatches(text).length;

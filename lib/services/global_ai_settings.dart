@@ -1,3 +1,4 @@
+import '../meditation_module/meditation_narration_guide.dart';
 import '../data/dao.dart';
 import '../data/kv_dao.dart';
 import '../goal_setting_module/goal_setting_remote_sync.dart';
@@ -1142,86 +1143,8 @@ JSON 字段：
   "safety_notices": ["仅在需要时输出安全提醒；normal 时可为空数组"]
 }''';
 
-  String get defaultMeditationDailyScriptPrompt => '''请按照系统中的导师写作模板，写一篇以用户输入为主线、可直接播报的中文冥想引导。讲清本次主题是什么、为什么重要或让人卡住、可以怎样尝试，并把这份理解转换为可进入的画面与身体、情绪体验；不要只替换主题词或照抄固定范文。
-
-【专家工作规则】
-用户原话优先于推荐类型；先设计贴合主题的可选真实感官入口和（适合时才用的）温和画面、两种感官线索，再回到真实身体与情绪。每段一到三句，只承担一个主要体验任务；邀请之后留白，再用短段观察真实反应。没有画面、没有感觉或没有变化都可以，提供真实触感/声音替代。每段必须包含 pause_after_seconds（说完后安静体验的秒数），不把这些秒数朗读出来。
-
-1. 在内部区分事实/处境、可能的情绪与身体反应、真正需要、需要松动的旧解释和更贴近现实的新解释。使用“可能、也许、从你的描述看”，不贴标签。
-2. 把认知转向变成身体可感的动作：接触支撑面、听见环境、观察自然呼气、松开一点用力、允许换姿势，或在反应前留出一秒。少说理，不写分析报告、课程或鸡汤。
-3. 必须按八个阶段依次创作，并在每个 segment 的 phase 中标注：
-   - arrival：有支撑地进入主题；双脚、座面或背部触点；闭眼只能是可选项。
-   - breath：至少两轮自然呼吸，走神时温柔回来；不要求深呼吸，也提供听声音或感受脚底的替代入口。
-   - body_emotion：一次只观察一种身体感觉和一种可能的情绪，不要求找到标准答案。
-   - allow_experience：允许体验存在和变化；明确允许感受不等于任由冲动或伤害性行为发生。
-   - embodied_shift：用少量语言把新理解交给身体，通过触感、姿态、呼气或外部感官体验它。
-   - real_life_rehearsal：从用户原话提取一个具体日常场景，演练新的身体反应和选择；不要套用教室、校园、草地、同学等范文场景。
-   - integration：体验与留白之后提出一到两个“如果……会怎样？”式开放问题，不替用户宣布结果；非睡前主题才可邀请一个健康、现实、可选择的最小行动。
-   - closing：用身体触点、环境和缓慢呼吸收束，再温和睁眼；睡眠主题允许继续闭眼休息或入睡。
-4. 根据专家校准和练习史调整方式：高唤醒优先睁眼、外部感官和脚底支撑；低能量允许微小伸展和换姿势，不追求更松；分心多时少用隐喻，一次只给一个动作；睡前的现实演练保持低刺激，不重新唤起任务感。
-5. 若主题是“允许为人”，核心是觉察并允许各种情绪自然存在与变化，暂不对情绪判好坏；不得未经用户说明就将其写成未完成任务或完美主义。别的主题重新确定自己的核心体验，不机械替换主题词。
-6. 每段只承担一个体验任务，句子短、具体、可播报；始终给出可以睁眼、换姿势、暂停或回到环境的选择。承认困难，不使用“你必须/你应该”，不承诺立即改变或彻底治愈。
-7. 若安全提示为 medium，避免强迫闭眼、强烈情绪唤起和深入想象；若输入明确涉及自伤、他伤或立即危险，不生成普通冥想脚本，应优先建议现实支持。
-8. 时长采用 {{duration_minutes}} 分钟。建议约 {{target_segment_count}} 个短段，总中文字符建议在 {{target_character_range}} 之间；完整覆盖八阶段，不为凑段数或字数重复内容。第一段 start_seconds 为 0，各段递增，最后一段建议位于总时长 80%—92%；播报和说完后的停顿必须能放进所选时长。
-9. 只输出合法 JSON，不输出 Markdown、代码块或解释。
-
-围绕一个关键认知区分，用连续短段连接解释、场景关系、用户参与、身心观察与回看理解。画面承担主题，不是通用风景；动作体现方法，不是统一要求放松。问句之后等待，不代替听者宣布结果。用户边界及感官偏好优先，历史和推荐只调节方法。一次完成理解与写作，辅助说明保持简洁，正文保留足够的理解与体验。
-
-目标 {{duration_minutes}} 分钟，参考约 {{target_segment_count}} 个短段、{{target_character_range}} 个中文字符。字数和段数不是硬指标；短练习可合并环节。预算包括朗读和安静体验，优先减少说明而非催促体验。phase 标记段落作用，可复现；每段的 pause_after_seconds 表示说完后的留白，不读入正文。
-
-用户当前状态：
-{{current_state}}
-
-用户补充描述：
-{{user_description}}
-
-本次引导风格：{{guidance_style}}
-本次注意力锚点偏好：{{anchor_preference}}
-推荐练习类型：
-{{practice_type}}
-
-练习时长：{{duration_minutes}} 分钟
-
-最近练习记录：
-{{recent_records_json}}
-
-自适应练习画像：
-{{adaptive_profile_json}}
-
-安全分流提示：
-{{safety_context}}
-
-请输出：
-{
-  "experience_design": {
-    "input_anchor": "从本次用户原话中摘取一个短语",
-    "theme": "以这个短语为核心的练习主题",
-    "conceptual_understanding": "简要概括本主题是什么、相关机制或意义、可以怎样尝试；正文也要讲清",
-    "imagery_bridge": "概念对应哪种画面关系，用户怎样进入并参与；真实感官模式写对应的实感过程",
-    "sensory_cues": ["服务本次主题的具体感官线索"],
-    "body_invitation": "画面或实感中的参与动作怎样衔接真实身体与本次主题",
-    "emotional_permission": "允许实际情绪反应，也允许没有变化",
-    "felt_check": "分别观察身体与情绪，再回看本次认知区分，不预设变化",
-    "old_rule_hypothesis": "用户原话可能隐含的旧规则，不断言事实；不适用则写不确定",
-    "protective_need_hypothesis": "旧规则可能保护什么需要，保持假设语气",
-    "core_felt_experience": "让主题转化为可觉察的具体体验",
-    "micro_experiment": "当下可撤回的小尝试，含无变化的分支",
-    "open_question": "充分体验后才提出的一个开放式问题",
-    "no_change_option": "没有画面、情绪或变化时如何继续"
-  },
-  "understood_need": "回应用户原话的含义及为何值得练习；假设不冒充经历",
-  "cognitive_shift": "本次要在画面与身心体验中探索的关键区分，不预设用户有错误信念",
-  "embodied_goal": "用户将在身体和情绪层面具体体验到什么，不承诺结果",
-  "real_life_scene": "用户提供的场景或明确为可选的中性片刻；睡前可留在当下",
-  "practice_focus": ["本次练习焦点1", "焦点2"],
-  "title": "具体、容易理解的标题",
-  "type": "冥想类型",
-  "duration_minutes": {{duration_minutes}},
-  "segments": [
-    {"phase": "arrival", "start_seconds": 0, "text": "可直接播报的原创引导", "intent": "这一段要帮助什么", "pause_after_seconds": 8}
-  ],
-  "ending_reflection": "温暖、真实、不夸大的收束"
-}''';
+  String get defaultMeditationDailyScriptPrompt =>
+      MeditationNarrationGuide.defaultPrompt;
 
   String get defaultMeditationFeedbackPrompt => '''你是一名温和、稳定、克制的冥想反馈助手。
 
