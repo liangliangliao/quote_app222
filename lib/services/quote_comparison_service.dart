@@ -14,7 +14,7 @@ enum ComparisonPurpose {
 }
 
 class QuoteComparisonService {
-  static const promptVersion = 1;
+  static const promptVersion = 2;
   static final Map<String, Future<QuoteComparison>> _pending = {};
   final UnifiedAiService _ai;
   final QuoteInsightStore _store;
@@ -145,12 +145,13 @@ ${jsonEncode({
             'user_conditions': conditions
           })}
 
+请首先区分：单个概念、两个概念的内涵/外延关系、完整判断和推理链；把作者的句子当作需要解释的命题，不要把主题词当结论。比较时分别找出共同规定、具体殊相、在当前判断目的下起作用的决定性差异；指出抽象概括遗漏的情境和最强反例。概念的共同内涵不等于两个对象集合交叉，隐喻相似不等于外延包含；一个文本支持作者表达了什么，不等于证明了事实真伪。
 根据本次判断目的与情境指出共同讨论的问题、决定性差异、不能直接等同的部分、适用条件与未知。在 limitation 中说明什么条件改变会让结论改变；未给出情境就明确条件未知，不替用户编造。
 不要把解释当成事实，不推断作者真实心理。出处只是原记录，未经外部核对。
 不能由交集推出因果；先后发生不证明因果；作者声望不代替证据。
 relation_type 仅可为 overlap/subset/superset/disjoint/analogy/contrast/cause/condition/evidence/unknown。
 subset 表示 A 包含于 B，superset 表示 A 包含 B。因果只能作为有条件的假设。
-只有两句明确描述了可定义的对象集合，且原句能直接支持范围关系时，relation_scope 才可为 extension，填写 set_a/set_b、逐字摘自 A/B 的 basis_a/basis_b 和 relation_justification。概念特征相似、修辞类比或不确定时用 contrast/unknown，relation_scope 为 features，不要强行画圈。
+只有两句明确描述了可定义的对象集合、明确成员资格与可判断的外延范围，且原句能直接支持范围关系时，relation_scope 才可为 extension；必须在 relation_justification 交代成员资格依据。不要因同一主题、词语重合、思想相似或样本共现就输出 overlap/subset/superset/disjoint。不能证明外延的就降级为 features。只有两句明确描述了可定义的对象集合，且原句能直接支持范围关系时，relation_scope 才可为 extension，填写 set_a/set_b、逐字摘自 A/B 的 basis_a/basis_b 和 relation_justification。概念特征相似、修辞类比或不确定时用 contrast/unknown，relation_scope 为 features，不要强行画圈。
 任何关系都要说明限制、可能反例以及还需要什么证据。
 relation_direction 为 A_to_B/B_to_A/unknown，表示因果或条件的前项到后项，或证据支持判断的方向；不能确定时为 unknown，不画箭头。
 只返回 JSON：
@@ -181,7 +182,21 @@ relation_direction 为 A_to_B/B_to_A/unknown，表示因果或条件的前项到
         orElse: () => QuoteRelation.unknown);
     final basisA = insightText(map, 'basis_a');
     final basisB = insightText(map, 'basis_b');
-    final grounded = basisA.runes.length >= 2 &&
+    final setA = insightText(map, 'set_a');
+    final setB = insightText(map, 'set_b');
+    // A literal quotation excerpt proves only textual attribution; a Venn
+    // diagram additionally requires named sets and an explicit quantifier.
+    // This intentionally favours a text comparison over invented set geometry.
+    final quantified = RegExp(r'所有|每个|凡是|有些|某些|部分|并非|不一定|不都是|属于|包含|包括|都是');
+    final explicitSetClaim = quantified.hasMatch(a.content) &&
+        quantified.hasMatch(b.content) &&
+        setA.isNotEmpty &&
+        setB.isNotEmpty &&
+        setA != setB &&
+        a.content.contains(setA) &&
+        b.content.contains(setB);
+    final grounded = explicitSetClaim &&
+        basisA.runes.length >= 2 &&
         basisB.runes.length >= 2 &&
         a.content.contains(basisA) &&
         b.content.contains(basisB);
@@ -193,8 +208,8 @@ relation_direction 为 A_to_B/B_to_A/unknown，表示因果或条件的前项到
       relation: relation,
       relationScope: insightText(map, 'relation_scope'),
       justification: insightText(map, 'relation_justification'),
-      setA: insightText(map, 'set_a'),
-      setB: insightText(map, 'set_b'),
+      setA: setA,
+      setB: setB,
       basisA: basisA,
       basisB: basisB,
       groundedInQuotes: grounded,
