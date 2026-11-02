@@ -354,6 +354,30 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                     if (widget.task == CognitiveTask.reflection)
                       CognitiveLoopSteps(note: note),
                     _section('一种理解', note.currentJudgment),
+                    if (note.analysis.epistemicPath.hasContent) ...[
+                      _section('原句到底断言什么',
+                          note.analysis.epistemicPath.proposition),
+                      _section('抽象保留了哪些共同规定',
+                          note.analysis.epistemicPath.sharedFeature),
+                      _section('哪些具体差异不能被抹去',
+                          note.analysis.epistemicPath.particularDifferences),
+                      _section('抽象遗漏了什么',
+                          note.analysis.epistemicPath.abstractionLoss),
+                      _section('依什么目的判断这些差异',
+                          note.analysis.epistemicPath.judgmentPurpose),
+                      _section('原句可定位的依据',
+                          note.analysis.epistemicPath.quoteExcerpt.isEmpty
+                              ? '尚无可逐字定位的原句摘录'
+                              : '“${note.analysis.epistemicPath.quoteExcerpt}” · 文字对应不等于现实证实'),
+                      _section('认识根据的限度',
+                          note.analysis.epistemicPath.groundLimit),
+                      Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                              '关系类型：${note.analysis.epistemicPath.relationLabel}；解释与类比仍待核实。',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.black54))),
+                    ],
                     if (note.analysis.concepts.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       Wrap(
