@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:quote_app/data/db.dart';
 import 'package:quote_app/services/global_ai_request_settings.dart';
 import 'package:quote_app/services/unified_ai_service.dart';
@@ -402,18 +403,27 @@ void main() {
     expect((await db.query('qk_jobs')).single['status'], 'blocked');
   });
   test(
-      'ambiguous timeout does not automatically repeat a possibly billed request',
+      'ambiguous transport failures never automatically repeat a possibly billed request',
       () async {
-    await insert(1);
-    final ai = BatchAi((_, __) => TimeoutException('fixture timeout'));
-    final w = worker(ai, local: false);
-    await w.drain();
-    time = time.add(const Duration(minutes: 4));
-    await w.drain();
-    expect(ai.calls, 1);
-    expect((await db.query('qk_jobs')).single['status'], 'blocked');
-    expect((await db.query('qk_jobs')).single['last_error'],
-        contains('无法确认是否已计费'));
+    await repo.beginRound(requestLimit: 6);
+    for (final error in [
+      TimeoutException('fixture timeout'),
+      const SocketException('fixture socket'),
+      const HttpException('fixture transport'),
+      http.ClientException('fixture wrapped disconnect'),
+    ]) {
+      await db.delete('quotes');
+      await insert(1);
+      final ai = BatchAi((_, __) => error);
+      final w = worker(ai, local: false);
+      await w.drain();
+      time = time.add(const Duration(minutes: 4));
+      await w.drain();
+      expect(ai.calls, 1, reason: error.runtimeType.toString());
+      expect((await db.query('qk_jobs')).single['status'], 'blocked');
+      expect((await db.query('qk_jobs')).single['last_error'],
+          contains('无法确认是否已计费'));
+    }
   });
   test('continuing a budget-paused round preserves the three-retry counter',
       () async {

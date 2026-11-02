@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
 import 'batch_request.dart';
 import 'classifier.dart';
 import 'cost_policy.dart';
@@ -125,7 +126,10 @@ class QuoteKnowledgeWorker {
         failed = true;
         for (final c in pending) {
           await repository.provisional(c);
-          if (error is TimeoutException || error is SocketException) {
+          if (error is TimeoutException ||
+              error is SocketException ||
+              error is HttpException ||
+              error is http.ClientException) {
             await repository.hold(c,
                 message: '请求超时或连接中断，无法确认是否已计费，已暂停自动重发；可手动重试。');
           } else {
