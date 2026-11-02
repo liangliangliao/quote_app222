@@ -1,3 +1,4 @@
+import 'quote_knowledge/runtime.dart';
 import 'diary/diary_theme.dart';
 import './services/native_guard.dart';
 import 'services/native_sport_fg.dart';
@@ -124,6 +125,7 @@ Future<void> _bootstrapAfterFirstFrame() async {
   // 其余初始化互不依赖，并行执行，避免把首页交互串行卡住。
   await Future.wait<void>([
     _warmDatabaseAndRestoreSport(),
+    _runBestEffort(() => QuoteKnowledgeRuntime.instance.start()),
     _scheduleSportMidnightRenewal(),
     _runBestEffort(() => ensureExtraTaskColumns()),
     _runBestEffort(() => DiaryTheme.reloadFromDatabase()),
@@ -250,6 +252,7 @@ class RootShell extends StatefulWidget {
 
 class _RootShellState extends State<RootShell> {
   int _idx = 0;
+  bool _historyGraphActive = false;
   int _drawerStyleSeed = DateTime.now().microsecondsSinceEpoch;
   int _drawerRevealSeed = DateTime.now().microsecondsSinceEpoch;
   int _drawerHeaderRequestId = 0;
@@ -941,7 +944,7 @@ class _RootShellState extends State<RootShell> {
   Widget build(BuildContext context) {
     final pages = [
       const HomePage(),
-      const HistoryPage(),
+      HistoryPage(onGraphChanged: (value) {if (mounted && value != _historyGraphActive) setState(() => _historyGraphActive = value);}),
       const DiscoverPage(),
       const LogsPage(),
       const SettingsPage(),
@@ -1103,14 +1106,18 @@ class _RootShellState extends State<RootShell> {
           );
         },
       ),
-      backgroundColor: Colors.white,
+      backgroundColor: _idx == 1 && _historyGraphActive ? const Color(0xff081c26) : Colors.white,
       // 使用 IndexedStack 保持各页面的状态，避免切换时重新构建导致白屏或闪烁
       body: IndexedStack(index: _idx, children: pages),
       bottomNavigationBar: SafeArea(
         top: false,
         child: SizedBox(
           height: 60, // reduce bottom bar height by another 10 (total -20)
-          child: NavigationBar(
+          child: NavigationBarTheme(data: _idx == 1 && _historyGraphActive
+            ? NavigationBarThemeData(backgroundColor: const Color(0xff081c26), indicatorColor: const Color(0xff324a51),
+                iconTheme: WidgetStateProperty.all(const IconThemeData(color: Color(0xffcedbd8))),
+                labelTextStyle: WidgetStateProperty.all(const TextStyle(color: Color(0xffcedbd8), fontSize: 11)))
+            : NavigationBarTheme.of(context), child: NavigationBar(
             elevation: 0,
             surfaceTintColor: Colors.transparent,
             shadowColor: Colors.transparent,
@@ -1123,7 +1130,7 @@ class _RootShellState extends State<RootShell> {
               NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
             ],
             onDestinationSelected: (i) { _handleSelectTab(i); },
-          ),
+          )),
         ),
       ),
     );

@@ -1,3 +1,5 @@
+import '../quote_knowledge/repository.dart';
+import '../quote_knowledge/models.dart';
 import '../data/dao.dart';
 import '../data/quote_insight_store.dart';
 import '../models/quote_insight.dart';
@@ -9,7 +11,10 @@ enum ConceptQuoteReason {
   acceptedNote,
   proposedNote,
   semanticAnalysis,
-  textMatch
+  textMatch,
+  automaticCategory,
+  manualCategory,
+  provisionalCategory
 }
 
 class ConceptQuoteMatch {
@@ -18,6 +23,9 @@ class ConceptQuoteMatch {
   const ConceptQuoteMatch(this.row, this.reason);
 
   String get explanation => switch (reason) {
+        ConceptQuoteReason.automaticCategory => '统一分类库 · 自动归类，保留原句依据',
+        ConceptQuoteReason.manualCategory => '统一分类库 · 用户调整的类别',
+        ConceptQuoteReason.provisionalCategory => '统一分类库 · 原主题初分，尚待整理',
         ConceptQuoteReason.savedConcept => '已保存的概念标注 · AI 暂定理解',
         ConceptQuoteReason.acceptedNote => '已采纳的概念注释 · 一种理解',
         ConceptQuoteReason.proposedNote => '待确认的概念注释',
@@ -38,15 +46,19 @@ class ConceptQuotePage {
 class QuoteConceptCatalog {
   final QuoteInsightStore insights;
   final CognitiveStore notes;
+  final QuoteKnowledgeRepository? knowledge;
   final Future<List<Map<String, dynamic>>> Function(int limit, int offset)
       _readPage;
   QuoteConceptCatalog({
     QuoteInsightStore? insights,
     CognitiveStore? notes,
+    QuoteKnowledgeRepository? knowledge,
     Future<List<Map<String, dynamic>>> Function(int limit, int offset)?
         readPage,
   })  : insights = insights ?? QuoteInsightStore(),
         notes = notes ?? CognitiveStore(),
+        knowledge =
+            knowledge ?? (readPage == null ? QuoteKnowledgeRepository() : null),
         _readPage = readPage ??
             ((limit, offset) =>
                 QuoteDao().latest(limit: limit, offset: offset));
@@ -76,6 +88,12 @@ class QuoteConceptCatalog {
       final rows = await _readPage(batchSize, cursor);
       if (rows.isEmpty) return ConceptQuotePage(matches, cursor, false);
       final refs = rows.map(QuoteReference.fromRow).toList();
+      var indexed = <String, String>{};
+      try {
+        indexed = await knowledge?.indexedMatches(
+                rows.map(knowledgeQuoteKey).toList(), query) ??
+            {};
+      } catch (_) {/* Saved annotations and literal matches remain usable. */}
       final addons = await insights.readAddons(refs);
       final semantic = await insights.readSemanticConcepts(refs);
       final annotations = await notes.forRecords('quote',
@@ -96,16 +114,23 @@ class QuoteConceptCatalog {
         final analyzed = semantic[ref.contentKey]
                 ?.any((s) => s.trim().toLowerCase() == query) ==
             true;
-        if (tagged || literal || analyzed) {
-          final reason = !tagged && analyzed
-              ? ConceptQuoteReason.semanticAnalysis
-              : !tagged
-                  ? ConceptQuoteReason.textMatch
-                  : note?.analysis.concepts.isNotEmpty == true
-                      ? note!.accepted
-                          ? ConceptQuoteReason.acceptedNote
-                          : ConceptQuoteReason.proposedNote
-                      : ConceptQuoteReason.savedConcept;
+        final categoryStatus = indexed[knowledgeQuoteKey(rows[i])];
+        if (tagged || literal || analyzed || categoryStatus != null) {
+          final reason = categoryStatus != null
+              ? switch (categoryStatus) {
+                  'manual' => ConceptQuoteReason.manualCategory,
+                  'provisional' => ConceptQuoteReason.provisionalCategory,
+                  _ => ConceptQuoteReason.automaticCategory,
+                }
+              : !tagged && analyzed
+                  ? ConceptQuoteReason.semanticAnalysis
+                  : !tagged
+                      ? ConceptQuoteReason.textMatch
+                      : note?.analysis.concepts.isNotEmpty == true
+                          ? note!.accepted
+                              ? ConceptQuoteReason.acceptedNote
+                              : ConceptQuoteReason.proposedNote
+                          : ConceptQuoteReason.savedConcept;
           matches.add(ConceptQuoteMatch(rows[i], reason));
         }
         if (matches.length == limit) {

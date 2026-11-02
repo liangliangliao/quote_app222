@@ -554,6 +554,11 @@ void main() {
     expect(find.textContaining('待确定'), findsNothing);
     expect(find.textContaining('endpoint-hash'), findsNothing);
     await capture(tester, 'comparison-judgment');
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('comparison-semantic-details')));
+    await tester.tap(find.text('概念与依据'));
+    await settle(tester);
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '直观与抽象'));
     await tester.tap(find.widgetWithText(ChoiceChip, '直观与抽象'));
     await settle(tester);
     expect(find.text('具体材料 → 保留的共同规定 → 被省略的个别细节'), findsOneWidget);
