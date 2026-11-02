@@ -1,3 +1,5 @@
+import 'reading_map_quality.dart';
+import 'semantic_scope_service.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'concept_analysis.dart';
@@ -15,6 +17,7 @@ class PassageScopeView extends StatelessWidget {
   final void Function(String, SemanticScope)? onOpenConcept;
   final String? imagePath;
   final bool showCircles;
+  final SemanticScopeService? service;
   const PassageScopeView(
       {super.key,
       required this.text,
@@ -25,7 +28,8 @@ class PassageScopeView extends StatelessWidget {
       this.onResult,
       this.onOpenConcept,
       this.imagePath,
-      this.showCircles = true});
+      this.showCircles = true,
+      this.service});
   @override
   Widget build(BuildContext context) =>
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -44,6 +48,8 @@ class PassageScopeView extends StatelessWidget {
             key: ValueKey(text),
             sources: [ScopeSource('A', text)],
             initial: legacyConceptView(text, abstractions, scopes),
+            service: service,
+            analysisContext: readingMapContext,
             preferredView: preferredView,
             allowCircles: showCircles,
             showViewSelector: preferredView == null,

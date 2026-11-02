@@ -72,9 +72,11 @@ class QuoteKnowledgeGraph {
 
 class ClassificationClaim {
   final String quoteKey, token, inputHash;
+  final String strategy;
   final Map<String, dynamic> quote;
   const ClassificationClaim(
-      this.quoteKey, this.token, this.inputHash, this.quote);
+      this.quoteKey, this.token, this.inputHash, this.quote,
+      {this.strategy = 'economy'});
 }
 
 class CategoryProposal {

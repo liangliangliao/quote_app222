@@ -509,7 +509,7 @@ void main() {
         const Scaffold(
             body: QuoteCognitiveReader(
                 quote: ref, topic: '评审', authorLabel: '案例', note: '')));
-    await waitFor(tester, find.text('分析概念关系并绘图'));
+    await waitFor(tester, find.text('生成完整概念树与含义圈'));
     expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
     expect(find.text('概念含义圈 · 单一范围'), findsNothing);
   });

@@ -1,3 +1,4 @@
+import 'concept_circle_preview.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/quote_insight.dart';
@@ -149,6 +150,38 @@ class ConceptCircleLayout {
             radius);
       }
     }
+    // A long overlap path gets a compact hexagonal snake. Adjacent circles
+    // intersect and non-neighbours remain separate in the bounded exercise.
+    if (contains.isEmpty &&
+        relations.every((r) => r.scope!.relation == QuoteRelation.overlap)) {
+      final graph = <String, Set<String>>{};
+      for (final e in overlap) {
+        graph.putIfAbsent(e.$1, () => {}).add(e.$2);
+        graph.putIfAbsent(e.$2, () => {}).add(e.$1);
+      }
+      final ends = graph.keys.where((id) => graph[id]!.length == 1).toList();
+      if (ends.length == 2 &&
+          graph.length == groups.length &&
+          graph.values.every((n) => n.length <= 2)) {
+        final path = <String>[], seen = <String>{};
+        var at = ends.first;
+        while (seen.add(at)) {
+          path.add(at);
+          final next = graph[at]!.where((n) => !seen.contains(n)).firstOrNull;
+          if (next == null) break;
+          at = next;
+        }
+        if (path.length == groups.length)
+          for (final e in path.indexed) {
+            final i = e.$1, row = i ~/ 4, step = i % 4;
+            final x = row.isEven
+                ? (step < 3 ? step * 160.0 : 400.0)
+                : (step < 3 ? (2 - step) * 160.0 : -80.0);
+            final y = row * 277.2 + (step == 3 ? 138.6 : 0);
+            circles[e.$2]!.center = Offset(x, y);
+          }
+      }
+    }
     bool inside(String parent, String child, Set<String> seen) =>
         contains.contains((parent, child)) ||
         (seen.add(parent) &&
@@ -254,10 +287,16 @@ class _ConceptMeaningNetworkState extends State<ConceptMeaningNetwork> {
     final nodes = {for (final n in widget.value.concepts) n.id: n};
     final picked = nodes[selected];
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (clusters.isEmpty)
+        ConceptCirclePreview(
+            value: widget.value,
+            onOpen: widget.onOpen,
+            onExpand: widget.onExpand),
       for (final cluster in clusters) ...[
         if (cluster.verified)
           ConceptCanvas(
-              title: '多概念含义圈 · ${cluster.relations.first.scope!.universe}',
+              title:
+                  '${cluster.relations.any((r) => r.scope!.illustration) ? '模拟练习 · ' : ''}多概念含义圈 · ${cluster.relations.first.scope!.universe}',
               size: cluster.size,
               child: GestureDetector(
                   key: ValueKey(

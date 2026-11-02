@@ -1,3 +1,4 @@
+import 'reading_map_quality.dart';
 import 'package:flutter/material.dart';
 import 'concept_meaning_diagram.dart';
 import 'concept_meaning_network.dart';
@@ -87,7 +88,15 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
       final value = await service.cached(widget.sources, widget.focus,
           context: widget.analysisContext);
       if (mounted && n == generation) {
-        setState(() => result = value ?? result);
+        final retainComplete =
+            widget.analysisContext.purpose == readingMapPurpose &&
+                result != null &&
+                ReadingMapQuality.issues(result!).isEmpty &&
+                value != null &&
+                ReadingMapQuality.issues(value).isNotEmpty;
+        setState(() {
+          if (!retainComplete) result = value ?? result;
+        });
         if (result != null) widget.onResult?.call(result!);
       }
     } catch (_) {
@@ -161,6 +170,8 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
         if (result case final value?)
           SemanticScopeView(
               value: value,
+              guidedReading:
+                  widget.analysisContext.purpose == readingMapPurpose,
               sources: widget.sources,
               stars: widget.stars,
               allowCircles: widget.allowCircles,
@@ -184,9 +195,14 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
             icon: const Icon(Icons.auto_awesome_outlined),
             label: Text(busy
                 ? '正在分析概念关系…'
-                : result == null
-                    ? '分析概念关系并绘图'
-                    : '重新判断关系并绘图')),
+                : widget.analysisContext.purpose == readingMapPurpose
+                    ? (result == null ||
+                            ReadingMapQuality.issues(result!).isNotEmpty
+                        ? '生成完整概念树与含义圈'
+                        : '完善概念链与含义圈')
+                    : result == null
+                        ? '分析概念关系并绘图'
+                        : '重新判断关系并绘图')),
       ]));
 }
 
@@ -194,6 +210,7 @@ class SemanticScopeView extends StatefulWidget {
   final SemanticScope value;
   final List<ScopeSource> sources;
   final bool stars, allowCircles, showViewSelector;
+  final bool guidedReading;
   final EpistemicViewKind? preferredView;
   final ValueChanged<String>? onExpand, onOpenConcept;
   final Map<String, String> imagePaths;
@@ -202,6 +219,7 @@ class SemanticScopeView extends StatefulWidget {
       required this.value,
       required this.sources,
       this.stars = false,
+      this.guidedReading = false,
       this.allowCircles = true,
       this.showViewSelector = true,
       this.preferredView,
@@ -239,6 +257,11 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
             (view) => widget.allowCircles || view != EpistemicViewKind.circles)
         .toList();
     final preferred = chosen ?? widget.preferredView;
+    if (preferred == EpistemicViewKind.circles &&
+        widget.allowCircles &&
+        value.concepts.isNotEmpty &&
+        !views.contains(EpistemicViewKind.circles))
+      views.insert(0, EpistemicViewKind.circles);
     final active = views.contains(preferred)
         ? preferred
         : views.contains(value.primaryView)
@@ -256,11 +279,6 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
             title:
                 const Text('部分内容返回不完整，已保留可用分析', style: TextStyle(fontSize: 13)),
             children: [for (final issue in value.issues) Text(issue.message)]),
-      if (widget.preferredView == EpistemicViewKind.circles &&
-          !views.contains(EpistemicViewKind.circles))
-        Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('当前内容更适合${active?.label ?? '概念分析'}，可从下方查看其原文依据与适用条件。')),
       if (widget.showViewSelector && views.length > 1)
         Wrap(spacing: 6, runSpacing: 4, children: [
           for (final view in views)
@@ -272,6 +290,7 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
       if (active == EpistemicViewKind.hierarchy)
         ConceptHierarchyView(
             value: value,
+            traceGrounding: widget.guidedReading,
             imagePaths: widget.imagePaths,
             onExpand: widget.onExpand,
             onOpen: widget.onOpenConcept),

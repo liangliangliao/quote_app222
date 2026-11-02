@@ -69,6 +69,29 @@ class QuoteKnowledgeSchema {
       relation_id TEXT NOT NULL REFERENCES qk_relations(id) ON DELETE CASCADE,
       quote_key TEXT NOT NULL, excerpt TEXT NOT NULL, reason TEXT NOT NULL,
       PRIMARY KEY(relation_id,quote_key))''');
+    final columns = (await db.rawQuery('PRAGMA table_info(qk_jobs)'))
+        .map((r) => r['name'])
+        .toSet();
+    if (!columns.contains('strategy'))
+      await db.execute(
+          "ALTER TABLE qk_jobs ADD COLUMN strategy TEXT NOT NULL DEFAULT 'economy'");
+    if (!columns.contains('request_id'))
+      await db.execute(
+          "ALTER TABLE qk_jobs ADD COLUMN request_id TEXT NOT NULL DEFAULT ''");
+    if (!columns.contains('ai_attempts'))
+      await db.execute(
+          "ALTER TABLE qk_jobs ADD COLUMN ai_attempts INTEGER NOT NULL DEFAULT 0");
+    await db.execute('''CREATE TABLE IF NOT EXISTS qk_classification_cache (
+      cache_key TEXT PRIMARY KEY, dependencies TEXT NOT NULL, analysis TEXT NOT NULL)''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS qk_ai_budget (
+      id INTEGER PRIMARY KEY CHECK(id=1), request_limit INTEGER NOT NULL DEFAULT 3,
+      used INTEGER NOT NULL DEFAULT 0, estimated_used INTEGER NOT NULL DEFAULT 0,
+      estimated_limit INTEGER NOT NULL DEFAULT 48000, stopped INTEGER NOT NULL DEFAULT 0,
+      token TEXT NOT NULL DEFAULT '', lease_ms INTEGER NOT NULL DEFAULT 0, migrated INTEGER NOT NULL DEFAULT 0)''');
+    await db.execute('INSERT OR IGNORE INTO qk_ai_budget(id) VALUES(1)');
+    await db.execute('''CREATE TABLE IF NOT EXISTS qk_ai_requests (
+      id TEXT PRIMARY KEY, created_ms INTEGER NOT NULL, quote_count INTEGER NOT NULL,
+      estimated_tokens INTEGER NOT NULL, status TEXT NOT NULL)''');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS qk_jobs_due ON qk_jobs(status,next_ms)');
     await db.execute(

@@ -1,9 +1,12 @@
+import 'dart:convert';
+import 'cost_policy.dart';
 import 'dart:math' as math;
 import 'package:sqflite/sqflite.dart';
 import '../data/db.dart';
 import '../models/quote_insight.dart';
 import 'models.dart';
 import 'schema.dart';
+part 'repository_cost.dart';
 
 class QuoteKnowledgeRepository {
   final Future<Database> Function() _database;
@@ -26,6 +29,7 @@ class QuoteKnowledgeRepository {
 
   Future<void> _initialize(Database db) async {
     await QuoteKnowledgeSchema.ensure(db);
+    await initializeEconomy(db);
     await db.transaction((txn) async {
       if ((await txn.query('qk_categories', columns: ['id'], limit: 1))
           .isNotEmpty) return;
@@ -198,9 +202,19 @@ class QuoteKnowledgeRepository {
           text.contains(name)) matches['${c['id']}'] = name;
     }
     for (final label in labels) {
-      final id = await _category(
-          db, label, '原记录中以“$label”标注的名言主题。', '', 'label', const []);
-      matches[id] = label;
+      final existing = await db.query('qk_aliases',
+          columns: ['category_id'],
+          where: 'alias_key=?',
+          whereArgs: [categoryNameKey(label)]);
+      if (existing.length == 1) {
+        matches['${existing.single['category_id']}'] = label;
+      } else if (existing.isEmpty) {
+        final id = await _category(
+            db, label, '原记录中以“$label”标注的名言主题。', '', 'label', const []);
+        matches[id] = label;
+      }
+      // Homonyms under different parents need semantic context; do not create
+      // a third root or silently pick one of them during local topic indexing.
     }
     for (final entry in matches.entries.take(4)) {
       await db.insert(
@@ -230,31 +244,39 @@ class QuoteKnowledgeRepository {
     QuoteKnowledgeEvents.notify();
   }
 
-  Future<void> enqueueBackfill() async {
+  Future<void> enqueueBackfill(
+      {bool semantic = false,
+      int requestLimit = ClassificationCostPolicy.defaultRequests}) async {
     while (await bootstrapLegacy() == 200) {}
+    await beginRound(requestLimit: requestLimit);
     await (await database).rawUpdate(
-        "UPDATE qk_jobs SET status='pending',origin='backfill',next_ms=0,last_error='' WHERE status IN ('legacy','paused') OR (origin='backfill' AND status IN ('retry','waiting_model'))");
+        "UPDATE qk_jobs SET status='pending',origin='backfill',strategy=?,next_ms=0,last_error='',request_id='',ai_attempts=CASE WHEN status IN ('blocked','waiting_model') THEN 0 ELSE ai_attempts END WHERE status IN ('legacy','paused','budget') OR (origin='backfill' AND status IN ('retry','waiting_model','blocked')) ${semantic ? "OR (status='done' AND method='local')" : ''}",
+        [semantic ? 'ai' : 'economy']);
     QuoteKnowledgeEvents.notify();
   }
 
   Future<void> pauseBackfill() async {
     await (await database).rawUpdate(
-        "UPDATE qk_jobs SET status='paused' WHERE origin='backfill' AND status IN ('pending','retry','waiting_model')");
+        "UPDATE qk_jobs SET status='paused' WHERE origin='backfill' AND status IN ('pending','retry','waiting_model','budget')");
     QuoteKnowledgeEvents.notify();
   }
 
   Future<void> retryPending() async {
+    await beginRound();
     await (await database).rawUpdate(
-        "UPDATE qk_jobs SET status='pending',next_ms=0,last_error='' WHERE status IN ('retry','waiting_model')");
+        "UPDATE qk_jobs SET status='pending',next_ms=0,last_error='',request_id='',ai_attempts=0 WHERE status IN ('retry','waiting_model','blocked','budget')");
     QuoteKnowledgeEvents.notify();
   }
 
   Future<ClassificationClaim?> claim() async {
     final db = await database, ms = now().millisecondsSinceEpoch;
     return db.transaction((txn) async {
+      await txn.rawUpdate(
+          "UPDATE qk_jobs SET status='blocked',token='',lease_ms=0,last_error='上次AI请求可能已发出，为避免重复计费已暂停，请手动重试。' WHERE status='running' AND lease_ms<=? AND request_id<>''",
+          [ms]);
       final jobs = await txn.query('qk_jobs',
           where:
-              "((status IN ('pending','retry','waiting_model') AND next_ms<=?) OR (status='running' AND lease_ms<=?))",
+              "((status IN ('pending','retry') AND next_ms<=?) OR (status='running' AND lease_ms<=? AND request_id=''))",
           whereArgs: [ms, ms],
           orderBy: "CASE origin WHEN 'new' THEN 0 ELSE 1 END,next_ms,quote_key",
           limit: 1);
@@ -276,6 +298,7 @@ class QuoteKnowledgeRepository {
           'qk_jobs',
           {
             'status': 'running',
+            'request_id': '',
             'token': token,
             'input_hash': hash,
             'lease_ms': ms + 180000,
@@ -283,7 +306,8 @@ class QuoteKnowledgeRepository {
           },
           where: 'quote_key=?',
           whereArgs: [key]);
-      return ClassificationClaim(key, token, hash, row);
+      return ClassificationClaim(key, token, hash, row,
+          strategy: '${jobs.first['strategy']}');
     });
   }
 
@@ -294,15 +318,11 @@ class QuoteKnowledgeRepository {
         where: 'quote_key=? AND token=?',
         whereArgs: [claim.quoteKey, claim.token]);
     if (jobs.isEmpty) return;
-    final attempts = (jobs.first['attempts'] as num).toInt();
-    final seconds =
-        unavailable ? 60 : math.min(3600, 30 * (1 << math.min(7, attempts)));
     await db.update(
         'qk_jobs',
         {
-          'status': unavailable ? 'waiting_model' : 'retry',
+          'status': 'blocked',
           'last_error': message,
-          'next_ms': now().millisecondsSinceEpoch + seconds * 1000,
           'lease_ms': 0,
           'token': ''
         },
@@ -311,8 +331,8 @@ class QuoteKnowledgeRepository {
     QuoteKnowledgeEvents.notify();
   }
 
-  Future<bool> apply(
-      ClassificationClaim claim, QuoteClassification result) async {
+  Future<bool> apply(ClassificationClaim claim, QuoteClassification result,
+      {String method = 'ai'}) async {
     final db = await database;
     final applied = await db.transaction((txn) async {
       final row = await _quote(txn, claim.quoteKey);
@@ -409,7 +429,7 @@ class QuoteKnowledgeRepository {
           'qk_jobs',
           {
             'status': result.needsReview ? 'review' : 'done',
-            'method': 'ai',
+            'method': method,
             'review_reason': result.reviewReason,
             'token': '',
             'lease_ms': 0,
@@ -417,6 +437,8 @@ class QuoteKnowledgeRepository {
           },
           where: 'quote_key=? AND token=?',
           whereArgs: [claim.quoteKey, claim.token]);
+      if ((method == 'ai' || method == 'batch') && !result.needsReview)
+        await rememberClassification(txn, claim, result, resolved);
       return true;
     });
     if (applied) QuoteKnowledgeEvents.notify();
@@ -479,8 +501,8 @@ class QuoteKnowledgeRepository {
         categories: categories,
         edges: edges,
         quoteCount: (totals.single['n'] as num).toInt(),
-        pending: count(['pending', 'retry', 'waiting_model', 'running']),
-        needsReview: count(['review']),
+        pending: count(['pending', 'running', 'budget', 'retry']),
+        needsReview: count(['review', 'blocked']),
         legacyRemaining: count(['legacy', 'paused']));
   }
 
@@ -582,7 +604,7 @@ class QuoteKnowledgeRepository {
       (await database).rawQuery(
           '''SELECT q.*,j.status AS classification_status,j.review_reason,j.last_error
       FROM quotes q JOIN qk_jobs j ON j.quote_key=$_joinedKey
-      WHERE j.status IN ('review','retry','waiting_model') ORDER BY q.id DESC LIMIT ? OFFSET ?''',
+      WHERE j.status IN ('review','retry','waiting_model','blocked','budget') ORDER BY q.id DESC LIMIT ? OFFSET ?''',
           [limit, offset]);
 
   Future<Map<String, String>> indexedMatches(

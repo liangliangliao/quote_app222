@@ -25,7 +25,7 @@ class ConceptQuoteMatch {
   String get explanation => switch (reason) {
         ConceptQuoteReason.automaticCategory => '统一分类库 · 自动归类，保留原句依据',
         ConceptQuoteReason.manualCategory => '统一分类库 · 用户调整的类别',
-        ConceptQuoteReason.provisionalCategory => '统一分类库 · 原主题初分，尚待整理',
+        ConceptQuoteReason.provisionalCategory => '统一分类库 · 本地主题初分，可按需 AI 细分',
         ConceptQuoteReason.savedConcept => '已保存的概念标注 · AI 暂定理解',
         ConceptQuoteReason.acceptedNote => '已采纳的概念注释 · 一种理解',
         ConceptQuoteReason.proposedNote => '待确认的概念注释',

@@ -1,3 +1,4 @@
+import 'package:quote_app/quote_knowledge/batch_request.dart';
 import 'dart:convert';
 import 'package:quote_app/services/unified_ai_service.dart';
 import 'package:quote_app/data/quote_insight_store.dart';
@@ -16,7 +17,15 @@ class ControlledClassifier extends QuoteKnowledgeClassifier {
   final Future<QuoteClassification> Function(
       Map<String, dynamic>, List<QuoteCategory>) answer;
   int calls = 0;
-  ControlledClassifier(this.answer);
+  ControlledClassifier(this.answer, {bool available = true})
+      : super(ai: ClassificationAi((_) => '', available: available));
+  @override
+  Future<Map<String, QuoteClassification>> classifyBatch(
+          BatchClassificationRequest request) async =>
+      {
+        for (final c in request.claims)
+          c.quoteKey: await classify(c.quote, request.candidates)
+      };
   @override
   Future<QuoteClassification> classify(
       Map<String, dynamic> q, List<QuoteCategory> cats) {
@@ -28,18 +37,19 @@ class ControlledClassifier extends QuoteKnowledgeClassifier {
 class ClassificationAi extends UnifiedAiService {
   final String Function(String) respond;
   final prompts = <String>[];
-  ClassificationAi(this.respond);
+  final bool available;
+  ClassificationAi(this.respond, {this.available = true});
   @override
   Future<UnifiedAiResolvedConfig> resolveGlobalConfig(
           {String? forcedProvider, String? forcedModel}) async =>
-      const UnifiedAiResolvedConfig(
+      UnifiedAiResolvedConfig(
           provider: 'test',
           apiKey: '',
           model: 'fixture',
           endpoint: 'https://example.invalid',
           label: 'test',
           displayModel: '模拟模型',
-          available: true);
+          available: available);
   @override
   Future<String> generateText(
       {required String prompt,
@@ -237,14 +247,17 @@ void main() {
       () async {
     await insert('q', theme: '幸福');
     final classifier = ControlledClassifier(
-        (_, __) async => throw ClassificationUnavailable());
+        (_, __) async => throw ClassificationUnavailable(),
+        available: false);
     expect(
         await QuoteKnowledgeWorker(
-                repository: repository, classifier: classifier)
+                repository: repository,
+                classifier: classifier,
+                localFirst: false)
             .drain(),
         0);
     final job = (await db.query('qk_jobs')).single;
-    expect(job['status'], 'waiting_model');
+    expect(job['status'], 'blocked');
     expect((await repository.assignments('q')).map((r) => r['status']),
         everyElement('provisional'));
     expect((await db.query('quotes')).single['content'], '幸福源于成长。');
@@ -258,14 +271,17 @@ void main() {
     await insert('q');
     final bad =
         ControlledClassifier((_, __) async => throw StateError('secret-token'));
-    await QuoteKnowledgeWorker(repository: repository, classifier: bad).drain();
+    await QuoteKnowledgeWorker(
+            repository: repository, classifier: bad, localFirst: false)
+        .drain();
     expect((await db.query('qk_jobs')).single['last_error'],
         isNot(contains('secret')));
     await repository.retryPending();
     final good = ControlledClassifier(
         (_, cats) async => assigned(cats.firstWhere((c) => c.name == '幸福').id));
     expect(
-        await QuoteKnowledgeWorker(repository: repository, classifier: good)
+        await QuoteKnowledgeWorker(
+                repository: repository, classifier: good, localFirst: false)
             .drain(),
         1);
     expect((await repository.assignments('q')).single['evidence'], '幸福');
@@ -383,7 +399,9 @@ void main() {
               ]
             })}\n```');
     final worker = QuoteKnowledgeWorker(
-        repository: repository, classifier: QuoteKnowledgeClassifier(ai: ai));
+        repository: repository,
+        classifier: QuoteKnowledgeClassifier(ai: ai),
+        localFirst: false);
     expect(await worker.drain(), 1);
     expect((await repository.assignments('q')).single['id'], happy);
     expect(ai.prompts.single, contains('复用已有类别'));
