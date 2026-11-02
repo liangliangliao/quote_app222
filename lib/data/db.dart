@@ -1,5 +1,6 @@
 
 import 'dart:async';
+import '../quote_knowledge/schema.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -15,11 +16,19 @@ class AppDatabase {
   static Future<Database>? _opening;
 
   static Future<Database> instance() async {
-    if (_db != null) return _db!;
     if (_opening != null) return await _opening!;
+    if (_db != null) return _db!;
+    final opening = _openAndMigrate();
+    _opening = opening;
+    try {return await opening;}
+    catch (_) {final failed = _db; _db = null; if (failed != null) await failed.close(); rethrow;}
+    finally {_opening = null;}
+  }
+
+  static Future<Database> _openAndMigrate() async {
     final dir = await getApplicationDocumentsDirectory();
     final path = p.join(dir.path, 'quotes.db');
-    _opening = openDatabase(
+    final opening = openDatabase(
       path,
       // Bump the database version to trigger onUpgrade for recent migrations.
       // Increasing this version number ensures that any device with an older
@@ -39,11 +48,7 @@ class AppDatabase {
       onCreate: _create,
       onUpgrade: _upgrade,
     );
-    try {
-      _db = await _opening!;
-    } finally {
-      _opening = null;
-    }
+    _db = await opening;
 
     // Debug: print DB absolute path and notify native
     try {
@@ -293,6 +298,7 @@ if (!colsEmotions.contains('type'))           await db.execute("ALTER TABLE emot
     } catch (_) {
       // ignore any errors; missing columns will raise on next upgrade
     }
+    await QuoteKnowledgeSchema.ensure(_db!);
     return _db!;
   }
 

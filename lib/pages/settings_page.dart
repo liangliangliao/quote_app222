@@ -11,6 +11,7 @@ import 'package:quote_app/services/native_am.dart';
 import 'package:quote_app/services/native_wm.dart';
 import 'package:quote_app/services/native_guard.dart';
 import 'package:flutter/material.dart';
+import '../epistemic/cognitive_settings.dart';
 import 'package:image_picker/image_picker.dart';
 // removed duplicate import of path_provider
 // 用于选择和上传量表 Excel 模板文件
@@ -3791,6 +3792,7 @@ Future<String?> _saveAvatarTemp(File file) async {
     SettingsSection.media => [_buildMediaFields()],
     SettingsSection.engine => [_buildEngineFields()],
     SettingsSection.appearance => [
+      const CognitiveSettingsSection(),
       _quoteCalligraphySettingsCard(),
       _buildDisplayFields(),
     ],

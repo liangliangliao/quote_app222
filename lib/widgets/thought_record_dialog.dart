@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/dao.dart';
+import '../epistemic/cognitive_scope_hint.dart';
 
 class ThoughtRecordResult {
   final String thought;
@@ -95,6 +96,8 @@ class _ThoughtRecordDialogState extends State<ThoughtRecordDialog> {
       setState(() {
         _childrenCache[uid] = rows;
       });
+    } catch (_) {
+      if (mounted) setState(() => _expanded.remove(uid));
     } finally {
       _loadingChildren[uid] = false;
       if (mounted) setState(() {});
@@ -202,21 +205,23 @@ class _ThoughtRecordDialogState extends State<ThoughtRecordDialog> {
           ),
           body: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Column(
+            child: LayoutBuilder(builder: (context, box) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(
+                ConstrainedBox(constraints: BoxConstraints(
+                    maxHeight: (box.maxHeight * .4).clamp(72.0, 240.0).toDouble()),
+                  child: TextField(
                   controller: _ctrl,
                   maxLines: 4,
                   decoration: const InputDecoration(
                     hintText: '简单记一下，专注结束后再处理。',
                   ),
-                ),
+                )),
+                CognitiveScopeHint(controller: _ctrl),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Text('念头分类（可多选）', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                    const Spacer(),
+                    const Expanded(child: Text('念头分类（可多选）', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
                     if (_selected.isNotEmpty)
                       Text('已选 ${_selected.length}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   ],
@@ -289,7 +294,7 @@ class _ThoughtRecordDialogState extends State<ThoughtRecordDialog> {
                         ),
                 ),
               ],
-            ),
+            )),
           ),
         ),
       ),

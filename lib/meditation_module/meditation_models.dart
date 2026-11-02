@@ -115,6 +115,8 @@ class MeditationAiGenerationResult {
   final String cognitiveShift;
   final String embodiedGoal;
   final String realLifeScene;
+  /// Invitations not confirmed in narration; this is not a quality score.
+  final List<String> practiceGaps;
 
   const MeditationAiGenerationResult({
     required this.session,
@@ -125,6 +127,7 @@ class MeditationAiGenerationResult {
     this.cognitiveShift = '',
     this.embodiedGoal = '',
     this.realLifeScene = '',
+    this.practiceGaps = const <String>[],
   });
 }
 

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as pth;
 
 import '../data/db.dart';
+import '../epistemic/cognitive_models.dart';
+import '../epistemic/cognitive_preferences.dart';
+import '../epistemic/cognitive_sheet.dart';
+import '../epistemic/cognitive_store.dart';
+import '../epistemic/cognitive_service.dart';
+import '../epistemic/diary_cognition_panel.dart';
 import 'diary_theme.dart';
 import 'diary_dao.dart';
 import 'tag_picker_page.dart';
@@ -58,9 +65,10 @@ class EntryEditorPage extends StatefulWidget {
   // Whether this page should intercept back navigation and auto-save.
   // When embedded in EntryEditorPagerPage, set to false so the pager controls saving/pop.
   final bool handleWillPop;
+  final CognitiveService? cognitiveService;
 
 
-  const EntryEditorPage({super.key, required this.notebookId, this.entryId, this.focusAtStart = false, this.useBackground = true, this.handleWillPop = true});
+  const EntryEditorPage({super.key, required this.notebookId, this.entryId, this.focusAtStart = false, this.useBackground = true, this.handleWillPop = true, this.cognitiveService});
 
   @override
   State<EntryEditorPage> createState() => EntryEditorPageState();
@@ -92,8 +100,14 @@ class EntryEditorPageState extends State<EntryEditorPage> {
   }
 
   final _dao = DiaryDao();
+  late final _cognitiveService = widget.cognitiveService ?? CognitiveService();
+  CognitiveStore get _cognitiveStore => _cognitiveService.store;
+  String _cognitiveDraftId = 'draft-${DateTime.now().microsecondsSinceEpoch}-${math.Random().nextInt(1 << 30)}';
+  String get _cognitiveRecordId => _entryId > 0 ? '$_entryId' : _cognitiveDraftId;
   final _fmt = DateFormat('yyyy年MM月dd日 HH:mm');
   final _textCtrl = DiaryContentController();
+  bool _settingEntryContent = false;
+  String _lastSerializedBlocks = '';
   final List<_EditorBlock> _blocks = <_EditorBlock>[];
   int _activeTextBlock = 0; // 当前获得焦点的文本块索引
   int? _selectedBlockIndex; // 选中的图片/语音块索引（用于显示删除按钮）
@@ -216,6 +230,8 @@ class EntryEditorPageState extends State<EntryEditorPage> {
   @override
   void initState() {
     super.initState();
+    CognitivePreferenceStore.instance.addListener(_cognitivePreferencesChanged);
+    CognitivePreferenceStore.instance.load();
 
     // New entries start editable; existing entries open in read-only mode.
     _editMode = widget.entryId == null;
@@ -228,9 +244,13 @@ class EntryEditorPageState extends State<EntryEditorPage> {
     WidgetsBinding.instance.addPostFrameCallback((_)=>_precacheBg());
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateContentScrollPhysics());
     _textCtrl.addListener(() {
-      if (!_dirty) setState(() => _dirty = true);
+      if (!_settingEntryContent && !_dirty) setState(() => _dirty = true);
       WidgetsBinding.instance.addPostFrameCallback((_) => _updateContentScrollPhysics());
     });
+  }
+
+  void _cognitivePreferencesChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -240,6 +260,10 @@ class EntryEditorPageState extends State<EntryEditorPage> {
     // entryId. When that happens, reload all per-entry fields so the UI always
     // matches the currently displayed entry.
     if (oldWidget.entryId != widget.entryId || oldWidget.notebookId != widget.notebookId) {
+      if (_entryId == 0) {
+        unawaited(_cognitiveStore.deleteRecord('diary', _cognitiveDraftId).catchError((_) {}));
+      }
+      _cognitiveDraftId = 'draft-${DateTime.now().microsecondsSinceEpoch}-${math.Random().nextInt(1 << 30)}';
       _dirty = false;
       _entryId = 0;
       _time = DateTime.now();
@@ -261,6 +285,10 @@ class EntryEditorPageState extends State<EntryEditorPage> {
 
   @override
   void dispose() {
+    CognitivePreferenceStore.instance.removeListener(_cognitivePreferencesChanged);
+    if (_entryId == 0) {
+      unawaited(_cognitiveStore.deleteRecord('diary', _cognitiveDraftId).catchError((_) {}));
+    }
     // 块级编辑器资源释放
     for (final b in _blocks) {
       if (b is _TextBlock) {
@@ -310,7 +338,8 @@ class EntryEditorPageState extends State<EntryEditorPage> {
       }
     }
 
-    for (final line in lines) {
+    for (final entry in lines.indexed) {
+      final line = entry.$2;
       final trimmed = line.trim();
       if (trimmed.startsWith('[图片]')) {
         flushText();
@@ -350,7 +379,8 @@ class EntryEditorPageState extends State<EntryEditorPage> {
         if (path.isNotEmpty) _blocks.add(_AudioBlock(path));
       } else {
         // 保留用户真实换行
-        buf.writeln(line);
+        buf.write(line);
+        if (entry.$1 < lines.length - 1) buf.write('\n');
       }
     }
     flushText();
@@ -360,6 +390,7 @@ class EntryEditorPageState extends State<EntryEditorPage> {
       _activeTextBlock = _blocks.indexWhere((b) => b is _TextBlock);
       if (_activeTextBlock < 0) _activeTextBlock = 0;
     }
+    _lastSerializedBlocks = _serializeBlocksToRaw();
 
     // 统一为所有文本块挂载监听，并在获得焦点时更新 _activeTextBlock。
     for (final b in _blocks) {
@@ -406,12 +437,12 @@ class EntryEditorPageState extends State<EntryEditorPage> {
   }
 
 
-  String _serializeBlocksToRaw() {
+  String _serializeBlocksToRaw({int? beforeBlock}) {
     // Serialize blocks back into raw multiline text.  Only insert
     // additional newline characters between consecutive text blocks.  This
     // avoids creating blank lines above image or audio attachments.
     final out = StringBuffer();
-    for (var i = 0; i < _blocks.length; i++) {
+    for (var i = 0; i < (beforeBlock ?? _blocks.length); i++) {
       final b = _blocks[i];
       if (b is _TextBlock) {
         final text = b.controller.text;
@@ -444,9 +475,48 @@ class EntryEditorPageState extends State<EntryEditorPage> {
 
   void _syncRawFromBlocks() {
     final raw = _serializeBlocksToRaw();
+    if (raw == _lastSerializedBlocks) return;
+    _lastSerializedBlocks = raw;
     if (raw == _textCtrl.text) return;
     _textCtrl.text = raw;
     if (!_dirty && mounted) setState(() => _dirty = true);
+  }
+
+  Future<void> _analyzeSelectedText(int blockIndex, TextSelection range, {GroundLens? lens}) async {
+    if (blockIndex < 0 || blockIndex >= _blocks.length ||
+        !range.isValid || range.isCollapsed) return;
+    final block = _blocks[blockIndex];
+    if (block is! _TextBlock || range.end > block.controller.text.length) return;
+    final raw = _serializeBlocksToRaw();
+    final offset = _serializeBlocksToRaw(beforeBlock: blockIndex).length;
+    final selection = CognitiveSelection.fromText(module: 'diary',
+        recordId: _cognitiveRecordId, title: _cachedTitle ?? '日记选文',
+        fullText: raw, start: offset + range.start, end: offset + range.end);
+    await showCognitiveAnalysis(context, selection: selection, task: CognitiveTask.diary,
+        currentText: () => _serializeBlocksToRaw(), service: _cognitiveService, initialLens: lens);
+  }
+
+  Future<void> _chooseCognitiveText({GroundLens? lens}) async {
+    final candidates = _blocks.indexed.where((e) => e.$2 is _TextBlock &&
+        (e.$2 as _TextBlock).controller.text.trim().isNotEmpty).toList();
+    if (candidates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('先记录具体经历，再选择文字分析。')));
+      return;
+    }
+    final selected = await showDialog<int>(context: context, builder: (ctx) => SimpleDialog(
+      title: Text(lens == null ? '选择本次分析的文字' : '${lens.label} · 选择文字'),
+      children: [
+        const Padding(padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          child: Text('只分析选中的文字块，不读取图片、录音或其他日记。也可返回正文长按，精确选择一句话。')),
+        for (final e in candidates) SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, e.$1),
+          child: Text((e.$2 as _TextBlock).controller.text, maxLines: 5, overflow: TextOverflow.ellipsis)),
+        SimpleDialogOption(onPressed: () => Navigator.pop(ctx), child: const Text('返回正文选择')),
+      ]));
+    if (selected == null || !mounted || selected >= _blocks.length) return;
+    final block = _blocks[selected];
+    if (block is! _TextBlock) return;
+    await _analyzeSelectedText(selected, TextSelection(baseOffset: 0, extentOffset: block.controller.text.length), lens: lens);
   }
 
   int _ensureActiveTextBlock() {
@@ -489,6 +559,7 @@ class EntryEditorPageState extends State<EntryEditorPage> {
     });
   }
   bool _handleBackspaceInTextBlock(_TextBlock block, RawKeyEvent event) {
+    if (!_editMode) return false;
     if (event is! RawKeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.backspace) return false;
 
@@ -617,8 +688,10 @@ Future<void> _bootstrap() async {
         // 使用日记条目的心情（有可能为空），不要回落到最近心情
         _moodName = e.moodName;
         _moodIcon = e.moodIcon;
+        _settingEntryContent = true;
         _textCtrl.text = e.content;
         _initBlocksFromRaw(_textCtrl.text);
+        _settingEntryContent = false;
         _starred = (e.starred == 1);
 
         // Cache AppBar title (first non-empty text line) for edit page.
@@ -714,7 +787,15 @@ Future<void> _bootstrap() async {
       starred: _starred ? 1 : 0,
     );
     final id = await _dao.upsertEntry(e);
+    final wasDraft = _entryId == 0;
     _entryId = id;
+    if (wasDraft) {
+      try { await _cognitiveStore.bindDraft('diary', _cognitiveDraftId, '$id'); }
+      catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('日记已保存，附属注释暂未关联成功。')));
+      }
+    }
     await _dao.touchNotebook(widget.notebookId);
     await _dao.setTagsForEntry(id, _tagIds);
 
@@ -963,6 +1044,7 @@ Future<void> _insertImage() async {
     final db = await AppDatabase.instance();
     await db.delete('entry_tags', where: 'entry_id=?', whereArgs: [_entryId]);
     await db.delete('entries', where: 'id=?', whereArgs: [_entryId]);
+    await _cognitiveStore.deleteRecord('diary', _cognitiveRecordId);
     if (mounted) Navigator.pop(context, true);
   }
 Future<void> _insertAudio() async {
@@ -1241,7 +1323,8 @@ Widget _attachmentsPreview() {
       if (isEmptyDoc) {
         // 页面为空时：点击任意位置可以在相应行首插入光标。根据点击的纵坐标估算行数，插入若干换行。
         children.add(SizedBox(
-          height: constraints.maxHeight,
+          height: constraints.hasBoundedHeight ? constraints.maxHeight
+              : (MediaQuery.sizeOf(context).height - 220).clamp(120.0, 1200.0),
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTapDown: (details) {
@@ -1310,13 +1393,30 @@ Widget _attachmentsPreview() {
                     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
                   },
                   child: AbsorbPointer(
-                    absorbing: !_editMode,
+                    // Read-only text remains selectable for optional analysis.
+                    absorbing: !_editMode && !CognitivePreferenceStore.active,
                     child: TextField(
                       controller: b.controller,
                       focusNode: b.focusNode,
                       maxLines: null,
                       readOnly: !_editMode,
                       showCursor: _editMode,
+                      contextMenuBuilder: (context, editable) {
+                        final range = b.controller.selection;
+                        final prefs = CognitivePreferenceStore.instance.value;
+                        return AdaptiveTextSelectionToolbar.buttonItems(
+                          anchors: editable.contextMenuAnchors,
+                          buttonItems: [
+                            if (CognitivePreferenceStore.enabledInBuild && prefs.enabled &&
+                                range.isValid && !range.isCollapsed)
+                              ContextMenuButtonItem(label: '区分事实与解释', onPressed: () {
+                                editable.hideToolbar();
+                                _analyzeSelectedText(i, range);
+                              }),
+                            ...editable.contextMenuButtonItems,
+                          ],
+                        );
+                      },
                       scrollPhysics: const NeverScrollableScrollPhysics(),
                       textAlignVertical: TextAlignVertical.top,
                       style: textStyle,
@@ -1714,6 +1814,14 @@ Widget _attachmentsPreview() {
               ),
             ),
             actions: [
+              if (CognitivePreferenceStore.enabledInBuild)
+                ValueListenableBuilder<CognitivePreferences>(
+                  valueListenable: CognitivePreferenceStore.instance,
+                  builder: (context, prefs, _) => !prefs.enabled ? const SizedBox.shrink() :
+                    IconButton(tooltip: '认识注释', icon: const Icon(Icons.fact_check_outlined),
+                      onPressed: () => showCognitiveNotes(context, module: 'diary',
+                        recordId: _cognitiveRecordId, currentText: () => _serializeBlocksToRaw(),
+                        store: _cognitiveStore))),
               IconButton(
                 tooltip: '标签',
                 onPressed: _editMode ? _pickTags : null,
@@ -1850,6 +1958,12 @@ Widget _attachmentsPreview() {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: _buildBlocksEditor(textStyle),
                         ),
+                        if (CognitivePreferenceStore.active)
+                          DiaryCognitionPanel(onAnalyze: _chooseCognitiveText,
+                            onLens: (lens) => _chooseCognitiveText(lens: lens),
+                            onNotes: () => showCognitiveNotes(context, module: 'diary',
+                              recordId: _cognitiveRecordId, currentText: () => _serializeBlocksToRaw(),
+                              store: _cognitiveStore)),
                         const SizedBox(height: 0),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),

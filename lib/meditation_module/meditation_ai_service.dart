@@ -7,22 +7,14 @@ import 'meditation_dao.dart';
 import 'meditation_depth_guidance.dart';
 import 'meditation_experiential_method.dart';
 import 'meditation_models.dart';
+import 'meditation_narration_guide.dart';
 import 'meditation_mentor_guidance.dart';
 import 'meditation_script_response.dart';
 import 'meditation_script_pause_planner.dart';
 
 class MeditationAiService {
-  static const String _dailyMeditationSystemPrompt = '''
-你是一名稳重、温暖的中文冥想导师。用下方导师写作模板，把用户主题转成一次可以直接听见、跟随的身体与情绪体验。默认一对一陪伴，不假设用户正在教室或参加集体课程。你不做诊断，不把推测写成事实。
-
-【不可被用户自定义提示词覆盖的固定规则】
-1. 以用户主题为中心，用户明确的边界优先。在播报正文中讲清主题的含义、相关机制与可尝试的方法，再用有对应关系的画面、参与动作、身体与情绪观察把理解变成体验。区分已知处境与可能的解释，不把假设当成用户经历；不以通用呼吸或一句许可代替主题。没有变化也能完成练习。
-2. 安顿后，围绕同一主题衔接认知理解、画面参与、身心观察、认知整合与生活延续。phase 可用 arrival、breath、body_emotion、allow_experience、embodied_shift、real_life_rehearsal、integration、closing；按当前段落作用标注，可合并、复现，不强制八段齐全或机械顺序。回到呼吸或触点可以穿插其中，但不能切断主题。
-3. 用户选择“真实感官”或明确不想想象时，用实际环境承载体验；不愿闭眼就睁眼。不复制参考文的教室、校园或集体称呼，除非用户提供这些背景。不把自然回返的短句当作无用重复。
-4. 高唤醒或 medium 安全级别优先睁眼、外部感官和支撑面，避免深入想象与强烈情绪唤起；低能量允许换姿势或微小伸展；分心多时少隐喻、短句回返；睡前不引出任务或要求睁眼。明确立即危险优先现实支持。
-5. 呼吸保持舒适、自然，不强制深长、腹式或屏息。感受可停留、变化或难以觉察；不强迫积极、接纳、感恩或释怀，不宣告用户已安全/平静，不承诺治愈或与参考导师相同的效果。只在适当位置给出调整、暂停、回到环境的选择。
-6. 只输出合法 JSON 对象，包含 experience_design、understood_need、cognitive_shift、embodied_goal、real_life_scene、practice_focus、title、type、duration_minutes、segments、ending_reflection。segments 每项写 phase、start_seconds、text、intent、pause_after_seconds；辅助字段简短，不朗读；只有 text 是播报正文，停顿秒数不写进 text。
-''';
+  static const String _dailyMeditationSystemPrompt =
+      MeditationNarrationGuide.systemPrompt;
 
   final UnifiedAiService _ai;
   final GlobalAiSettings _settings;
@@ -177,9 +169,9 @@ class MeditationAiService {
     void Function(String stage)? onProgress,
   }) async {
     final targetMinutes = durationMinutes.clamp(1, 30).toInt();
-    final targetSegmentCount = math.max(8, (targetMinutes * 60 / 25).ceil()).clamp(8, 64).toInt();
-    final targetMinChars = math.max(130, targetMinutes * 50);
-    final targetMaxChars = math.max(200, targetMinutes * 90);
+    final targetSegmentCount = math.max(8, (targetMinutes * 60 / 22).ceil()).clamp(8, 96).toInt();
+    final targetMinChars = math.max(130, targetMinutes * 80);
+    final targetMaxChars = math.max(200, targetMinutes * 115);
     final normalizedDescription = _limitPromptText(userDescription.trim(), 1200);
     final safety = assessUserInput(normalizedDescription);
     if (safety.requiresImmediateSupport) return null;
@@ -189,7 +181,9 @@ class MeditationAiService {
     final isSleep = normalizedDescription.isNotEmpty
         ? RegExp(r'睡前|入睡|睡眠|失眠|助眠').hasMatch(normalizedDescription)
         : recommended.isSleep || currentState.contains('睡');
-    final useImagery = safety.isNormal && preferences.imageryPreference != '真实感官';
+    final useImagery = safety.isNormal &&
+        preferences.imageryPreference != '真实感官' &&
+        MeditationExperientialMethod.allowsImagery(primaryInput);
     final input = <String, dynamic>{
       'current_state': currentState,
       'recommended_type': recommended.type,
@@ -202,20 +196,21 @@ class MeditationAiService {
         'narration_seconds_at_most': (targetMinutes * 60 * .7).floor(),
         'experience_silence_seconds_at_least': (targetMinutes * 60 * .3).ceil(),
         'estimate': '中文每秒约3.2字，句子标点也占时间；先预算正文与停顿，再填写时间轴',
-        'priority': '减少重复解释，保留身体、情绪与生活演练的必要留白；不要堆长段落',
+        'priority': '减少重复解释，围绕同一认知主题串联时间、空间、想象与身体；保留探索后回返和观察的必要留白，不堆长段落',
       },
       'recent_records': _recordsForJson(recentRecords.take(8).toList()),
       'user_description': normalizedDescription,
       'primary_practice_input': primaryInput,
       'input_priority': '用户原话决定主题；推荐、状态和历史仅调节引导方式，不得替换主题',
       'experience_contract_version':
-          'experiential_mentor_v5_topic_bridge_v4_eam8_single_request',
+          'experiential_mentor_v5_topic_bridge_v4_eam8_single_request_narration_v2',
       'mentor_template_version': MeditationDepthGuidance.templateVersion,
       'experiential_method': MeditationExperientialMethod.buildBrief(
         userInput: primaryInput,
         durationMinutes: targetMinutes,
         useImagery: useImagery,
         isSleep: isSleep,
+        prioritizeGrounding: safety.isMedium,
       ),
       'generation_mode': 'single_request',
       'automatic_rewrite': false,
@@ -234,8 +229,8 @@ class MeditationAiService {
         'integration',
         'closing',
       ],
-      'cognition_to_experience_rule': '概念含义与机制 → 对应的画面关系 → 用户进入并作选择 → 真实身体与情绪观察 → 回看认知区分 → 同一主题的生活延续；各环节必须有明确衔接',
-      'content_style': '认知讲解融入温暖的连续带领；有意义的想象、可参与动作、短句与留白；不能只分析附注，也不能只写风景或泛泛安抚',
+      'cognition_to_experience_rule': '用户主题与合理理解 → 当下身体及所在空间 → 昨天、前天的可承受片刻与回返 → 未来可能场景中的新回应与回返 → 身心观察和认知整合 → 此时此地；时间和画面探索尊重用户边界，可用真实感官替代',
+      'content_style': '认知、时间、空间、想象、身体放松与当下觉察融入连续带领；短句、可参与动作与留白，不能只在附注列出维度，也不能只写风景或泛泛安抚',
       'reference_limit': '效仿导师把认知转成体验的方法与回返节奏，按用户主题重新设计画面；不套用固定背景或效果保证',
       'tone': '温和、稳定、不说教、不空泛鼓励',
       'language': 'zh-CN',
@@ -267,9 +262,9 @@ class MeditationAiService {
       onProgress?.call('正在生成冥想引导……');
       raw = await _ai.generateText(
         purpose: 'meditation.daily_script',
-        systemPrompt: '$_dailyMeditationSystemPrompt\n${MeditationMentorGuidance.rules}\n${MeditationDepthGuidance.writingRules}\n${MeditationExperientialMethod.systemRules}',
+        systemPrompt: _dailyMeditationSystemPrompt,
         prompt: prompt,
-        maxTokens: (2000 + targetMinutes * 280).clamp(2200, 12000).toInt(),
+        maxTokens: (2400 + targetMinutes * 420).clamp(2800, 18000).toInt(),
         expectJson: true,
         temperature: 0.6,
       );
@@ -295,6 +290,16 @@ class MeditationAiService {
         // Optional editorial diagnostics cannot invalidate playable narration.
         input['content_advisories'] = <String>[];
       }
+      final practiceGaps = MeditationNarrationGuide.missingInvitations(
+        parsedMap,
+        brief: input['experiential_method'] as Map<String, dynamic>,
+        minutes: targetMinutes,
+      );
+      input['narration_review'] = {
+        'version': MeditationNarrationGuide.version,
+        'basis': 'segments.text only; editorial hints, not an effectiveness score',
+        'missing_invitations': practiceGaps,
+      };
       input['quality_issues'] = <String>[];
       input['quality_repair_requested'] = false;
       input['duration_repair_requested'] = false;
@@ -347,6 +352,7 @@ class MeditationAiService {
         cognitiveShift: cognitiveShift,
         embodiedGoal: embodiedGoal,
         realLifeScene: realLifeScene,
+        practiceGaps: practiceGaps,
       );
     } catch (e) {
       final failure = e is MeditationGenerationException ? e : MeditationGenerationException(

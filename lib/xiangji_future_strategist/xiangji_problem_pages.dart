@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/kv_dao.dart';
 import '../pages/settings_page.dart';
+import '../epistemic/cognitive_reflection.dart';
 import 'xiangji_campaign_action_pages.dart';
 import 'xiangji_database.dart';
 import 'xiangji_experience_widgets.dart';
@@ -194,6 +195,7 @@ class _XiangjiProblemWorkspacePageState
     extends State<XiangjiProblemWorkspacePage> {
   bool _loading = true;
   bool _working = false;
+  String _cognitiveNewEvidence = '';
   XiangjiProblemRecord? _problem;
   List<Map<String, Object?>> _items = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _claims = const <Map<String, Object?>>[];
@@ -602,6 +604,7 @@ class _XiangjiProblemWorkspacePageState
         authorizedSensitiveContext: sensitiveCloudAuthorized,
         forceStrategic: problem.campaignId.isNotEmpty,
       );
+      _cognitiveNewEvidence = values['task']!;
     });
   }
 
@@ -1340,6 +1343,12 @@ class _XiangjiProblemWorkspacePageState
                   padding: const EdgeInsets.all(16),
                   children: [
                     _solverCockpit(problem),
+                    CognitiveReflectionCard(module: 'xiangji_problem', recordId: problem.id,
+                      observation: problem.rawQuestion,
+                      judgment: _decisionDraft?.recommendation ?? problem.reframedQuestion,
+                      basis: _naturalList(_explanation?['facts_json']),
+                      newEvidence: _cognitiveNewEvidence,
+                      onNewEvidence: _working ? null : _askStrategist),
                     if (_aiExecution != null) ...[
                       const SizedBox(height: 12),
                       XiangjiAiContributionCard(

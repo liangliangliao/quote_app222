@@ -23,6 +23,13 @@ final Map<NodeKind, Json> nodeShapes = {
   },
   NodeKind.understanding: {
     'summary': 'text',
+    'clarity?': {
+      'stuckPoint': 'text',
+      'perspective': 'text',
+      'nextStep': 'text',
+      'whyThisStep': 'text',
+      'question': 'note',
+    },
     'facts': [
       {
         'claim': 'text',
@@ -334,6 +341,7 @@ final Map<NodeKind, Json> nodeShapes = {
   },
   NodeKind.plan: {
     'routeId': 'text',
+    'sourceAnalysisIds?': ['text'],
     'motiveIds': ['text'],
     'sceneId': 'text?',
     'principleId': 'text?',
@@ -536,6 +544,7 @@ final Map<NodeKind, Json> nodeShapes = {
         'enum:tentative,multiple_contexts,contradicted,insufficient_evidence',
     'falsifier': 'text',
     'nextTest': 'text',
+    'reviewReason?': 'note',
     'unknowns': ['text']
   },
   NodeKind.manifestation: {
@@ -551,6 +560,7 @@ final Map<NodeKind, Json> nodeShapes = {
   },
   NodeKind.principle: {
     'summary': 'text',
+    'fieldCue?': 'text',
     'ifCondition': 'text',
     'thenAction': 'text',
     'exceptionRule': 'text',
@@ -558,6 +568,7 @@ final Map<NodeKind, Json> nodeShapes = {
     'maturity': 'enum:tentative,multiple_contexts,needs_review',
     'falsifier': 'text',
     'nextTest': 'text',
+    'reviewReason?': 'note',
     'riskGate': safetyState,
     'insightIds': ['text']
   },
@@ -571,6 +582,7 @@ final Map<NodeKind, Json> nodeShapes = {
     'application':
         'enum:unknown,applied_verified,applied_self_report,not_applied',
     'attemptIds': ['text'],
+    'preparationIds?': ['text'],
     'observationIds': ['text'],
     'detail': 'note'
   },
@@ -700,18 +712,20 @@ final Map<NodeKind, Json> nodeShapes = {
 
 void validateShape(dynamic value, dynamic shape, [String path = 'body']) {
   if (shape is Map) {
-    if (value is! Map) throw MirrorProblem('$path 不是结构化对象');
+    if (value is! Map)
+      throw MirrorProblem('$path 不是结构化对象', code: 'response_shape_invalid');
     final allowed = shape.keys
         .map((e) => e.toString().replaceFirst(RegExp(r'\?$'), ''))
         .toSet();
     if (value.keys.any((e) => !allowed.contains(e)))
-      throw MirrorProblem('$path 包含未知字段');
+      throw MirrorProblem('$path 包含未知字段', code: 'response_shape_invalid');
     for (final entry in shape.entries) {
       final raw = entry.key as String;
       final optional = raw.endsWith('?');
       final key = optional ? raw.substring(0, raw.length - 1) : raw;
       if (!value.containsKey(key)) {
-        if (!optional) throw MirrorProblem('$path.$key 缺失');
+        if (!optional)
+          throw MirrorProblem('$path.$key 缺失', code: 'response_shape_invalid');
       } else {
         validateShape(value[key], entry.value, '$path.$key');
       }
@@ -719,7 +733,8 @@ void validateShape(dynamic value, dynamic shape, [String path = 'body']) {
     return;
   }
   if (shape is List) {
-    if (value is! List || value.length > 300) throw MirrorProblem('$path 列表无效');
+    if (value is! List || value.length > 300)
+      throw MirrorProblem('$path 列表无效', code: 'response_shape_invalid');
     for (var i = 0; i < value.length; i++) {
       validateShape(value[i], shape.single, '$path[$i]');
     }
@@ -752,7 +767,8 @@ void validateShape(dynamic value, dynamic shape, [String path = 'body']) {
       _ => false,
     };
   }
-  if (!ok) throw MirrorProblem('$path 的数据类型或状态无效');
+  if (!ok)
+    throw MirrorProblem('$path 的数据类型或状态无效', code: 'response_shape_invalid');
 }
 
 Json jsonSchema(dynamic shape) {

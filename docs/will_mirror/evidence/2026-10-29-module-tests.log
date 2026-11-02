@@ -1,0 +1,176 @@
+00:00 +0: loading /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart
+00:00 +0: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E01 工作: no fabricated facts across a new evidence version
+00:00 +1: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E02 任务能力: no fabricated facts across a new evidence version
+00:00 +2: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E03 学习: no fabricated facts across a new evidence version
+00:00 +3: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E04 关系: no fabricated facts across a new evidence version
+00:00 +4: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E05 人身安全: no fabricated facts across a new evidence version
+00:00 +5: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E06 健康: no fabricated facts across a new evidence version
+00:00 +6: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E07 资金: no fabricated facts across a new evidence version
+00:00 +7: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E08 法律责任: no fabricated facts across a new evidence version
+00:00 +8: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E09 休息: no fabricated facts across a new evidence version
+00:00 +9: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E10 资源取舍: no fabricated facts across a new evidence version
+00:00 +10: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E11 资源取舍: no fabricated facts across a new evidence version
+00:00 +11: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E12 社会榜样: no fabricated facts across a new evidence version
+00:00 +12: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E13 获得与满足: no fabricated facts across a new evidence version
+00:00 +13: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E14 新兴趣: no fabricated facts across a new evidence version
+00:00 +14: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E15 多样性: no fabricated facts across a new evidence version
+00:00 +15: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E16 被迫行为: no fabricated facts across a new evidence version
+00:00 +16: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E17 通知: no fabricated facts across a new evidence version
+00:00 +17: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E18 现场变化: no fabricated facts across a new evidence version
+00:00 +18: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E19 多次尝试: no fabricated facts across a new evidence version
+00:00 +19: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E20 认知反证: no fabricated facts across a new evidence version
+00:00 +20: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E21 原则修订: no fabricated facts across a new evidence version
+00:00 +21: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E22 他人自主: no fabricated facts across a new evidence version
+00:00 +22: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E23 隐私撤回: no fabricated facts across a new evidence version
+00:00 +23: /workspace/quote_app222/test/will_mirror/scenario_integrity_test.dart: E24 信息极少: no fabricated facts across a new evidence version
+00:00 +24: loading /workspace/quote_app222/test/will_mirror/notification_host_test.dart
+00:09 +24: /workspace/quote_app222/test/will_mirror/notification_host_test.dart: a foreground notification consumes pending navigation and opens only once
+00:10 +25: loading /workspace/quote_app222/test/will_mirror/experience_flow_test.dart
+00:12 +25: /workspace/quote_app222/test/will_mirror/experience_flow_test.dart: (setUpAll)
+00:13 +25: /workspace/quote_app222/test/will_mirror/experience_flow_test.dart: T332: an edited principle can be explicitly adopted on the workbench
+00:15 +26: /workspace/quote_app222/test/will_mirror/experience_flow_test.dart: T338 T339 T364: a source counterexample stops cross-case cues and OS reminders
+00:15 +27: /workspace/quote_app222/test/will_mirror/experience_flow_test.dart: T332 T364: editing a principle cancels reminders for its old version
+00:15 +28: /workspace/quote_app222/test/will_mirror/experience_flow_test.dart: T338: an empty counterexample has no side effects or reminder cancellation
+00:15 +29: /workspace/quote_app222/test/will_mirror/experience_flow_test.dart: T338 T365: the counterexample UI shows review status and retains historical applications
+00:16 +30: /workspace/quote_app222/test/will_mirror/experience_flow_test.dart: T342: other candidates can be considered without automatically adopting either
+00:17 +31: /workspace/quote_app222/test/will_mirror/experience_flow_test.dart: T344 T350 T356: practical cards retain evidence and work with large text
+00:17 +32: /workspace/quote_app222/test/will_mirror/experience_flow_test.dart: (tearDownAll)
+00:17 +32: loading /workspace/quote_app222/test/will_mirror/android_sqlite_contract_test.dart
+00:18 +32: /workspace/quote_app222/test/will_mirror/android_sqlite_contract_test.dart: Android startup and privacy cleanup use result-capable SQL operations
+error DatabaseException(Queries can be performed using SQLiteDatabase query or rawQuery methods only.) during open, closing...
+00:18 +33: loading /workspace/quote_app222/test/will_mirror/experience_storage_test.dart
+00:20 +33: /workspace/quote_app222/test/will_mirror/experience_storage_test.dart: T332 T338 T361 T365: review versions and historical uses survive encrypted SQLite reopen
+00:21 +34: loading /workspace/quote_app222/test/will_mirror/domain_test.dart
+00:22 +34: /workspace/quote_app222/test/will_mirror/domain_test.dart: one case preserves raw input and separates UI step from real time phase
+00:22 +35: /workspace/quote_app222/test/will_mirror/domain_test.dart: nested ledger bodies and support references are immutable
+00:22 +36: /workspace/quote_app222/test/will_mirror/domain_test.dart: schema rejects invented keys, invalid score and unknown enum
+00:22 +37: /workspace/quote_app222/test/will_mirror/domain_test.dart: sealed T0 is canonical, unchanged by T1 and T2, and cannot be backfilled
+00:22 +38: /workspace/quote_app222/test/will_mirror/domain_test.dart: changed T1 conditions also prohibit inventing a T0 forecast
+00:22 +39: /workspace/quote_app222/test/will_mirror/domain_test.dart: retrospective case has no manufactured prediction
+00:22 +40: /workspace/quote_app222/test/will_mirror/domain_test.dart: unknown actual action does not become failure or reveal
+00:22 +41: /workspace/quote_app222/test/will_mirror/domain_test.dart: actual action and outside result remain independent
+00:22 +42: /workspace/quote_app222/test/will_mirror/domain_test.dart: next episode retains original observations once on the same CaseID
+00:22 +43: /workspace/quote_app222/test/will_mirror/domain_test.dart: unsafe route and later unsafe assessment prevent preparation
+00:22 +44: /workspace/quote_app222/test/will_mirror/domain_test.dart: AI cannot author action facts or user acceptance
+00:22 +45: /workspace/quote_app222/test/will_mirror/domain_test.dart: missing, stale, or foreign evidence blocks model records
+00:22 +46: /workspace/quote_app222/test/will_mirror/domain_test.dart: plans, scenes, scores and device events do not self-prove personality
+00:22 +47: /workspace/quote_app222/test/will_mirror/domain_test.dart: transitive withdrawal reaches saved forecasts and ranking
+00:22 +48: /workspace/quote_app222/test/will_mirror/domain_test.dart: Top5 preserves counterarguments and long horizon and never fills false scores
+00:22 +49: /workspace/quote_app222/test/will_mirror/domain_test.dart: generic assumptions remain verify-first rather than personal facts
+00:22 +50: /workspace/quote_app222/test/will_mirror/domain_test.dart: duplicate semantic key collapses paraphrases, bounded distinct pool
+00:22 +51: /workspace/quote_app222/test/will_mirror/domain_test.dart: all scored candidates survive weight adjustment, refusal stays unknown
+00:22 +52: loading /workspace/quote_app222/test/will_mirror/startup_recovery_test.dart
+00:24 +52: /workspace/quote_app222/test/will_mirror/startup_recovery_test.dart: native vault errors expose only safe categories, never native details
+00:24 +53: /workspace/quote_app222/test/will_mirror/startup_recovery_test.dart: missing channel and empty native reply cannot write plaintext
+00:24 +54: /workspace/quote_app222/test/will_mirror/startup_recovery_test.dart: optional provider and reminder failures keep the local ledger usable
+00:24 +55: /workspace/quote_app222/test/will_mirror/startup_recovery_test.dart: storage failures remain blocking and preserve the existing records
+00:24 +56: /workspace/quote_app222/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:26 +57: /workspace/quote_app222/test/will_mirror/startup_recovery_test.dart: unknown startup error is neutral and usable with large text
+00:26 +58: loading /workspace/quote_app222/test/will_mirror/widget_flow_test.dart
+00:28 +58: /workspace/quote_app222/test/will_mirror/widget_flow_test.dart: (setUpAll)
+00:28 +58: /workspace/quote_app222/test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
+00:31 +59: /workspace/quote_app222/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:33 +60: /workspace/quote_app222/test/will_mirror/widget_flow_test.dart: unknown observation keeps waiting and no reveal button invents result
+00:34 +61: /workspace/quote_app222/test/will_mirror/widget_flow_test.dart: active source detail removes private content immediately after withdrawal
+00:34 +62: /workspace/quote_app222/test/will_mirror/widget_flow_test.dart: populated Top5 keeps counterarguments visible on a phone
+00:35 +63: /workspace/quote_app222/test/will_mirror/widget_flow_test.dart: life path renders actual episodes and optional possible branches distinctly
+00:35 +64: /workspace/quote_app222/test/will_mirror/widget_flow_test.dart: small screen with enlarged text has no overflow in all module tabs
+00:36 +65: /workspace/quote_app222/test/will_mirror/widget_flow_test.dart: (tearDownAll)
+00:36 +65: loading /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart
+00:37 +65: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: first pass commits understanding without starting the fifty-motive workflow
+00:37 +66: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: route comparison commits one target at a time and never merges matrices
+00:37 +67: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: scope retry resumes inside its pass without repeating earlier work
+00:37 +68: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: same motive keeps different directions for different routes
+00:37 +69: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: new condition cancels reminders and stops stale plans without altering the seal
+00:37 +70: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: completed action does not fill missing decision, attempt, or satisfaction
+00:37 +71: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: principle reuse needs a new match after changed conditions or a new episode
+00:37 +72: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: retrospective belief changes keep the after-event phase label
+00:37 +73: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: invalid workbench scope cannot leave an orphan permission or busy state
+00:37 +74: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: superseded-route motives leave the live pool while historical evidence remains
+00:37 +75: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: historical reasons cannot suppress current-route candidates during deduplication
+00:37 +76: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:40 +77: /workspace/quote_app222/test/will_mirror/intent_workbench_test.dart: conflict view fits a narrow screen with large type
+00:40 +78: loading /workspace/quote_app222/test/will_mirror/experience_ai_review_test.dart
+00:42 +78: /workspace/quote_app222/test/will_mirror/experience_ai_review_test.dart: T342 T354 T357: fatalistic_acceptance fails closed before practical advice commits
+00:42 +79: /workspace/quote_app222/test/will_mirror/experience_ai_review_test.dart: T342 T354 T357: unsupported_obligation fails closed before practical advice commits
+00:42 +80: /workspace/quote_app222/test/will_mirror/experience_ai_review_test.dart: T342 T354 T357: principle_conflict fails closed before practical advice commits
+00:42 +81: loading /workspace/quote_app222/test/will_mirror/store_controller_test.dart
+00:43 +81: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: first open configures secure deletion and foreign key enforcement
+00:43 +82: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
+00:43 +83: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:43 +84: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: optimistic concurrency prevents late AI from overwriting a correction
+00:44 +85: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: authentication failure preserves rows and never manufactures empty replacement
+00:44 +86: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:44 +87: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: cross-case revoke preserves source while clearing all dependent histories
+00:44 +88: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
+00:44 +89: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:44 +90: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: withdrawal cancels OS reminder before its job ID is redacted
+00:44 +91: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: denied reminder permission preserves plan and never fabricates delivery
+00:44 +92: /workspace/quote_app222/test/will_mirror/store_controller_test.dart: malformed or unrelated notification payload is not handled by this module
+00:44 +93: loading /workspace/quote_app222/test/will_mirror/ai_contract_test.dart
+00:47 +93: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: minimal consent excludes unselected raw data and all of its derivatives
+00:47 +94: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: cross-case selection requires both explicit case and evidence grants
+00:47 +95: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: seals are sent only if the complete linked source set was authorized
+00:47 +96: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: stage schema repair is bounded and unauthorized references never commit
+00:47 +97: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: cancellation before model request retains the original case
+00:47 +98: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: multi-batch generation and independent semantic audit produce an honest bounded pool
+00:48 +99: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: semantic paraphrases do not get counted just to reach fifty
+00:48 +100: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: OpenAI structured request uses host config without storing or logging content
+00:48 +101: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: private model never forwards upstream error bodies
+00:48 +102: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: Decisions refusal and name mismatch have no manufactured zero scores
+00:48 +103: /workspace/quote_app222/test/will_mirror/ai_contract_test.dart: strict model schemas require every declared property and no additional properties
+00:48 +104: loading /workspace/quote_app222/test/will_mirror/intent_visual_test.dart
+00:49 +104: /workspace/quote_app222/test/will_mirror/intent_visual_test.dart: (setUpAll)
+00:50 +104: /workspace/quote_app222/test/will_mirror/intent_visual_test.dart: accepting a reframe invalidates affected route fits and keeps other fits
+00:50 +105: /workspace/quote_app222/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:55 +106: /workspace/quote_app222/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
+00:59 +107: /workspace/quote_app222/test/will_mirror/intent_visual_test.dart: (tearDownAll)
+00:59 +107: loading /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart
+01:04 +107: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T353: an uncertain assessment must still offer a concrete verification step
+01:04 +108: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T350: recording a belief after the event does not make its prediction irreversible
+01:04 +109: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T347: an expired task requirement cannot establish a current hard limit
+01:04 +110: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T344: an asserted strength needs task requirements and capability evidence
+01:04 +111: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T344: a model capability without real sources does not prove an advantage
+01:04 +112: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T345 T346 T348: gaps, temporary state and new interests retain separate states
+01:04 +113: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T344: task evidence cannot silently be borrowed from another route
+01:04 +114: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T347: a capability match cannot lower the route safety gate
+01:04 +115: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T350: an imagined future is not an irreversible past fact
+01:04 +116: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T351 T352 T353: no source means unknown, while support and intervention remain possible
+01:04 +117: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T347 T353: a hard limit needs verified requirements for this exact task
+01:04 +118: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T353: principle and ranking are not the subject of a changeability verdict
+01:04 +119: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T357: an unverified expectation is not a verified duty of someone else
+01:04 +120: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T335: reporting no action alone cannot establish actual principle use
+01:04 +121: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T336: actual preparation remains evidence when the later action did not occur
+01:04 +122: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T329 T338 T365: counterexamples create review versions without rewriting old applications
+01:04 +123: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T333: a prior principle match for one route does not approve another route
+01:04 +124: /workspace/quote_app222/test/will_mirror/experience_qualification_test.dart: T362: an overlong field cue is rejected without replacing the principle
+01:04 +125: loading /workspace/quote_app222/test/will_mirror/regression_v28_test.dart
+01:09 +125: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: a superseded route cannot activate an old plan or rank its old support as current
+01:09 +126: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: repeated route analysis must revise prior IDs instead of exceeding six active alternatives
+01:09 +127: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: weight adjustment retains the original online scoring and expiry times
+01:09 +128: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: latest hard safety assessment blocks high-scored supporting motives
+01:09 +129: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: unreferenced AI guesses cannot use verified fact status
+01:09 +130: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: later user records cannot acquire an earlier knowledge phase
+01:09 +131: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: known exclusive resources prohibit a parallel tradeoff but allow sequencing
+01:09 +132: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: two actual events without free informed alternatives cannot prove a stable want
+01:09 +133: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: safety reappraisal immediately retires preparation and cancels the OS job
+01:09 +134: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: identical completed analysis reuses its result and new facts invalidate reuse
+01:09 +135: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: independent learning review repairs once before commit
+01:09 +136: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: independent learning review rejects persistent violations
+01:09 +137: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: Azure tries an alternate path only after an unsupported endpoint
+01:09 +138: /workspace/quote_app222/test/will_mirror/regression_v28_test.dart: Azure Claude uses Messages body and parses text blocks
+01:10 +139: loading /workspace/quote_app222/test/will_mirror/principle_application_test.dart
+01:11 +139: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: a draft principle cannot become an adopted cue before user acceptance
+01:11 +140: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: risk and review gates block principle adoption and plan sealing
+01:11 +141: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: display and advance declarations cannot fabricate actual principle use
+01:11 +142: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: real application needs a concrete account and a known observation
+01:11 +143: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: version references must match and an application cannot switch versions
+01:11 +144: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: later revisions stop new cues but preserve review of the version used
+01:11 +145: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: changed field conditions stop reuse without rewriting past acceptance
+01:11 +146: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: cross-case reuse requires authorization and a current safe context match
+01:11 +147: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: a new safety restriction suspends even an accepted principle
+01:11 +148: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+01:14 +149: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=opened
+01:15 +150: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=accepted
+01:16 +151: /workspace/quote_app222/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
+01:16 +152: All tests passed!

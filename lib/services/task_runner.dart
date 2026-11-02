@@ -1,6 +1,9 @@
+import '../quote_knowledge/runtime.dart';
 import 'dart:ui' as ui;
 
 import '../data/dao.dart';
+import '../data/quote_insight_store.dart';
+import '../models/quote_insight.dart';
 import '../services/notification_service.dart';
 import '../services/quote_ai_service.dart';
 import '../platform/native_notify.dart';
@@ -46,9 +49,8 @@ class TaskRunner {
     }
 
     try {
-      // One scheduled run performs exactly one structured AI request. We no
-      // longer send local quote history or repeatedly call the model for local
-      // similarity checks; variation is driven by a compact rotation cursor.
+      // Generation uses one structured request and no unrelated quote history.
+      // A separate durable classification job runs after notification delivery.
       final generated = await QuoteAiService().generate(t);
       String? quoteUid;
       if (config.saveLocally) {
@@ -68,6 +70,15 @@ class TaskRunner {
           taskType: 'auto',
           insertedAt: insertedAt,
         );
+        // Optional annotations must never turn a successful original save into
+        // a failed scheduled run. The quote remains readable if this fails.
+        try {
+          await QuoteInsightStore().saveAddon(
+            QuoteReference(id: quoteUid, content: generated.content,
+              author: generated.author, source: generated.source),
+            generated.readingAddon,
+          );
+        } catch (_) {}
       }
 
       // A monotonically increasing cursor gives deterministic ordered cycling
@@ -102,6 +113,9 @@ class TaskRunner {
             '${config.saveLocally ? '并保存到本地' : ''}',
       );
       _notifyHomeRefresh();
+      if (quoteUid != null) {
+        try {await QuoteKnowledgeWorker().drain(limit: 1);} catch (_) {}
+      }
     } catch (error) {
       await LogDao().add(taskUid: uid, detail: '错误! AI 名人名言获取失败: $error');
       rethrow;

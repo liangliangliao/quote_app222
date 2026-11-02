@@ -1,3 +1,6 @@
+import 'package:flutter/services.dart';
+import '../quote_knowledge/constellation_view.dart';
+import '../quote_knowledge/repository.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,12 +12,25 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show mapEquals;
 import '../data/dao.dart';
+import '../models/quote_insight.dart';
+import '../services/quote_comparison_service.dart';
+import '../services/quote_insight_settings.dart';
+import '../widgets/quote_comparison_sheet.dart';
 import '../widgets/quote_history_avatar.dart';
 import '../utils/quote_change_bus.dart';
 import '../utils/simple_bus.dart';
+import '../widgets/quote_reading_insights.dart';
+import '../epistemic/history_knowledge_view.dart';
+import '../epistemic/cognitive_preferences.dart';
+import '../epistemic/quote_cognitive_reader.dart';
 
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key, this.loadQuotes});
+  final QuoteDao? dao;
+  final QuoteKnowledgeRepository? knowledgeRepository;
+  final ValueChanged<bool>? onGraphChanged;
+  final QuoteComparisonService? comparisonService;
+  final QuoteReference? initialComparison;
+  const HistoryPage({super.key, this.dao, this.knowledgeRepository, this.onGraphChanged, this.comparisonService, this.initialComparison, this.loadQuotes});
   final Future<List<Map<String, dynamic>>> Function({
     required int limit, required int offset, String? q,
   })? loadQuotes;
@@ -36,13 +52,38 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     await _refresh();
   }
 
-  final _dao = QuoteDao();
+  late final _dao = widget.dao ?? QuoteDao();
   final _scroll = ScrollController();
   String _q = '';
   List<Map<String,dynamic>> _items = [];
   int _offset = 0;
   bool _loading = false;
   bool _done = false;
+  bool _selecting = false;
+  int _cognitiveView = 0;
+  int _insightRevision = 0;
+  final Map<String, QuoteReference> _selected = {};
+
+  void _toggleQuote(QuoteReference quote) {
+    if (quote.content.trim().isEmpty) return;
+    final key = quote.contentKey;
+    if (!_selected.containsKey(key) && _selected.length == 2) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('一次比较两条名言，请先取消一条')));
+      return;
+    }
+    setState(() {
+      _selecting = true;
+      if (_selected.containsKey(key)) { _selected.remove(key); }
+      else { _selected[key] = quote; }
+    });
+  }
+
+  Future<void> _compareSelected() async {
+    if (_selected.length != 2) return;
+    final pair = _selected.values.toList();
+    await showQuoteComparison(context, pair[0], pair[1], service: widget.comparisonService);
+  }
+
   bool _refreshing = false;
   bool _refreshAgain = false;
   int _generation = 0;
@@ -60,6 +101,13 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    CognitivePreferenceStore.instance.load();
+    CognitivePreferenceStore.instance.addListener(_preferencesChanged);
+    final initial = widget.initialComparison;
+    if (initial != null && initial.content.trim().isNotEmpty && QuoteInsightSettings.comparisonEnabled) {
+      _selected[initial.contentKey] = initial;
+      _selecting = true;
+    }
     WidgetsBinding.instance.addObserver(this);
     QuoteChangeBus.changes.addListener(_onQuoteChange);
     SimpleBus.navIndex.addListener(_onNavigation);
@@ -82,6 +130,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    CognitivePreferenceStore.instance.removeListener(_preferencesChanged);
     WidgetsBinding.instance.removeObserver(this);
     QuoteChangeBus.changes.removeListener(_onQuoteChange);
     SimpleBus.navIndex.removeListener(_onNavigation);
@@ -90,6 +139,20 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     _pollTimer?.cancel();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _changeView(int value) {
+    setState(() => _cognitiveView = value);
+    widget.onGraphChanged?.call(value == 1 && CognitivePreferenceStore.active);
+  }
+
+  void _preferencesChanged() {
+    if (mounted) setState(() {
+      if (!CognitivePreferenceStore.instance.value.enabled) {
+        _cognitiveView = 0;
+        widget.onGraphChanged?.call(false);
+      }
+    });
   }
 
   @override
@@ -197,6 +260,16 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   }
 
   Future<void> _showQuoteDetails(Map<String, dynamic> quote) async {
+    if (CognitivePreferenceStore.active) {
+      await showModalBottomSheet<void>(context: context, isScrollControlled: true,
+        showDragHandle: true, backgroundColor: const Color(0xfffaf6ee),
+        builder: (_) => FractionallySizedBox(heightFactor: .96, child: SafeArea(top: false,
+          child: SelectionArea(child: QuoteCognitiveReader(
+              quote: QuoteReference.fromRow(quote), topic: '${quote['theme'] ?? ''}',
+              authorLabel: '${quote['author_name'] ?? ''}', note: '${quote['explanation'] ?? ''}')))));
+      if (mounted) setState(() => _insightRevision++);
+      return;
+    }
     final content = (quote['content'] ?? '').toString().trim();
     final theme = (quote['theme'] ?? '').toString().trim();
     final author = (quote['author_name'] ?? '').toString().trim();
@@ -249,8 +322,11 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
                 ],
                 if (explanation.isNotEmpty) ...[
                   const Divider(height: 32),
+                  const Text('解读 · 一种理解', style: TextStyle(fontSize: 13, color: Colors.black54)),
+                  const SizedBox(height: 8),
                   Text(explanation, style: const TextStyle(height: 1.65)),
                 ],
+                QuoteReadingInsights(quote: QuoteReference.fromRow(quote)),
               ],
             ),
           ),
@@ -265,14 +341,16 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
+    final night = _cognitiveView == 1 && CognitivePreferenceStore.active;
     // Wrap entire page in SafeArea with top/bottom disabled so that list content touches edges
-    return Scaffold(backgroundColor: Colors.white, body: SafeArea(
+    return AnnotatedRegion<SystemUiOverlayStyle>(value: night ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      child: Scaffold(backgroundColor: night ? knowledgeNight : Colors.white, body: SafeArea(
       top: false,
       bottom: false,
       child: Column(
         children: [
           // Header row containing search bar and upload button. Place within safe area padding manually
-          Container(
+          if (!night) Container(
             color: Colors.white,
             padding: EdgeInsets.only(top: topPad, left: 8, right: 8),
             height: topPad + kToolbarHeight,
@@ -493,9 +571,66 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
               ],
             ),
           ),
+          if (CognitivePreferenceStore.active)
+            Padding(padding: EdgeInsets.fromLTRB(12, night ? topPad + 4 : 4, 12, 4),
+              child: Row(children: [
+                for (final view in ['列表', '关系图', '时间线', '人物'].indexed)
+                  Expanded(child: InkWell(onTap: () => _changeView(view.$1),
+                    child: Container(padding: const EdgeInsets.symmetric(vertical: 13),
+                      decoration: BoxDecoration(border: Border(bottom: BorderSide(width: 2,
+                        color: _cognitiveView == view.$1 ? (night ? const Color(0xffe1d3a8) : const Color(0xff8a7650)) : Colors.transparent))),
+                      child: Text(view.$2, textAlign: TextAlign.center, style: TextStyle(fontSize: 14,
+                        fontWeight: _cognitiveView == view.$1 ? FontWeight.w600 : FontWeight.normal,
+                        color: night ? Colors.white70 : Colors.black87))))),
+                if (night) IconButton(tooltip: '搜索名言', icon: const Icon(Icons.search, color: Colors.white70), onPressed: () async {
+                  final text = TextEditingController(text: _q);
+                  final value = await showDialog<String>(context: context, builder: (context) => AlertDialog(
+                    title: const Text('搜索全库名言'), content: TextField(controller: text, autofocus: true,
+                      onSubmitted: (value) => Navigator.pop(context, value)), actions: [
+                        TextButton(onPressed: () => Navigator.pop(context, ''), child: const Text('清除')),
+                        TextButton(onPressed: () => Navigator.pop(context, text.text), child: const Text('搜索'))]));
+                  if (value != null && mounted) {setState(() => _q = value);_reload();}
+                }),
+              ])),
+          if (QuoteInsightSettings.comparisonEnabled && !night)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Wrap(spacing: 12, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  TextButton.icon(
+                    key: const ValueKey('quote-select-comparison'),
+                    icon: Icon(_selecting ? Icons.close : Icons.compare_arrows),
+                    label: Text(_selecting ? '退出选择（${_selected.length}/2）' : '选择比较'),
+                    onPressed: () => setState(() {
+                      _selecting = !_selecting;
+                      _selected.clear();
+                    }),
+                  ),
+                  if (_selecting)
+                    FilledButton(
+                      key: const ValueKey('quote-start-comparison'),
+                      onPressed: _selected.length == 2 ? _compareSelected : null,
+                      child: const Text('开始比较'),
+                    ),
+                ]),
+                if (_selecting && _selected.isEmpty)
+                  const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('选择两条名言；可以搜索后继续选择。')),
+                if (_selected.isNotEmpty)
+                  LayoutBuilder(builder: (context, bounds) {
+                    final compactPair = _selected.length == 2 &&
+                        bounds.maxWidth >= 300 && MediaQuery.textScalerOf(context).scale(14) <= 22;
+                    final labelWidth = compactPair ? (bounds.maxWidth - 8) / 2 - 80 : 220.0;
+                    return Wrap(spacing: 8, children: _selected.values.indexed.map((entry) => InputChip(
+                      label: ConstrainedBox(constraints: BoxConstraints(maxWidth: labelWidth),
+                        child: Text('${entry.$1 == 0 ? 'A' : 'B'} · ${entry.$2.content}', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      onDeleted: () => _toggleQuote(entry.$2),
+                    )).toList());
+                  }),
+              ]),
+            ),
           // List content with zero top/bottom padding
           Expanded(
-            child: ListView.builder(
+            child: _cognitiveView == 0 ? ListView.builder(
               controller: _scroll,
               padding: EdgeInsets.zero,
               itemCount: _items.length,
@@ -507,6 +642,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
               },
               itemBuilder: (_, i) {
                 final e = _items[i];
+                final reference = QuoteReference.fromRow(e);
                 final content = (e['content'] ?? '').toString();
                 final author = (e['author_name'] ?? '').toString().trim();
                 final source = (e['source_from'] ?? '').toString().trim();
@@ -520,7 +656,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
                   if (taskName.isNotEmpty) taskName,
                 ].join(' · ');
                 return ListTile(
-                  key: ValueKey<String>('quote-${e['quote_uid'] ?? e['id']}'),
+                  key: ValueKey('quote-history-row-${reference.id.isEmpty ? reference.contentKey : reference.id}'),
                   minVerticalPadding: 8,
                   leading: QuoteHistoryAvatar(
                     key: ValueKey('quote-history-list-avatar-${e['quote_uid'] ?? e['id']}'),
@@ -529,14 +665,29 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
                   ),
                   title: Text(content, maxLines: 3, overflow: TextOverflow.ellipsis),
                   subtitle: meta.isEmpty ? null : Text(meta, maxLines: 2, overflow: TextOverflow.ellipsis),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _showQuoteDetails(e),
+                  trailing: _selecting
+                      ? Checkbox(
+                          value: _selected.containsKey(reference.contentKey),
+                          semanticLabel: '选择名言：$content',
+                          onChanged: (_) => _toggleQuote(reference),
+                        )
+                      : const Icon(Icons.chevron_right),
+                  selected: _selected.containsKey(reference.contentKey),
+                  onTap: () => _selecting ? _toggleQuote(reference) : _showQuoteDetails(e),
+                  onLongPress: QuoteInsightSettings.comparisonEnabled ? () => _toggleQuote(reference) : null,
                 );
               },
-            ),
+            ) : HistoryKnowledgeView(
+              key: ValueKey('history-cognition-$_q-$_generation'),
+              repository: widget.knowledgeRepository, query: _q, onCompare: _compareSelected,
+              rows: List.of(_items), mode: _cognitiveView, revision: _insightRevision,
+              selectedKeys: _selected.keys.toSet(),
+              onOpen: (row) => _showQuoteDetails(row),
+              onSelect: (row) => _toggleQuote(QuoteReference.fromRow(row)),
+              onLoadMore: _loadMore, hasMore: !_done, loading: _loading),
           ),
         ],
       ),
-    ));
+    )));
   }
 }

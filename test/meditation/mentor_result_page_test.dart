@@ -68,6 +68,25 @@ Future<void> submit(
 }
 
 void main() {
+  testWidgets('正文只有泛化呼吸时显示具体练习缺口，保留正文和用户的重生成选择', (tester) async {
+    final dao = PageDao();
+    final ai = FakeAi([jsonEncode({'segments': [
+      {'text': '允许自己为人。先自然呼吸，再回到当下。'}
+    ]})]);
+    final service = PageService(ai, dao);
+    await submit(tester, service, dao);
+    expect(find.textContaining('这次引导可能还未充分展开'), findsOneWidget);
+    expect(find.textContaining('前天片刻的进入、参与与观察'), findsOneWidget);
+    expect(find.text('开始专家引导'), findsOneWidget);
+    final preview = find.text('阅读完整引导');
+    await tester.ensureVisible(preview);
+    await tester.tap(preview);
+    await tester.pumpAndSettle();
+    expect(find.text('允许自己为人。先自然呼吸，再回到当下。'), findsOneWidget);
+    expect(ai.calls, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('完整 AI 正文直接展示为可开始的引导，不额外请求推荐说明', (tester) async {
     final dao = PageDao();
     final service =

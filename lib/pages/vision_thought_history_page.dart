@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../data/dao.dart';
 import '../widgets/thought_taxonomy_mindmap.dart';
+import '../epistemic/cognitive_training.dart';
+import '../epistemic/cognitive_models.dart';
+import '../epistemic/cognitive_sheet.dart';
+import '../epistemic/cognitive_mode.dart';
 
 class VisionThoughtHistoryPage extends StatefulWidget {
   const VisionThoughtHistoryPage({super.key});
@@ -251,7 +255,15 @@ class VisionThoughtDetailPage extends StatelessWidget {
               children: [
                 const Text('念头', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                Text(thought.isEmpty ? '（空）' : thought, style: const TextStyle(fontSize: 15)),
+                CognitiveSelectableText(text: thought.isEmpty ? '（空）' : thought,
+                  module: 'thought', recordId: '${row['id']}', title: '念头'),
+                if (thought.trim().isNotEmpty) CognitiveAction(label: '检验这条念头的适用范围',
+                  task: CognitiveTask.calibration, selection: CognitiveSelection.fromText(
+                    module: 'thought', recordId: '${row['id']}', title: '念头', fullText: thought),
+                  currentText: () => thought),
+                CognitiveMode(child: TextButton(onPressed: () => showCognitiveNotes(context,
+                  module: 'thought', recordId: '${row['id']}', currentText: () => thought),
+                  child: const Text('查看已有认识注释'))),
                 const SizedBox(height: 16),
                 if (nodeUids.isNotEmpty) ...[
                   const Text('分类（思维导图）', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),

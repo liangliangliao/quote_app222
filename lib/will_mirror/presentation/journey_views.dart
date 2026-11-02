@@ -61,10 +61,12 @@ class CaseSituationCard extends StatelessWidget {
     required this.file,
     required this.onNode,
     required this.onAdd,
+    this.showQuestion = true,
   });
   final CaseFile file;
   final ValueChanged<MirrorNode> onNode;
   final VoidCallback onAdd;
+  final bool showQuestion;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +77,7 @@ class CaseSituationCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        AiOriginLabel(node: u, resolve: file.node),
         _EvidenceLane(
           label: '你描述的事实与体验',
           icon: Icons.format_quote,
@@ -82,7 +85,7 @@ class CaseSituationCard extends StatelessWidget {
             for (final fact in u.objects('facts'))
               _SourceLine(
                 text: fact['claim'] as String,
-                caption: '来自你的原话',
+                caption: 'AI 整理 · 来自你的原话',
                 onTap: () => onNode(u),
               ),
           ],
@@ -114,7 +117,7 @@ class CaseSituationCard extends StatelessWidget {
             ],
           ),
         ],
-        if (u.text('keyQuestion').isNotEmpty) ...[
+        if (showQuestion && u.text('keyQuestion').isNotEmpty) ...[
           const SizedBox(height: 14),
           Text('先核实这一件事', style: theme.textTheme.labelLarge),
           const SizedBox(height: 6),
@@ -238,6 +241,10 @@ class _MotiveConflictPanelState extends State<MotiveConflictPanel> {
             ],
           ),
           const SizedBox(height: 10),
+          AiOriginLabel(node: route, resolve: widget.file.node),
+          if (widget.file.current(NodeKind.motive).firstOrNull
+              case final motive?)
+            AiOriginLabel(node: motive, resolve: widget.file.node),
           Text(route.text('title'), style: theme.textTheme.titleSmall),
           const SizedBox(height: 16),
           LayoutBuilder(
@@ -334,6 +341,7 @@ class RecognitionBridge extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        AiOriginLabel(node: reframe, resolve: file.node),
         _statement(
           context,
           '原来这样理解',
@@ -493,6 +501,9 @@ class RouteTradeoffCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          AiOriginLabel(node: route, resolve: file.node, showHumanSource: true),
+          if (fit != null && route.origin != EvidenceOrigin.aiHypothesis)
+            AiOriginLabel(node: fit, resolve: file.node),
           Wrap(
             spacing: 6,
             runSpacing: 6,

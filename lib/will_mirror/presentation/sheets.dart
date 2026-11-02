@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../ai/protocol.dart';
 import '../application/controller.dart';
 import '../domain/model.dart';
+import '../domain/failures.dart';
 import 'design.dart';
 
 Future<T?> mirrorSheet<T>(BuildContext context,
@@ -36,10 +37,11 @@ class TextQuestion {
       {this.initial = '',
       this.hint = '',
       this.required = false,
+      this.maxLength = 8000,
       this.lines = 2});
   final String key, label, initial, hint;
   final bool required;
-  final int lines;
+  final int lines, maxLength;
 }
 
 Future<Map<String, String>?> askText(BuildContext context,
@@ -68,7 +70,7 @@ Future<Map<String, String>?> askText(BuildContext context,
                           controller: inputs[q.key],
                           minLines: q.lines,
                           maxLines: q.lines + 2,
-                          maxLength: 8000,
+                          maxLength: q.maxLength,
                           decoration: InputDecoration(
                               labelText: q.label,
                               hintText: q.hint,
@@ -76,7 +78,9 @@ Future<Map<String, String>?> askText(BuildContext context,
                           validator: (value) =>
                               q.required && (value ?? '').trim().isEmpty
                                   ? '请填写这一项'
-                                  : null),
+                                  : (value ?? '').runes.length > q.maxLength
+                                      ? '请保留在 ${q.maxLength} 字以内'
+                                      : null),
                       const SizedBox(height: 14)
                     ],
                     FilledButton(
@@ -248,6 +252,11 @@ Future<AnalysisConsent?> askAnalysisConsent(
 }
 
 const fieldLabels = <String, String>{
+  'clarity': '这一步的简要理解',
+  'stuckPoint': '当前卡点',
+  'perspective': '可以重新看的一点',
+  'whyThisStep': '为什么先做这一步',
+  'question': '可以补充的一点',
   'scoredAt': '在线评分时间',
   'timeContext': '当时的时间与处境',
   'source': '记录来源',
@@ -425,6 +434,7 @@ const fieldLabels = <String, String>{
   'nextStep': '接下来能做的一步',
   'category': '经验所属方面',
   'maturity': '经验支持程度',
+  'reviewReason': '为什么需要重新对照',
   'ifCondition': '什么情境下',
   'thenAction': '可观察的做法',
   'exceptionRule': '哪些情况下不适用',
@@ -462,7 +472,10 @@ Future<void> showNodeDetails(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Wrap(spacing: 6, runSpacing: 6, children: [
-                      MirrorTag(sourceLabel(node.origin)),
+                      AiOriginLabel(
+                          node: node,
+                          resolve: controller.resolve,
+                          showHumanSource: true),
                       MirrorTag(phaseLabel(node.phase)),
                       MirrorTag(statusLabel(node.status))
                     ]),
@@ -602,7 +615,7 @@ List<Widget> _sourceTiles(
               subtitle: ref == null
                   ? null
                   : Text(
-                      '${sourceLabel(ref.origin)} · ${timeLabel(ref.recordedAt)}'),
+                      '${contentSourceLabel(ref, resolve: controller.resolve)} · ${timeLabel(ref.recordedAt)}'),
               onTap: ref == null
                   ? null
                   : () => showNodeDetails(context, controller, ref));
@@ -660,7 +673,8 @@ Future<void> runUiAction(
   } catch (error) {
     if (context.mounted)
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text(error is MirrorProblem ? error.message : '操作未完成，原有资料已保留')));
+          content: Text(error is MirrorProblem
+              ? analysisFailureMessage(error)
+              : '操作未完成，原有资料已保留')));
   }
 }

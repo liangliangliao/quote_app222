@@ -50,6 +50,10 @@ import '../kindling_host/kindling_host_page.dart';
 import '../beautiful_enemy_host/enemy_host_page.dart';
 import '../zhaojian_host/zhaojian_host_page.dart';
 import '../evidence_growth/evidence_growth_home_page.dart';
+import '../epistemic/cognitive_scope_hint.dart';
+import '../epistemic/cognitive_mode.dart';
+import '../epistemic/cognitive_models.dart';
+import '../epistemic/cognitive_sheet.dart';
 import '../self_os/self_os_home_page.dart';
 import '../widgets/discovery_directory.dart';
 import '../widgets/journey_design.dart';
@@ -839,6 +843,7 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
                 controller: _thoughtController,
                 hint: '例如：我认为自己不够好、别人都在否定我...（这是你的“信念”）',
               ),
+              CognitiveScopeHint(controller: _thoughtController),
               const SizedBox(height: 8),
               _buildTextRow(
                 label: '类型',
@@ -1450,11 +1455,21 @@ DateTime? _parseInsertedAt(String? insertedAt) {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: SingleChildScrollView(
-                child: Text(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Text(
                   line,
                   style: const TextStyle(fontSize: 14),
                   softWrap: true,
                 ),
+                  if (thought.trim().isNotEmpty) ...[
+                    CognitiveAction(label: '核查这条信念的适用范围', task: CognitiveTask.calibration,
+                        selection: CognitiveSelection.fromText(module: 'discover_belief',
+                            recordId: '${item['id'] ?? item['uid'] ?? item['inserted_at']}',
+                            title: '这条信念', fullText: thought)),
+                    CognitiveMode(child: TextButton(onPressed: () => showCognitiveNotes(ctx,
+                        module: 'discover_belief', recordId: '${item['id'] ?? item['uid'] ?? item['inserted_at']}',
+                        currentText: () => thought), child: const Text('回顾这条信念的认识注释'))),
+                  ],
+                ]),
               ),
             ),
           ),

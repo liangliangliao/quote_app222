@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../domain/model.dart';
+import '../domain/provenance.dart';
 
 const mirrorInk = Color(0xff163f43);
 const mirrorTeal = Color(0xff286b69);
@@ -148,9 +149,39 @@ String sourceLabel(EvidenceOrigin value) => switch (value) {
       EvidenceOrigin.selfReport => '本人记录',
       EvidenceOrigin.authorizedObservation => '授权核实',
       EvidenceOrigin.deviceEvent => '设备事件',
-      EvidenceOrigin.aiHypothesis => 'AI 候选',
+      EvidenceOrigin.aiHypothesis => 'AI 生成',
       EvidenceOrigin.productRule => '记录与规则',
     };
+
+String contentSourceLabel(MirrorNode node,
+        {MirrorNode? Function(String)? resolve}) =>
+    aiContentOrigin(node, resolve: resolve) ??
+    (node.kind == NodeKind.plan ? '你确认的预案' : sourceLabel(node.origin));
+
+class AiOriginLabel extends StatelessWidget {
+  const AiOriginLabel(
+      {super.key,
+      required this.node,
+      this.resolve,
+      this.showHumanSource = false});
+  final MirrorNode node;
+  final MirrorNode? Function(String)? resolve;
+  final bool showHumanSource;
+
+  @override
+  Widget build(BuildContext context) {
+    final ai = aiContentOrigin(node, resolve: resolve);
+    if (ai == null && !showHumanSource) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(children: [
+        MirrorTag(ai ?? sourceLabel(node.origin),
+            icon: ai == null ? Icons.edit_note : Icons.auto_awesome_outlined)
+      ]),
+    );
+  }
+}
+
 String phaseLabel(TimePhase value) => switch (value) {
       TimePhase.t0 => '事前',
       TimePhase.t1 => '现场',

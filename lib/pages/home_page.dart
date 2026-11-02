@@ -13,6 +13,7 @@ import 'package:quote_app/services/quote_frame_ai_service.dart';
 import 'package:quote_app/services/quote_calligraphy_settings.dart';
 import 'package:quote_app/services/notification_service.dart';
 import 'package:quote_app/services/quote_ai_service.dart';
+import '../models/quote_insight.dart';
 import '../services/quote_author_signature_service.dart';
 import '../data/dao.dart';
 import '../widgets/quote_home_scene.dart';
@@ -20,6 +21,8 @@ import '../widgets/quote_library_sheet.dart';
 import '../widgets/journey_design.dart';
 import '../services/quote_library_store.dart';
 import '../utils/debug_logger.dart';
+import '../epistemic/cognitive_mode.dart';
+import '../epistemic/quote_cognitive_reader.dart';
 import 'package:quote_app/services/native_guard.dart';
 
 
@@ -223,9 +226,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       builder: (dialogContext) => AlertDialog(
         title: const Text('名言如何变成画面'),
         content: SingleChildScrollView(
-          child: Text(script == null
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Text(script == null
             ? '当前尚未生成 AI 视觉脚本。请先选择「AI 生成/重绘框内配画」。默认始终使用你提供的木质画框。'
             : '原句含义：${script.meaning}\n\n核心视觉类比：${script.metaphor}\n\n可见场景：${script.scene}\n\n为什么这样画：${script.relationship}\n\n氛围：${script.mood}\n\n固定画框：你提供的木质画框；AI 只替换框内画面。\n\n分析来源：${script.fromAi ? 'AI 语义解析' : '本地有限规则兜底（不代表 AI 已理解）'}'),
+            if (script != null) CognitiveMode(child: QuoteVisualExplanation(
+                topic: topic, quote: quote, script: script)),
+          ]),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
@@ -707,6 +713,8 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
           'author': authorName,
           'author_original_name': (latest['author_original_name'] ?? '').toString(),
           'source': source,
+          'quoteAuthor': authorName,
+          'quoteUid': (latest['quote_uid'] ?? '').toString(),
           'note': (latest['explanation'] ?? latest['note'] ?? '').toString(),
           'avatarUrl': avatarUrl,
         };
@@ -762,6 +770,8 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
       'source': source,
       'note': note,
       'avatarUrl': avatarUrl,
+      'quoteAuthor': authorName,
+      'quoteUid': (row['quote_uid'] ?? row['fixed_uid'] ?? '').toString(),
     };
     if (!mounted) return;
     setState(() {
@@ -908,6 +918,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
           signaturePending: originalAuthor.isEmpty && authorName.isNotEmpty,
           source: '${content['source'] ?? ''}',
           note: '${content['note'] ?? ''}',
+          quoteReference: QuoteReference.fromPosterPayload(content),
           avatar: '${content['avatar'] ?? content['avatarUrl'] ?? ''}',
           woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
           aiFramePath: _frameImagePath,

@@ -13,6 +13,7 @@ import 'sheets.dart';
 import 'tide.dart';
 import 'visuals.dart';
 import 'journey_views.dart';
+import 'experience_cards.dart';
 
 part 'workbench_analysis.dart';
 part 'workbench_action.dart';
@@ -38,6 +39,7 @@ class CaseWorkbench extends StatefulWidget {
 
 class _CaseWorkbenchState extends State<CaseWorkbench> {
   String? _focusedReframeId;
+  String? _focusedPrincipleId;
   bool _expandedIssue = false;
   final _stepKeys = List.generate(7, (_) => GlobalKey());
   final _scroll = ScrollController();
@@ -96,6 +98,7 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
   Future<void> _act(Future<void> Function() action) =>
       runUiAction(context, action);
   void _focusReframe(String id) => setState(() => _focusedReframeId = id);
+  void _focusPrinciple(String id) => setState(() => _focusedPrincipleId = id);
   Future<void> _go(int step) async {
     await _act(() => c.advance(widget.caseId, step));
     if (!mounted) return;
@@ -117,7 +120,10 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
 
   Future<void> _analyze([AnalysisStage? stage, Json options = const {}]) async {
     final pass = stage == null && options.isEmpty ? passForStep(_active) : null;
-    final request = pass == null ? options : {'workbenchPass': pass.name};
+    final request = {
+      ...(pass == null ? options : {'workbenchPass': pass.name}),
+      'requireClarity': true,
+    };
     final consent = await askAnalysisConsent(
       context,
       c,
@@ -175,7 +181,8 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
       TextButton.icon(
           onPressed: () => _details(node),
           icon: const Icon(Icons.notes_outlined, size: 17),
-          label: Text(label));
+          label:
+              Text('${contentSourceLabel(node, resolve: c.resolve)} · $label'));
   Widget _heading(String text, [String? body]) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(text, style: Theme.of(context).textTheme.titleLarge),
@@ -205,7 +212,7 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
             contentPadding: EdgeInsets.zero,
             title: Text(nodeTitle(node)),
             subtitle: Text(
-                '${sourceLabel(node.origin)} · ${statusLabel(node.status)}'),
+                '${contentSourceLabel(node, resolve: c.resolve)} · ${statusLabel(node.status)}'),
             trailing: const Icon(Icons.chevron_right, size: 18),
             onTap: () => _details(node))
     ]);
@@ -326,7 +333,7 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
                           Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: MirrorEmpty(
-                                  title: '本次分析尚未完成',
+                                  title: '这一步暂时没完成',
                                   body: c.error!,
                                   icon: Icons.cloud_off_outlined,
                                   action: TextButton(
@@ -334,7 +341,7 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
                                             ...c.retryOptions,
                                             'resumeWorkflow': c.retryWorkflow
                                           }),
-                                      child: const Text('检查资料后重试')))),
+                                      child: const Text('重试这一步')))),
                         CaseJourneyHeader(
                           file: f,
                           step: active,
@@ -410,7 +417,7 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
   }
 
   static const _stepTitles = [
-    '理解这次取舍',
+    '看清这件事',
     '看见正反理由',
     '检验新的认识',
     '比较实际走法',
@@ -418,25 +425,40 @@ class _CaseWorkbenchState extends State<CaseWorkbench> {
     '真正的条件出现了吗',
     '回望事实，带走经验'
   ];
-  String _stepSummary(int i) => switch (i) {
-        0 => f.latest(NodeKind.understanding)?.text('summary') ?? '从你的原话开始',
-        1 => f.current(NodeKind.motive).isEmpty
-            ? '还没有生成候选'
-            : '${MotiveRanking.distinct(f.current(NodeKind.motive)).length} 条候选 · ${f.selectedMotiveIds.length} 条已选理由',
-        2 => f.current(NodeKind.reframe).isEmpty
-            ? '原来的认识也可能正确'
-            : '${f.current(NodeKind.reframe).length} 项可检验的认识',
-        3 => f.selectedRouteId == null
-            ? '比较收益、代价与现实条件'
-            : f.node(f.selectedRouteId)?.text('title') ?? '路线需要复核',
-        4 => f.latest(NodeKind.plan)?.text('ifThen') ?? '安排可真实执行的条件',
-        5 => f.latest(NodeKind.triggerCheck) == null
-            ? '提醒到时仍需核实条件'
-            : humanValue(f.latest(NodeKind.triggerCheck)!.text('state')),
-        _ => f.latest(NodeKind.observation) == null
-            ? '等待真实反馈'
-            : humanValue(f.latest(NodeKind.observation)!.text('actionState')),
-      };
+  String _stepSummary(int i) {
+    final source = switch (i) {
+      0 => f.latest(NodeKind.understanding),
+      1 => f.latest(NodeKind.recommendation) ?? f.latest(NodeKind.motive),
+      2 => f.latest(NodeKind.reframe),
+      3 => f.node(f.selectedRouteId) ?? f.latest(NodeKind.routeFit),
+      4 => f.latest(NodeKind.plan),
+      5 => f.latest(NodeKind.triggerCheck),
+      _ => f.latest(NodeKind.observation),
+    };
+    final summary = switch (i) {
+      0 => f.latest(NodeKind.understanding)?.text('summary') ?? '从你的原话开始',
+      1 => f.current(NodeKind.motive).isEmpty
+          ? '还没有生成候选'
+          : '${MotiveRanking.distinct(f.current(NodeKind.motive)).length} 条候选 · ${f.selectedMotiveIds.length} 条已选理由',
+      2 => f.current(NodeKind.reframe).isEmpty
+          ? '原来的认识也可能正确'
+          : '${f.current(NodeKind.reframe).length} 项可检验的认识',
+      3 => f.selectedRouteId == null
+          ? '比较收益、代价与现实条件'
+          : f.node(f.selectedRouteId)?.text('title') ?? '路线需要复核',
+      4 => f.latest(NodeKind.plan)?.text('ifThen') ?? '安排可真实执行的条件',
+      5 => f.latest(NodeKind.triggerCheck) == null
+          ? '提醒到时仍需核实条件'
+          : humanValue(f.latest(NodeKind.triggerCheck)!.text('state')),
+      _ => f.latest(NodeKind.observation) == null
+          ? '等待真实反馈'
+          : humanValue(f.latest(NodeKind.observation)!.text('actionState')),
+    };
+    return source == null
+        ? summary
+        : '${contentSourceLabel(source, resolve: c.resolve)} · $summary';
+  }
+
   Future<void> _menu(String action) async {
     if (action == 'reanalyze') {
       await _analyze(null, {'fullWorkflow': true});

@@ -67,6 +67,7 @@ extension _ReviewViews on _CaseWorkbenchState {
               '基于真实记录复盘', _busy ? null : () => _analyze(AnalysisStage.review),
               icon: Icons.auto_awesome_outlined),
         ] else ...[
+          AiOriginLabel(node: review, resolve: c.resolve),
           if (review.objects('revisedClaims').isNotEmpty) ...[
             Text(
               '这次现实改变了哪些判断',
@@ -114,7 +115,12 @@ extension _ReviewViews on _CaseWorkbenchState {
                     ])),
           Text('下次可验证：${review.text('nextTest')}'),
           _sourceLink(review, label: '事实、偏差、反证与未知'),
-          _nodeList(NodeKind.changeability, title: '已经发生的事，与仍可改变的条件'),
+          for (final assessment in f.current(NodeKind.changeability))
+            ChangeabilityCard(
+                node: assessment,
+                resolve: c.resolve,
+                onDetails: () => _details(assessment),
+                onRecord: _evidence),
           _nodeList(NodeKind.repair, title: '可以自主选择的补救'),
           _nodeList(NodeKind.insight, title: '这次支持或质疑了什么认识'),
           _nodeList(NodeKind.manifestation, title: '同一个我，多种经历'),
@@ -551,7 +557,9 @@ extension _ReviewViews on _CaseWorkbenchState {
               authorized: c.authorizedHistory)) return p;
     }
     final own = f.current(NodeKind.principle);
-    if (own.isNotEmpty) return own.first;
+    if (own.isNotEmpty)
+      return own.where((p) => p.id == _focusedPrincipleId).firstOrNull ??
+          own.first;
     final earlier = f.current(NodeKind.principle, allEpisodes: true).where(
         (p) => EvidenceRules.principleCanBePrepared(p, f,
             authorized: c.authorizedHistory));
@@ -568,6 +576,11 @@ extension _ReviewViews on _CaseWorkbenchState {
         authorized: c.authorizedHistory, requireAccepted: false);
     final adopted = {'accepted', 'scheduled', 'delivered'}
         .contains(application?.text('exposure'));
+    final cue = principle.text('fieldCue').isNotEmpty
+        ? principle.text('fieldCue')
+        : principle.text('thenAction').runes.length <= 60
+            ? '${principle.text('thenAction')}。条件变化时可以暂停。'
+            : '先核实这条经验是否适用，再自主选择下一步；条件变化时可以暂停。';
     return Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: MirrorCard(
@@ -579,15 +592,30 @@ extension _ReviewViews on _CaseWorkbenchState {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const MirrorTag('我的经验原则 · 仍可修订', icon: Icons.bookmark_border),
+              AiOriginLabel(node: principle, resolve: c.resolve),
               const SizedBox(height: 12),
-              Text(principle.text('summary'),
+              Text(atField ? cue : principle.text('summary'),
                   style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(
-                  '如果 ${principle.text('ifCondition')}，\n就先 ${principle.text('thenAction')}。'),
-              const SizedBox(height: 9),
-              Text('不适用时：${principle.text('exceptionRule')}'),
-              Text('仍需验证：${principle.text('nextTest')}'),
+              if (!atField) ...[
+                const SizedBox(height: 8),
+                Text(
+                    '如果 ${principle.text('ifCondition')}，\n就先 ${principle.text('thenAction')}。'),
+                const SizedBox(height: 9),
+                Text('不适用时：${principle.text('exceptionRule')}'),
+                Text('仍需验证：${principle.text('nextTest')}'),
+                if (principle.text('reviewReason').isNotEmpty)
+                  Text(principle.text('reviewReason')),
+              ] else
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('适用条件、例外与完整做法'),
+                  children: [
+                    Text(
+                        '如果 ${principle.text('ifCondition')}，就先 ${principle.text('thenAction')}。'),
+                    Text('不适用时：${principle.text('exceptionRule')}'),
+                    Text('仍需验证：${principle.text('nextTest')}'),
+                  ],
+                ),
               _sourceLink(principle, label: '实际出处、反例和适用条件'),
               if (!atField && !canAdopt)
                 const Text('适用条件或安全限制需要重新核实。可以修改这条原则，也可以不使用原则继续。'),
@@ -612,6 +640,22 @@ extension _ReviewViews on _CaseWorkbenchState {
                       onPressed: () => _declinePrinciple(principle, 'skip'),
                       child: const Text('跳过'))
                 ]),
+              if (!atField && f.current(NodeKind.principle).length > 1)
+                ExpansionTile(
+                  title: const Text('也看看其他候选 · 可以全部跳过'),
+                  children: [
+                    const Text('不同做法可能适合不同条件。只选择这次适用的一条，冲突时先核实。'),
+                    for (final other in f
+                        .current(NodeKind.principle)
+                        .where((p) => p.id != principle.id)
+                        .take(2))
+                      ListTile(
+                        title: Text(other.text('summary')),
+                        subtitle: Text('适用：${other.text('ifCondition')}'),
+                        onTap: () => _focusPrinciple(other.id),
+                      ),
+                  ],
+                ),
               if (atField && application != null)
                 Wrap(spacing: 6, children: [
                   TextButton(
@@ -689,7 +733,15 @@ extension _ReviewViews on _CaseWorkbenchState {
       TextQuestion('thenAction', '具体先做什么？',
           initial: principle.text('thenAction'), required: true),
       TextQuestion('exceptionRule', '什么时候不适用？',
-          initial: principle.text('exceptionRule'), required: true)
+          initial: principle.text('exceptionRule'), required: true),
+      TextQuestion('fieldCue', '现场只提醒这一句（75 字以内）',
+          maxLength: 75,
+          initial: principle.text('fieldCue').isNotEmpty
+              ? principle.text('fieldCue')
+              : principle.text('thenAction').runes.length <= 75
+                  ? principle.text('thenAction')
+                  : '',
+          required: true),
     ]);
     if (value == null) return;
     await _act(() => c.recordNode(
@@ -699,7 +751,8 @@ extension _ReviewViews on _CaseWorkbenchState {
           ...principle.body,
           ...value,
           'summary': '${value['ifCondition']}时，${value['thenAction']}',
-          'maturity': 'tentative'
+          'maturity': 'tentative',
+          'reviewReason': '本人调整了条件与做法，仍需下一次真实经历检验。',
         },
         evidenceIds: principle.evidenceIds,
         counterIds: principle.counterIds,
@@ -752,7 +805,13 @@ extension _ReviewViews on _CaseWorkbenchState {
           'detail': details['detail'],
           'attemptIds': f.current(NodeKind.attempt).map((n) => n.id).toList(),
           'observationIds':
-              f.current(NodeKind.observation).map((n) => n.id).toList()
+              f.current(NodeKind.observation).map((n) => n.id).toList(),
+          'preparationIds': f
+              .current(NodeKind.interventionExecution)
+              .where((n) =>
+                  {'executed', 'partly_executed'}.contains(n.text('state')))
+              .map((n) => n.id)
+              .toList(),
         },
         TimePhase.t2);
   }

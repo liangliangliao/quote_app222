@@ -44,7 +44,7 @@ class BootReceiver : BroadcastReceiver() {
         // LOCKED_BOOT_COMPLETED.  WorkManager may touch credential-protected storage
         // before the user unlocks the phone, so restore voice alarms first and keep
         // WorkManager boot reinitialization best-effort.
-        try { VoiceAlarmScheduler.restore(context.applicationContext) } catch (_: Throwable) {}
+        try { VoiceAlarmScheduler.restore(context.applicationContext, resetClock) } catch (_: Throwable) {}
 
         // The workmanager plugin only forwards keys prefixed with `payload_` to
         // Dart.  The old implementation used AlarmProxyWorker with an unprefixed

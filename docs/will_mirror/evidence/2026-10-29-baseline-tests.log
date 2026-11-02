@@ -1,0 +1,141 @@
+00:00 +0: loading /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart
+00:00 +0: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E01 工作: no fabricated facts across a new evidence version
+00:00 +1: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E02 任务能力: no fabricated facts across a new evidence version
+00:00 +2: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E03 学习: no fabricated facts across a new evidence version
+00:00 +3: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E04 关系: no fabricated facts across a new evidence version
+00:00 +4: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E05 人身安全: no fabricated facts across a new evidence version
+00:00 +5: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E06 健康: no fabricated facts across a new evidence version
+00:00 +6: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E07 资金: no fabricated facts across a new evidence version
+00:00 +7: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E08 法律责任: no fabricated facts across a new evidence version
+00:00 +8: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E09 休息: no fabricated facts across a new evidence version
+00:00 +9: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E10 资源取舍: no fabricated facts across a new evidence version
+00:00 +10: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E11 资源取舍: no fabricated facts across a new evidence version
+00:00 +11: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E12 社会榜样: no fabricated facts across a new evidence version
+00:00 +12: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E13 获得与满足: no fabricated facts across a new evidence version
+00:00 +13: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E14 新兴趣: no fabricated facts across a new evidence version
+00:00 +14: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E15 多样性: no fabricated facts across a new evidence version
+00:00 +15: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E16 被迫行为: no fabricated facts across a new evidence version
+00:00 +16: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E17 通知: no fabricated facts across a new evidence version
+00:00 +17: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E18 现场变化: no fabricated facts across a new evidence version
+00:00 +18: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E19 多次尝试: no fabricated facts across a new evidence version
+00:00 +19: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E20 认知反证: no fabricated facts across a new evidence version
+00:00 +20: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E21 原则修订: no fabricated facts across a new evidence version
+00:00 +21: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E22 他人自主: no fabricated facts across a new evidence version
+00:00 +22: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E23 隐私撤回: no fabricated facts across a new evidence version
+00:00 +23: /workspace/will-mirror-baseline/test/will_mirror/scenario_integrity_test.dart: E24 信息极少: no fabricated facts across a new evidence version
+00:00 +24: loading /workspace/will-mirror-baseline/test/will_mirror/notification_host_test.dart
+00:02 +24: /workspace/will-mirror-baseline/test/will_mirror/notification_host_test.dart: a foreground notification consumes pending navigation and opens only once
+00:04 +25: loading /workspace/will-mirror-baseline/test/will_mirror/android_sqlite_contract_test.dart
+00:06 +25: /workspace/will-mirror-baseline/test/will_mirror/android_sqlite_contract_test.dart: Android startup and privacy cleanup use result-capable SQL operations
+error DatabaseException(Queries can be performed using SQLiteDatabase query or rawQuery methods only.) during open, closing...
+00:06 +26: loading /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart
+00:08 +26: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: one case preserves raw input and separates UI step from real time phase
+00:08 +27: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: nested ledger bodies and support references are immutable
+00:08 +28: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: schema rejects invented keys, invalid score and unknown enum
+00:08 +29: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: sealed T0 is canonical, unchanged by T1 and T2, and cannot be backfilled
+00:08 +30: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: changed T1 conditions also prohibit inventing a T0 forecast
+00:08 +31: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: retrospective case has no manufactured prediction
+00:08 +32: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: unknown actual action does not become failure or reveal
+00:08 +33: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: actual action and outside result remain independent
+00:08 +34: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: next episode retains original observations once on the same CaseID
+00:08 +35: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: unsafe route and later unsafe assessment prevent preparation
+00:08 +36: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: AI cannot author action facts or user acceptance
+00:08 +37: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: missing, stale, or foreign evidence blocks model records
+00:08 +38: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: plans, scenes, scores and device events do not self-prove personality
+00:08 +39: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: transitive withdrawal reaches saved forecasts and ranking
+00:08 +40: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: Top5 preserves counterarguments and long horizon and never fills false scores
+00:08 +41: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: generic assumptions remain verify-first rather than personal facts
+00:08 +42: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: duplicate semantic key collapses paraphrases, bounded distinct pool
+00:08 +43: /workspace/will-mirror-baseline/test/will_mirror/domain_test.dart: all scored candidates survive weight adjustment, refusal stays unknown
+00:09 +44: loading /workspace/will-mirror-baseline/test/will_mirror/startup_recovery_test.dart
+00:11 +44: /workspace/will-mirror-baseline/test/will_mirror/startup_recovery_test.dart: native vault errors expose only safe categories, never native details
+00:11 +45: /workspace/will-mirror-baseline/test/will_mirror/startup_recovery_test.dart: missing channel and empty native reply cannot write plaintext
+00:11 +46: /workspace/will-mirror-baseline/test/will_mirror/startup_recovery_test.dart: optional provider and reminder failures keep the local ledger usable
+00:11 +47: /workspace/will-mirror-baseline/test/will_mirror/startup_recovery_test.dart: storage failures remain blocking and preserve the existing records
+00:11 +48: /workspace/will-mirror-baseline/test/will_mirror/startup_recovery_test.dart: startup error can retry without deleting or replacing any data
+00:16 +49: /workspace/will-mirror-baseline/test/will_mirror/startup_recovery_test.dart: unknown startup error is neutral and usable with large text
+00:16 +50: loading /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart
+00:19 +50: /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart: (setUpAll)
+00:20 +50: /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart: independent module has one entry input and three navigation destinations
+00:26 +51: /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart: one free input creates a persistent case before optional AI consent
+00:29 +52: /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart: unknown observation keeps waiting and no reveal button invents result
+00:30 +53: /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart: active source detail removes private content immediately after withdrawal
+00:30 +54: /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart: populated Top5 keeps counterarguments visible on a phone
+00:32 +55: /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart: life path renders actual episodes and optional possible branches distinctly
+00:33 +56: /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart: small screen with enlarged text has no overflow in all module tabs
+00:34 +57: /workspace/will-mirror-baseline/test/will_mirror/widget_flow_test.dart: (tearDownAll)
+00:34 +57: loading /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart
+00:36 +57: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: first pass commits understanding without starting the fifty-motive workflow
+00:36 +58: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: route comparison commits one target at a time and never merges matrices
+00:37 +59: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: scope retry resumes inside its pass without repeating earlier work
+00:37 +60: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: same motive keeps different directions for different routes
+00:37 +61: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: new condition cancels reminders and stops stale plans without altering the seal
+00:37 +62: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: completed action does not fill missing decision, attempt, or satisfaction
+00:37 +63: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: principle reuse needs a new match after changed conditions or a new episode
+00:37 +64: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: retrospective belief changes keep the after-event phase label
+00:37 +65: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: invalid workbench scope cannot leave an orphan permission or busy state
+00:37 +66: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: superseded-route motives leave the live pool while historical evidence remains
+00:37 +67: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: historical reasons cannot suppress current-route candidates during deduplication
+00:37 +68: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: feedback is a single sheet and unknown remains unknown
+00:41 +69: /workspace/will-mirror-baseline/test/will_mirror/intent_workbench_test.dart: conflict view fits a narrow screen with large type
+00:41 +70: loading /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart
+00:44 +70: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: first open configures secure deletion and foreign key enforcement
+00:44 +71: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: reopening preserves encrypted settings, cases and every old revision
+00:45 +72: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: database and history persist cipher payload, no private raw strings
+00:45 +73: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: optimistic concurrency prevents late AI from overwriting a correction
+00:45 +74: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: authentication failure preserves rows and never manufactures empty replacement
+00:45 +75: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: withdrawal redacts all versions and dependent cross-case explanations
+00:45 +76: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: cross-case revoke preserves source while clearing all dependent histories
+00:45 +77: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: case deletion removes histories and export excludes credentials
+00:46 +78: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: notification round trip verifies all IDs and opened is device event only
+00:46 +79: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: withdrawal cancels OS reminder before its job ID is redacted
+00:46 +80: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: denied reminder permission preserves plan and never fabricates delivery
+00:46 +81: /workspace/will-mirror-baseline/test/will_mirror/store_controller_test.dart: malformed or unrelated notification payload is not handled by this module
+00:46 +82: loading /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart
+00:48 +82: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: minimal consent excludes unselected raw data and all of its derivatives
+00:48 +83: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: cross-case selection requires both explicit case and evidence grants
+00:48 +84: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: seals are sent only if the complete linked source set was authorized
+00:48 +85: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: stage schema repair is bounded and unauthorized references never commit
+00:48 +86: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: cancellation before model request retains the original case
+00:48 +87: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: multi-batch generation and independent semantic audit produce an honest bounded pool
+00:49 +88: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: semantic paraphrases do not get counted just to reach fifty
+00:50 +89: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: OpenAI structured request uses host config without storing or logging content
+00:50 +90: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: private model never forwards upstream error bodies
+00:50 +91: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: Decisions refusal and name mismatch have no manufactured zero scores
+00:50 +92: /workspace/will-mirror-baseline/test/will_mirror/ai_contract_test.dart: strict model schemas require every declared property and no additional properties
+00:50 +93: loading /workspace/will-mirror-baseline/test/will_mirror/intent_visual_test.dart
+00:52 +93: /workspace/will-mirror-baseline/test/will_mirror/intent_visual_test.dart: (setUpAll)
+00:52 +93: /workspace/will-mirror-baseline/test/will_mirror/intent_visual_test.dart: accepting a reframe invalidates affected route fits and keeps other fits
+00:52 +94: /workspace/will-mirror-baseline/test/will_mirror/intent_visual_test.dart: route revision hides historical priorities and preserves current score pairing
+00:56 +95: /workspace/will-mirror-baseline/test/will_mirror/intent_visual_test.dart: one fictional case renders understanding, conflict, recognition and route comparisons
+00:59 +96: /workspace/will-mirror-baseline/test/will_mirror/intent_visual_test.dart: (tearDownAll)
+00:59 +96: loading /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart
+01:00 +96: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: a superseded route cannot activate an old plan or rank its old support as current
+01:00 +97: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: repeated route analysis must revise prior IDs instead of exceeding six active alternatives
+01:00 +98: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: weight adjustment retains the original online scoring and expiry times
+01:00 +99: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: latest hard safety assessment blocks high-scored supporting motives
+01:00 +100: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: unreferenced AI guesses cannot use verified fact status
+01:00 +101: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: later user records cannot acquire an earlier knowledge phase
+01:00 +102: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: known exclusive resources prohibit a parallel tradeoff but allow sequencing
+01:00 +103: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: two actual events without free informed alternatives cannot prove a stable want
+01:00 +104: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: safety reappraisal immediately retires preparation and cancels the OS job
+01:00 +105: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: identical completed analysis reuses its result and new facts invalidate reuse
+01:00 +106: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: independent learning review repairs once before commit
+01:00 +107: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: independent learning review rejects persistent violations
+01:00 +108: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: Azure tries an alternate path only after an unsupported endpoint
+01:00 +109: /workspace/will-mirror-baseline/test/will_mirror/regression_v28_test.dart: Azure Claude uses Messages body and parses text blocks
+01:00 +110: loading /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart
+01:01 +110: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: a draft principle cannot become an adopted cue before user acceptance
+01:02 +111: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: risk and review gates block principle adoption and plan sealing
+01:02 +112: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: display and advance declarations cannot fabricate actual principle use
+01:02 +113: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: real application needs a concrete account and a known observation
+01:02 +114: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: version references must match and an application cannot switch versions
+01:02 +115: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: later revisions stop new cues but preserve review of the version used
+01:02 +116: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: changed field conditions stop reuse without rewriting past acceptance
+01:02 +117: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: cross-case reuse requires authorization and a current safe context match
+01:02 +118: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: a new safety restriction suspends even an accepted principle
+01:02 +119: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=none
+01:03 +120: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=opened
+01:04 +121: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: field cue requires explicit adoption, exposure=accepted
+01:04 +122: /workspace/will-mirror-baseline/test/will_mirror/principle_application_test.dart: unsafe draft explains its gate and cannot be adopted
+01:05 +123: All tests passed!

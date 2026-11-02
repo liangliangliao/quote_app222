@@ -1,3 +1,4 @@
+import '../quote_knowledge/schema.dart';
 
 import 'dart:math';
 import 'dart:io';
@@ -1131,6 +1132,7 @@ Future<List<Map<String,dynamic>>> all({int limit=100, int offset=0, String q=''}
       'notified': 0,
       'created_at': DateTime.now().millisecondsSinceEpoch,
     });
+    QuoteKnowledgeEvents.notify();
     QuoteChangeBus.notifyWrite();
     await LogDao().add(taskUid: taskUid, detail: '成功! 已插入名言');
     return uid;
@@ -1247,6 +1249,7 @@ Future<bool> updateLatestForTask(String taskUid, String content) async {
     if (rows.isNotEmpty) {
       final id = rows.first['id'] as int;
       await db.update('quotes', {'content': content}, where: 'id=?', whereArgs: [id]);
+      QuoteKnowledgeEvents.notify();
       QuoteChangeBus.notifyWrite();
       return true;
     } else {
@@ -1284,6 +1287,7 @@ Future<bool> updateLatestForTask(String taskUid, String content) async {
       if (avatarPath != null) patch['avatar'] = avatarPath;
       patch['inserted_at'] = nowStr;
       await db.update('quotes', patch, where: 'id=?', whereArgs: [id]);
+      QuoteKnowledgeEvents.notify();
       QuoteChangeBus.notifyWrite();
       return true;
     } else {
@@ -2043,6 +2047,7 @@ extension QuoteDaoBulk on QuoteDao {
           }, conflictAlgorithm: ConflictAlgorithm.ignore);
         }
       });
+      QuoteKnowledgeEvents.notify();
       QuoteChangeBus.notifyWrite();
       return BulkImportResult(true, []);
     } catch (e) {
@@ -2057,6 +2062,7 @@ Future<void> shuffleQuotesPhysically() async {
   // -- 改进版物理洗牌：随机写入 quotes_new，然后替换 --
   final db = await AppDatabase.instance();
   await db.transaction((txn) async {
+    await QuoteKnowledgeSchema.preserveLegacyIdentity(txn);
     // 1) 复制表结构到 quotes_new
     final schemaRows = await txn.query(
       'sqlite_master',
@@ -2091,6 +2097,7 @@ Future<void> shuffleQuotesPhysically() async {
     // 3) 替换旧表
     await txn.execute('DROP TABLE quotes');
     await txn.execute('ALTER TABLE quotes_new RENAME TO quotes');
+    await QuoteKnowledgeSchema.ensure(txn);
   });
 
   // 4) VACUUM 固化页顺序
@@ -2106,6 +2113,7 @@ Future<void> shuffleQuotesPhysically() async {
 Future<void> restoreQuotesToOriginalOrder() async {
   final db = await AppDatabase.instance();
   await db.transaction((txn) async {
+    await QuoteKnowledgeSchema.preserveLegacyIdentity(txn);
     // 1) 确保备份表存在（若不存在则无从恢复）
     await txn.execute('CREATE TABLE IF NOT EXISTS quotes_id_backup(quote_uid TEXT PRIMARY KEY, original_id INTEGER, original_pos INTEGER)');
     await txn.execute('INSERT OR IGNORE INTO quotes_id_backup(quote_uid, original_id, original_pos) SELECT quote_uid, id, rowid FROM quotes');
@@ -2146,6 +2154,7 @@ await txn.execute(createSql2);
     // 5) 替换原表
     await txn.execute('DROP TABLE quotes');
     await txn.execute('ALTER TABLE quotes_new RENAME TO quotes');
+    await QuoteKnowledgeSchema.ensure(txn);
 
     // 6) 重建索引
     for (final row in idxRows) {
@@ -2713,6 +2722,17 @@ class VisionDao {
       whereArgs: [kThoughtTaxonomyId],
       orderBy: 'display_order ASC, id ASC',
     );
+  }
+
+  /// 按名称查找现有分类；同名节点留给调用者明确选择。
+  Future<List<Map<String, dynamic>>> findThoughtNodesByTitle(String title) async {
+    if (title.trim().isEmpty) return const [];
+    final db = await _db();
+    await _ensureTables(db);
+    return db.query('vision_node',
+        where: 'taxonomy_id=? AND title = ? COLLATE NOCASE AND is_active=1',
+        whereArgs: [kThoughtTaxonomyId, title.trim()],
+        orderBy: 'depth ASC, display_order ASC, id ASC');
   }
 
   /// 子节点列表（用于懒加载树）

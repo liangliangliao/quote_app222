@@ -1,0 +1,51 @@
+00:00 +0: loading /workspace/quote_app222/test/will_mirror/response_recovery_test.dart
+00:00 +0: a new pass retains mutually linked analysis when all real sources are granted
+00:00 +0 -1: a new pass retains mutually linked analysis when all real sources are granted [E]
+  Expected: contains all of [
+              'belief_1793273192696106_a20276087d62b43bfbc5',
+              'understanding_1793273192696048_5fa72d1a0813823d52d6'
+            ]
+    Actual: MappedListIterable<MirrorNode, String>:[
+              'evidence_1793273192689875_cc341161678ca9d1914f'
+            ]
+     Which: has too few elements (1 < 2)
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/will_mirror/response_recovery_test.dart 40:5   main.<fn>
+  
+00:00 +0 -1: a mutually linked group cannot conceal a private or withdrawn source
+00:00 +1 -1: malformed review is repaired without regenerating the already valid advice
+00:00 +1 -2: malformed review is repaired without regenerating the already valid advice [E]
+  Expected: <1>
+    Actual: <2>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/will_mirror/response_recovery_test.dart 82:5   main.<fn>
+  
+00:00 +1 -2: unreadable review stays untrusted and has a bounded format repair
+00:00 +1 -3: unreadable review stays untrusted and has a bounded format repair [E]
+  Expected: throws <Instance of 'MirrorProblem'> with `format failure`: 'quality_format_invalid'
+    Actual: <Instance of 'Future<CaseFile>'>
+     Which: threw MirrorProblem:<body.violations[0] 的数据类型或状态无效>
+            stack package:quote_app/will_mirror/domain/schema.dart 759:12  validateShape
+                  package:quote_app/will_mirror/domain/schema.dart 728:7   validateShape
+                  package:quote_app/will_mirror/domain/schema.dart 720:9   validateShape
+                  package:quote_app/will_mirror/ai/pipeline.dart 491:5     CaseAnalysisPipeline._qualityReview
+                  ===== asynchronous gap ===========================
+                  package:matcher                                          expectLater
+                  package:flutter_test/src/widget_tester.dart 507:8        expectLater
+                  test/will_mirror/response_recovery_test.dart 102:11      main.<fn>
+                  
+            which has `format failure` with value 'invalid_operation' which is different.
+                  Expected: quality_fo ...
+                    Actual: invalid_op ...
+                            ^
+                   Differ at offset 0
+  
+  package:matcher                                      expectLater
+  package:flutter_test/src/widget_tester.dart 507:8    expectLater
+  test/will_mirror/response_recovery_test.dart 102:11  main.<fn>
+  
+00:00 +1 -3: Some tests failed.

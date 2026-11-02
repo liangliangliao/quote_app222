@@ -114,6 +114,12 @@ void main() {
       expect(result.explanation, contains('活动 1｜三分钟自省停顿'));
       expect(result.explanation, contains('借鉴或类比：哲学对话的类比练习'));
       expect(result.explanation, contains('• 审视改变了什么？'));
+      expect(result.explanation, contains('模型对出处的自评（未经外部核对）'));
+      expect(result.readingAddon.source.label, '待核对出处');
+      expect(result.readingAddon.concreteExample, contains('今天一次准备立即回应消息'));
+      expect(result.readingAddon.boundary, contains('不能证明名言普遍成立'));
+      expect(result.withAvatarPath('assets/example.jpg').readingAddon.toJson(),
+          result.readingAddon.toJson());
     });
 
     test('uses explicit uncertainty instead of inventing a missing source', () {
@@ -127,6 +133,22 @@ void main() {
       expect(result.source, '出处待考');
       expect(result.theme, '勇气与行动');
       expect(result.practiceActivities.single.steps, hasLength(1));
+    });
+
+    test('new reading fields are optional and cannot grant source verification', () {
+      final result = QuoteAiService.parseResponse(
+        '''{"quote":"先观察，再判断。","author":"某思想家","source":"某书第一章",
+        "source_status":"verified","source_confidence":"高，已核实",
+        "epistemic_source":{"source_status":"verified","locator":"某书第一章","verified_by":"AI","verified_at":"2026-10-29"},
+        "concrete_example":"示例：先记录对方说了什么，再解释其意图。",
+        "commonality":"都在理解对方","critical_difference":"是否区分观察与推测","boundary":"记录也可能不完整",
+        "practice_activities":["记下观察与解释各一条。"]}''',
+        selectedFigure: '', fallbackTheme: '', nextCursor: 1,
+      );
+      expect(result.readingAddon.source.label, '待核对出处');
+      expect(result.readingAddon.source.verifiedBy, isEmpty);
+      expect(result.readingAddon.criticalDifference, '是否区分观察与推测');
+      expect(result.readingAddon.boundary, '记录也可能不完整');
     });
 
     test('normalizes provider variants for multiple practice activities', () {

@@ -2,10 +2,20 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // Flutter engine Maven repo (required for io.flutter:* artifacts)
-        maven { url 'https://storage.flutter-io.cn/download.flutter.io' }
-        maven { url 'https://storage.googleapis.com/download.flutter.io' }
-        maven { url 'https://pub.dev/download.flutter.io' }
+        // Flutter mirrors only host engine artifacts. Querying them for dynamic
+        // AndroidX versions can abort resolution when a mirror returns 522.
+        maven {
+            url 'https://storage.flutter-io.cn/download.flutter.io'
+            content { includeGroup 'io.flutter' }
+        }
+        maven {
+            url 'https://storage.googleapis.com/download.flutter.io'
+            content { includeGroup 'io.flutter' }
+        }
+        maven {
+            url 'https://pub.dev/download.flutter.io'
+            content { includeGroup 'io.flutter' }
+        }
         // Fallback mirrors (useful when Maven Central is blocked/unreachable in some networks).
         maven { url 'https://maven.aliyun.com/repository/public' }
         maven { url 'https://maven.aliyun.com/repository/central' }

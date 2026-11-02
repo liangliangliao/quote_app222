@@ -11,6 +11,7 @@ on:
         default: false
   push:
     paths:
+      - ".github/workflows/android_build_source_repo.yml"
       - "lib/**"
       - "android/**"
       - "ios/**"
@@ -34,6 +35,7 @@ on:
       - "**/*.java"
   pull_request:
     paths:
+      - ".github/workflows/android_build_source_repo.yml"
       - "lib/**"
       - "android/**"
       - "ios/**"
@@ -81,12 +83,14 @@ jobs:
             exit 0
           elif [ "$EVENT_NAME" = "pull_request" ] && [ "$EVENT_ACTION" != "synchronize" ]; then
             changed_files="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          elif [ "$EVENT_NAME" = "push" ] && [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            changed_files="$(git ls-tree -r --name-only "$AFTER_SHA")"
           else
             changed_files="$(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA")"
           fi
 
           printf '%s\n' "$changed_files"
-          if printf '%s\n' "$changed_files" | grep -Eq '^(lib/|android/|ios/|assets/|test/|tools/zhixing_tree/|pubspec\.yaml$|pubspec\.lock$|analysis_options\.yaml$|gradle/|gradlew$|settings\.gradle(\.kts)?$|build\.gradle(\.kts)?$|.*\.(dart|gradle|xml|kt|java)$)'; then
+          if printf '%s\n' "$changed_files" | grep -Eq '^(\.github/workflows/android_build_source_repo\.yml$|lib/|android/|ios/|assets/|test/|tools/zhixing_tree/|pubspec\.yaml$|pubspec\.lock$|analysis_options\.yaml$|gradle/|gradlew$|settings\.gradle(\.kts)?$|build\.gradle(\.kts)?$|.*\.(dart|gradle|xml|kt|java)$)'; then
             echo "run_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_build=false" >> "$GITHUB_OUTPUT"
@@ -237,19 +241,46 @@ jobs:
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter build apk --release --build-name 0.1.5 --build-number 10 -t lib/main.dart
 
-      - name: Give corrected APK a unique filename
+      - name: Package APK with source identity
+        id: apk_package
         if: steps.detect.outputs.project_type == 'flutter'
         working-directory: ${{ steps.detect.outputs.project_dir }}
-        run: >-
-          mv build/app/outputs/flutter-apk/app-release.apk
-          build/app/outputs/flutter-apk/quote_app_artwork_v0.1.5_build10.apk
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          package_name="quote-app-${SOURCE_SHA:0:12}-run${GITHUB_RUN_NUMBER}"
+          mkdir -p build/apk-delivery
+          cp build/app/outputs/flutter-apk/app-release.apk "build/apk-delivery/${package_name}.apk"
+          jq -n \
+            --arg source_sha "$SOURCE_SHA" \
+            --arg build_sha "$(git rev-parse HEAD)" \
+            --arg ref "$SOURCE_REF" \
+            --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{source_sha: $source_sha, build_sha: $build_sha, ref: $ref, run_url: $run_url}' \
+            > build/apk-delivery/build-info.json
+          (cd build/apk-delivery && sha256sum "${package_name}.apk" > SHA256SUMS)
+          cp docs/quote_knowledge_economy_v6.md build/apk-delivery/QUOTE-KNOWLEDGE-V6.md
+          cp docs/reading_concept_grounding_v7.md build/apk-delivery/READING-GROUNDING-V7.md
+          cp docs/quote_knowledge_prototypes_v5.md build/apk-delivery/QUOTE-KNOWLEDGE-V5.md
+          cp docs/quote_epistemic_p0_implementation.md build/apk-delivery/READING-AND-COMPARISON.md
+          cp docs/cognitive_prototypes_2_10.md build/apk-delivery/COGNITIVE-MODES.md
+          cp docs/cognitive_prototypes_2_10.md build/apk-delivery/cognitive_prototypes_2_10.md
+          cp docs/cognitive_requirements_audit_2026_11_01.md build/apk-delivery/cognitive_requirements_audit_2026_11_01.md
+          cp docs/schopenhauer_plan_full_acceptance.md build/apk-delivery/schopenhauer_plan_full_acceptance.md
+          cp docs/cognitive_prototype_depth_v3.md build/apk-delivery/COGNITIVE-PROTOTYPE-V3.md
+          cp -R docs/cognition-v3 build/apk-delivery/cognition-v3
+          echo 'New style is opt-in: 设置 → 阅读与认知风格 → 叔本华认知风格. Home artwork remains unchanged.' >> "$GITHUB_STEP_SUMMARY"
+          echo "name=$package_name" >> "$GITHUB_OUTPUT"
+          echo "APK source: $SOURCE_REF / $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK - Flutter
         if: steps.detect.outputs.project_type == 'flutter'
         uses: actions/upload-artifact@v4
         with:
-          name: quote_app-artwork-v0.1.5-build10
-          path: ${{ steps.detect.outputs.project_dir }}/build/app/outputs/flutter-apk/quote_app_artwork_v0.1.5_build10.apk
+          name: ${{ steps.apk_package.outputs.name }}
+          path: ${{ steps.detect.outputs.project_dir }}/build/apk-delivery/
           if-no-files-found: error
 
       # ---------- Gradle path fallback ----------

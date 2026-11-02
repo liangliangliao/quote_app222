@@ -44,6 +44,7 @@ class VoiceAlarmRingingService : Service() {
 
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
+    private const val ACTION_ENABLE_MICROPHONE = "com.example.quote_app.VOICE_ALARM_ENABLE_MICROPHONE"
     private const val ACTION_POSTPONE_VOICE_REPLAY = "com.example.quote_app.VOICE_ALARM_POSTPONE_VOICE_REPLAY"
     private const val ACTION_DUCK_SIGNAL_FOR_LISTENING = "com.example.quote_app.VOICE_ALARM_DUCK_SIGNAL_FOR_LISTENING"
     private const val EXTRA_PAYLOAD = "payload"
@@ -76,6 +77,16 @@ class VoiceAlarmRingingService : Service() {
         putExtra(EXTRA_PAYLOAD, payload)
       }
       if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+    }
+
+    @JvmStatic
+    fun enableVoiceInteraction(context: Context) {
+      // Android 14 can deny microphone FGS type at the alarm's background start.
+      // Retry only after the user-visible Activity is resumed and permission exists.
+      if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+      try {
+        context.startService(Intent(context, VoiceAlarmRingingService::class.java).setAction(ACTION_ENABLE_MICROPHONE))
+      } catch (_: Throwable) {}
     }
 
     @JvmStatic
@@ -273,6 +284,15 @@ class VoiceAlarmRingingService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
+    if (intent?.action == ACTION_ENABLE_MICROPHONE) {
+      val payload = activePayload ?: readActivePayload(this)
+      if (payload == null) {
+        stopSelf(startId)
+        return START_NOT_STICKY
+      }
+      startForegroundAlarm(payload, openActivity = false)
+      return START_STICKY
+    }
     if (intent?.action == ACTION_POSTPONE_VOICE_REPLAY) {
       postponeVoiceReplay(intent.getLongExtra(EXTRA_POSTPONE_MS, 15_000L))
       return START_STICKY
@@ -392,7 +412,7 @@ class VoiceAlarmRingingService : Service() {
     startSignals(currentPayload)
   }
 
-  private fun startForegroundAlarm(payload: String) {
+  private fun startForegroundAlarm(payload: String, openActivity: Boolean = true) {
     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     ensureAlarmChannel(this)
     val launchIntent = Intent(this, VoiceAlarmActivity::class.java).apply {
@@ -479,7 +499,7 @@ class VoiceAlarmRingingService : Service() {
     if (!foregroundStarted) {
       try { notificationManager.notify(NOTIFICATION_ID, notification) } catch (_: Throwable) {}
     }
-    try { contentIntent.send() } catch (_: Throwable) {}
+    if (openActivity) try { contentIntent.send() } catch (_: Throwable) {}
   }
 
   private fun acquireWakeLock() {

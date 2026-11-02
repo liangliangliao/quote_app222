@@ -5,6 +5,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/quote_calligraphy_settings.dart';
+import '../models/quote_insight.dart';
+import '../epistemic/quote_cognitive_reader.dart';
+import '../epistemic/cognitive_preferences.dart';
+import 'quote_reading_insights.dart';
 import 'quote_adaptive_frame.dart';
 import 'quote_art_layout.dart';
 import 'quote_calligraphy_text.dart';
@@ -66,6 +70,7 @@ class PosterPureFlutter extends StatelessWidget {
     this.animateCalligraphy = false,
     this.calligraphyStyle = QuoteCalligraphyStyle.xingshu,
     this.englishFontStyle = QuoteEnglishFontStyle.baskerville,
+    this.quoteReference,
   });
 
   final String topic, quote, author, originalAuthor, source, note, avatar;
@@ -75,8 +80,10 @@ class PosterPureFlutter extends StatelessWidget {
   final bool signaturePending;
   final QuoteCalligraphyStyle calligraphyStyle;
   final QuoteEnglishFontStyle englishFontStyle;
+  final QuoteReference? quoteReference;
 
   void _openReading(BuildContext context) {
+    CognitivePreferenceStore.instance.load();
     final readingQuoteStyle = quotePrefersLiteraryEnglish(quote)
         ? quoteLiteraryTextStyle(const TextStyle(fontSize: 21, height: 1.65))
         : const TextStyle(
@@ -89,63 +96,47 @@ class PosterPureFlutter extends StatelessWidget {
         ? source.trim()
         : _legacySource(author);
     showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        top: false,
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .80,
-          child: SingleChildScrollView(
-            key: const ValueKey('quote-full-reading'),
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-            child: SelectionArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (topic.trim().isNotEmpty) ...[
-                    Text(
-                      topic,
-                      style: const TextStyle(fontSize: 20, height: 1.5),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                  Text(
-                    quote,
-                    key: const ValueKey('quote-reader-body'),
-                    style: readingQuoteStyle,
-                  ),
-                  if (signature.isNotEmpty) ...[
-                    const SizedBox(height: 18),
-                    QuoteAuthorSignature(
-                      signature,
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(fontSize: 15, height: 1.5),
-                    ),
-                  ],
-                  if (citation.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      '出处：$citation',
-                      key: const ValueKey('quote-reader-source'),
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(fontSize: 14, height: 1.5),
-                    ),
-                  ],
-                  if (note.trim().isNotEmpty) ...[
-                    const SizedBox(height: 26),
-                    Text(
-                      note,
-                      style: const TextStyle(fontSize: 17, height: 1.7),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.white, showDragHandle: true,
+      builder: (context) => FractionallySizedBox(heightFactor: .96, child: SafeArea(top: false,
+        child: ValueListenableBuilder<CognitivePreferences>(
+            valueListenable: CognitivePreferenceStore.instance,
+            builder: (context, prefs, _) => CognitivePreferenceStore.active
+              ? SelectionArea(child: QuoteCognitiveReader(
+                  quote: quoteReference ?? QuoteReference(id: '', content: quote, author: author),
+                  topic: topic, authorLabel: signature, note: note, imagePath: aiFramePath))
+              : SingleChildScrollView(key: const ValueKey('quote-full-reading'),
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                child: SelectionArea(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (topic.trim().isNotEmpty) ...[
+                Text(topic,
+                    style: const TextStyle(fontSize: 20, height: 1.5)),
+                const SizedBox(height: 20),
+              ],
+              Text(quote, key: const ValueKey('quote-reader-body'), style: readingQuoteStyle),
+              if (signature.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                QuoteAuthorSignature(signature,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 15, height: 1.5)),
+              ],
+              if (citation.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text('出处：$citation', key: const ValueKey('quote-reader-source'), textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 14, height: 1.5)),
+              ],
+              if (note.trim().isNotEmpty) ...[
+                const SizedBox(height: 26),
+                const Text('解读 · 一种理解', style: TextStyle(fontSize: 13, color: Colors.black54)),
+                const SizedBox(height: 8),
+                Text(note, style: const TextStyle(fontSize: 17, height: 1.7)),
+              ],
+              QuoteReadingInsights(quote: quoteReference ?? QuoteReference(id: '', content: quote)),
+            ],
+          )))),
+      )),
     );
   }
 

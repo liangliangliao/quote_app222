@@ -1,3 +1,4 @@
+import '../quote_knowledge/cost_policy.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -5,6 +6,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../data/dao.dart';
+import '../epistemic/schopenhauer_guidance.dart';
 import '../utils/deepseek_logger.dart';
 import 'azure_ai_settings.dart';
 import 'global_ai_settings.dart';
@@ -579,13 +581,19 @@ class UnifiedAiService {
     String? forcedModel,
     double? temperature,
   }) async {
+    if (!prompt.contains(SchopenhauerGuidance.core)) {
+      systemPrompt = SchopenhauerGuidance.forPurpose(purpose, systemPrompt);
+    }
     final cfg = await resolveGlobalConfig(forcedProvider: forcedProvider, forcedModel: forcedModel);
     final requestCfg = await _requestSettings.getConfig();
-    final effectiveMaxTokens = requestCfg.resolveMaxTokens(maxTokens);
+    final classificationBatch = purpose == 'quote_knowledge.batch.v2';
+    final effectiveMaxTokens = classificationBatch
+        ? ClassificationCostPolicy.capOutput(maxTokens, requestCfg.resolveMaxTokens(maxTokens))
+        : requestCfg.resolveMaxTokens(maxTokens);
     final effectiveTemperature = requestCfg.resolveTemperature(temperature);
     final effectiveTopP = requestCfg.resolveTopP();
     var effectiveTimeout = requestCfg.resolveTimeout(const Duration(seconds: 90));
-    var effectiveRetryCount = requestCfg.resolveRetryCount();
+    var effectiveRetryCount = classificationBatch ? 0 : requestCfg.resolveRetryCount();
     var effectiveRetryDelayMs = requestCfg.resolveRetryDelayMs();
     // Movie episode generation calls many small JSON tasks. OpenRouter may
     // return temporary upstream 429 for a selected provider even when the
@@ -785,6 +793,10 @@ class UnifiedAiService {
       }
     }
     if (cleaned.isEmpty) return '';
+    if (SchopenhauerGuidance.appliesTo(purpose) &&
+        !cleaned.any((message) => message.content.contains(SchopenhauerGuidance.core))) {
+      cleaned.insert(0, const UnifiedAiChatMessage(role: 'system', content: SchopenhauerGuidance.core));
+    }
 
     final cfg = await resolveGlobalConfig(forcedProvider: forcedProvider, forcedModel: forcedModel);
     if (!cfg.available) return '';
