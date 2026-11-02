@@ -12,6 +12,9 @@ class ConceptMeaningDiagram extends StatefulWidget {
   final String setA, setB, intersection, onlyA, onlyB, universe, otherMember;
   final ValueChanged<String>? onRegion;
   final List<ScopePart> parts;
+  final bool compact;
+  final String centerLabel;
+  final String? highlightedRegion;
   const ConceptMeaningDiagram({
     super.key,
     required this.relation,
@@ -24,6 +27,9 @@ class ConceptMeaningDiagram extends StatefulWidget {
     this.universe = '',
     this.onRegion,
     this.parts = const [],
+    this.compact = false,
+    this.centerLabel = '共同',
+    this.highlightedRegion,
   });
   @override
   State<ConceptMeaningDiagram> createState() => _ConceptMeaningDiagramState();
@@ -64,18 +70,19 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          '概念含义圈 · $label',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        if (!widget.compact)
+          Text(
+            '概念含义圈 · $label',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
         const SizedBox(height: 8),
-        if (widget.universe.isNotEmpty)
+        if (!widget.compact && widget.universe.isNotEmpty)
           Text('论域：${widget.universe}', style: const TextStyle(fontSize: 12)),
         Semantics(
           label: '概念外延关系。A：${widget.setA}。B：${widget.setB}。$label。',
           child: ExcludeSemantics(
             child: LayoutBuilder(builder: (context, box) {
-              final size = Size(box.maxWidth, 190);
+              final size = Size(box.maxWidth, widget.compact ? 238 : 190);
               final geometry =
                   _CircleMap(size, widget.relation, widget.parts.length);
               return GestureDetector(
@@ -93,62 +100,65 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
                           Theme.of(context).textTheme.bodyMedium?.fontFamily,
                           widget.setA,
                           widget.setB,
-                          _region,
+                          _region ?? widget.highlightedRegion,
                           widget.parts,
                           MediaQuery.textScalerOf(context).scale(14),
-                          widget.universe),
+                          widget.universe,
+                          widget.centerLabel),
                     )),
               );
             }),
           ),
         ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            if (widget.relation == QuoteRelation.partition &&
-                widget.parts.isNotEmpty)
-              for (final part in widget.parts.indexed)
-                _chip('P${part.$1}', '${part.$1 + 1}　${part.$2.term}',
+        if (!widget.compact)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (widget.relation == QuoteRelation.partition &&
+                  widget.parts.isNotEmpty)
+                for (final part in widget.parts.indexed)
+                  _chip('P${part.$1}', '${part.$1 + 1}　${part.$2.term}',
+                      const Color(0xff596d87)),
+              if (!subset &&
+                  !equal &&
+                  !(widget.relation == QuoteRelation.partition &&
+                      widget.parts.isNotEmpty))
+                _chip('A', 'A 独有范围', const Color(0xff966b32)),
+              if (overlap || nested || equal)
+                _chip(
+                    '共同',
+                    equal
+                        ? 'A 与 B 重合'
+                        : subset
+                            ? 'A 的全部范围'
+                            : superset
+                                ? 'B 的全部范围'
+                                : '共同范围',
                     const Color(0xff596d87)),
-            if (!subset &&
-                !equal &&
-                !(widget.relation == QuoteRelation.partition &&
-                    widget.parts.isNotEmpty))
-              _chip('A', 'A 独有范围', const Color(0xff966b32)),
-            if (overlap || nested || equal)
-              _chip(
-                  '共同',
-                  equal
-                      ? 'A 与 B 重合'
-                      : subset
-                          ? 'A 的全部范围'
-                          : superset
-                              ? 'B 的全部范围'
-                              : '共同范围',
-                  const Color(0xff596d87)),
-            if (widget.relation == QuoteRelation.siblings)
-              _chip('其余', '上位圈其余范围', const Color(0xff71614d)),
-            if (!superset &&
-                !equal &&
-                !(widget.relation == QuoteRelation.partition &&
-                    widget.parts.isNotEmpty))
-              _chip('B', 'B 独有范围', const Color(0xff426e91)),
-          ],
-        ),
+              if (widget.relation == QuoteRelation.siblings)
+                _chip('其余', '上位圈其余范围', const Color(0xff71614d)),
+              if (!superset &&
+                  !equal &&
+                  !(widget.relation == QuoteRelation.partition &&
+                      widget.parts.isNotEmpty))
+                _chip('B', 'B 独有范围', const Color(0xff426e91)),
+            ],
+          ),
         if (_region != null)
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Text('$_region：${_detail(_region!)}',
                 style: const TextStyle(height: 1.6)),
           ),
-        const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text(
-            '圆圈表示对象的范围，大小不表示数量；交集不证明因果。',
-            style: TextStyle(fontSize: 12, color: Color(0xff6b645b)),
+        if (!widget.compact)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              '圆圈表示对象的范围，大小不表示数量；交集不证明因果。',
+              style: TextStyle(fontSize: 12, color: Color(0xff6b645b)),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -252,11 +262,19 @@ class _CircleMap {
 class _MeaningPainter extends CustomPainter {
   final QuoteRelation relation;
   final String? fontFamily, selected;
-  final String setA, setB, universe;
+  final String setA, setB, universe, centerLabel;
   final List<ScopePart> parts;
   final double fontSize;
-  const _MeaningPainter(this.relation, this.fontFamily, this.setA, this.setB,
-      this.selected, this.parts, this.fontSize, this.universe);
+  const _MeaningPainter(
+      this.relation,
+      this.fontFamily,
+      this.setA,
+      this.setB,
+      this.selected,
+      this.parts,
+      this.fontSize,
+      this.universe,
+      this.centerLabel);
   @override
   void paint(Canvas canvas, Size size) {
     final map = _CircleMap(size, relation, parts.length);
@@ -343,6 +361,7 @@ class _MeaningPainter extends CustomPainter {
       } else {
         active = switch (selected) {
           '共同' => Path.combine(PathOperation.intersect, left, right),
+          '差异' => Path.combine(PathOperation.xor, left, right),
           'A' => Path.combine(PathOperation.difference, left, right),
           'B' => Path.combine(PathOperation.difference, right, left),
           _ => Path.combine(PathOperation.difference, enclosing,
@@ -399,7 +418,7 @@ class _MeaningPainter extends CustomPainter {
       label(setA, a.translate(-shift, 0), maxWidth: r * .78);
       label(setB, b.translate(shift, 0), maxWidth: r * .78);
       if (relation == QuoteRelation.overlap)
-        label('共同', center, maxWidth: r * .5);
+        label(centerLabel, center, maxWidth: r * .63);
     }
   }
 
@@ -411,7 +430,8 @@ class _MeaningPainter extends CustomPainter {
       old.fontSize != fontSize ||
       old.fontFamily != fontFamily ||
       old.setA != setA ||
-      old.setB != setB;
+      old.setB != setB ||
+      old.centerLabel != centerLabel;
 }
 
 class ConceptAnalysisView extends StatelessWidget {

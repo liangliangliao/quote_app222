@@ -1,3 +1,5 @@
+import 'package:quote_app/quote_knowledge/repository.dart';
+import 'package:quote_app/quote_knowledge/models.dart';
 import 'package:quote_app/pages/history_page.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -230,6 +232,22 @@ void main() {
     });
   }
 
+  Future<QuoteKnowledgeRepository> seedKnowledge(
+      List<Map<String, dynamic>> rows) async {
+    final repository = QuoteKnowledgeRepository(database: () async => db);
+    await repository.database;
+    await db.delete('quotes');
+    for (final row in rows) {
+      await db.insert('quotes', row);
+      final ids = <String>[];
+      for (final name in '${row['theme'] ?? '未分类'}'.split('、')) {
+        ids.add(await repository.createCategory(name, '关于$name的名言主题'));
+      }
+      await repository.assignManually(knowledgeQuoteKey(row), ids);
+    }
+    return repository;
+  }
+
   Future<void> enable(WidgetTester tester) async =>
       tester.runAsync(() => CognitivePreferenceStore.instance
           .update(const CognitivePreferences(enabled: true)));
@@ -406,9 +424,11 @@ void main() {
           'inserted_at': '2026-10-30T00:00:00Z'
         }
     ];
+    final repository = (await tester.runAsync(() => seedKnowledge(rows)))!;
     int opens = 0, selections = 0;
     Widget view(int mode) => Scaffold(
         body: HistoryKnowledgeView(
+            repository: repository,
             rows: rows,
             mode: mode,
             onOpen: (_) => opens++,
@@ -418,14 +438,11 @@ void main() {
             hasMore: false,
             loading: false));
     await mount(tester, view(1));
-    await waitFor(tester, find.textContaining('已载入 4 条名言'));
-    await tester.tap(find.text('概念星图'));
-    await settle(tester);
-    expect(find.text('成长 3'), findsOneWidget);
+    await waitFor(tester, find.text('概念星图'));
+    expect(find.text('(3)'), findsOneWidget);
+    expect(find.byType(InteractiveViewer), findsOneWidget);
     await capture(tester, '03-history-constellation');
-    await tester.tap(find.text('成长 3'));
-    await waitFor(tester, find.text('分析概念关系并绘图'));
-    await tester.scrollUntilVisible(find.byTooltip('加入比较').first, 240,
+    await tester.scrollUntilVisible(find.byTooltip('加入比较').first, 200,
         scrollable: find
             .descendant(
                 of: find.byType(ListView).first,
@@ -455,11 +472,12 @@ void main() {
     await waitFor(tester, find.text('疑似同段引文'));
     expect(service.requests, isEmpty);
     expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
-    expect(find.text('分析概念关系并绘图'), findsOneWidget);
+    expect(find.text('各自的分析'), findsOneWidget);
     await tester.tap(find.text('继续比较两种表述'));
     await settle(tester);
     expect(service.requests.length, 1);
-    expect(find.textContaining('跨材料'), findsWidgets);
+    expect(
+        find.byKey(const ValueKey('comparison-judgment-map')), findsOneWidget);
   });
 
   testWidgets(
@@ -626,17 +644,22 @@ void main() {
       {'quote_uid': 'r1', 'content': '意义与责任', 'theme': '意义、责任'},
       {'quote_uid': 'r2', 'content': '意义的其他讨论', 'theme': '意义'},
     ];
-    await mount(tester, HistoryPage(dao: _ScopeHistoryDao(rows)),
-        width: 390, height: 800);
+    final repository = (await tester.runAsync(() => seedKnowledge(rows)))!;
+    await mount(
+        tester,
+        HistoryPage(
+            dao: _ScopeHistoryDao(rows), knowledgeRepository: repository),
+        width: 390,
+        height: 800);
     await waitFor(tester, find.text('关系图'));
     await tester.tap(find.text('关系图'));
-    await waitFor(tester, find.text('意义 2'));
-    await tester.tap(find.text('意义 2'));
-    await tester.tap(find.text('责任 1'));
-    await waitFor(tester, find.text('分析概念关系并绘图'));
+    await waitFor(tester, find.text('概念星图'));
+    expect(find.text('(2)'), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
     expect(find.text('概念含义圈 · A 包含 B'), findsNothing);
-    expect(find.text('分析概念关系并绘图'), findsOneWidget);
+    await tester.tap(find.byTooltip('关系依据'));
+    await settle(tester);
+    expect(find.textContaining('共同收录'), findsWidgets);
     await capture(tester, 'history-awaits-semantic-analysis');
   });
 
@@ -655,6 +678,12 @@ void main() {
                 a: a, b: b, service: _ConceptPairComparisons())),
         width: 390,
         height: 850);
+    await waitFor(
+        tester, find.byKey(const ValueKey('comparison-semantic-details')));
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('comparison-semantic-details')));
+    await tester.tap(find.text('概念与依据'));
+    await settle(tester);
     await waitFor(tester, find.text('概念含义圈 · 同属上位范围但未穷尽'));
     expect(find.widgetWithText(ChoiceChip, '判断力'), findsOneWidget);
     expect(find.textContaining('待确定'), findsNothing);
@@ -685,9 +714,11 @@ void main() {
                 b: const QuoteReference(id: 'other', content: '目标需要审视，行动需要检验。'),
                 service: service)));
     await waitFor(tester, find.text('判断目的'));
+    await tester.ensureVisible(find.text('选择行动'));
     await tester.tap(find.text('选择行动'));
     await settle(tester);
     expect(service.requests.last.$1, ComparisonPurpose.action);
+    await tester.ensureVisible(find.text('改变情境或条件'));
     await tester.tap(find.text('改变情境或条件'));
     await settle(tester);
     await tester.enterText(find.byType(TextField), '面对不可逆操作');
@@ -975,12 +1006,14 @@ void main() {
               'content': '星图名言$i',
               'theme': '编号${i.toString().padLeft(2, '0')}',
             });
+    final repository = (await tester.runAsync(() => seedKnowledge(rows)))!;
     var opens = 0;
     await mount(
         tester,
         Scaffold(
             body: HistoryKnowledgeView(
-                rows: rows,
+                repository: repository,
+                rows: rows.take(10).toList(),
                 mode: 1,
                 onOpen: (_) => opens++,
                 onSelect: (_) {},
@@ -989,13 +1022,17 @@ void main() {
                 hasMore: false,
                 loading: false)));
     await waitFor(tester, find.text('概念星图'));
-    await tester.tap(find.text('概念星图'));
+    await tester.tap(find.byTooltip('全部类别'));
     await settle(tester);
-    await waitFor(tester, find.text('编号00 1'));
-    await tester.ensureVisible(find.text('编号29 1'));
-    await tester.tap(find.text('编号29 1'));
-    await waitFor(tester, find.text('分析概念关系并绘图'));
-    await tester.scrollUntilVisible(find.text('星图名言29'), 350,
+    await tester.enterText(
+        find.byKey(const ValueKey('history-concept-search')), '编号29');
+    await settle(tester);
+    expect(find.widgetWithText(ListTile, '编号29'), findsOneWidget);
+    expect(find.text('编号24'), findsNothing);
+    await capture(tester, '03-history-search-all-concepts');
+    await tester.tap(find.widgetWithText(ListTile, '编号29'));
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('星图名言29'), 250,
         scrollable: find
             .descendant(
                 of: find.byType(ListView).first,
@@ -1003,18 +1040,6 @@ void main() {
             .first);
     await tester.tap(find.text('星图名言29'));
     expect(opens, 1);
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('history-concept-search')));
-    await tester.enterText(
-        find.byKey(const ValueKey('history-concept-search')), '编号29');
-    await settle(tester);
-    expect(find.text('编号29 1'), findsOneWidget);
-    expect(find.text('编号24 1'), findsNothing);
-    await capture(tester, '03-history-search-all-concepts');
-    await tester.enterText(
-        find.byKey(const ValueKey('history-concept-search')), '不存在的概念');
-    await settle(tester);
-    expect(find.textContaining('暂无匹配概念'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

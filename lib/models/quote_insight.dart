@@ -120,18 +120,20 @@ class EpistemicSource {
 }
 
 class QuoteReference {
-  final String id, content, author, source;
+  final String id, content, author, source, avatarPath;
   const QuoteReference(
       {required this.id,
       required this.content,
       this.author = '',
-      this.source = ''});
+      this.source = '',
+      this.avatarPath = ''});
 
   factory QuoteReference.fromRow(Map<String, dynamic> row) => QuoteReference(
         id: (row['quote_uid'] ?? row['fixed_uid'] ?? '').toString(),
         content: (row['content'] ?? '').toString(),
         author: (row['author_name'] ?? '').toString(),
         source: (row['source_from'] ?? '').toString(),
+        avatarPath: (row['avatar'] ?? row['avatar_path'] ?? '').toString(),
       );
 
   factory QuoteReference.fromPosterPayload(Map<String, dynamic> payload) =>
@@ -140,6 +142,8 @@ class QuoteReference {
         content: (payload['quote'] ?? '').toString(),
         author: (payload['quoteAuthor'] ?? payload['author'] ?? '').toString(),
         source: (payload['source'] ?? '').toString(),
+        avatarPath:
+            (payload['avatarPath'] ?? payload['avatar'] ?? '').toString(),
       );
 
   // Content identity also works for pinned copies and survives physical shuffle.

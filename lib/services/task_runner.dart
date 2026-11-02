@@ -1,3 +1,4 @@
+import '../quote_knowledge/runtime.dart';
 import 'dart:ui' as ui;
 
 import '../data/dao.dart';
@@ -48,9 +49,8 @@ class TaskRunner {
     }
 
     try {
-      // One scheduled run performs exactly one structured AI request. We no
-      // longer send local quote history or repeatedly call the model for local
-      // similarity checks; variation is driven by a compact rotation cursor.
+      // Generation uses one structured request and no unrelated quote history.
+      // A separate durable classification job runs after notification delivery.
       final generated = await QuoteAiService().generate(t);
       String? quoteUid;
       if (config.saveLocally) {
@@ -113,6 +113,9 @@ class TaskRunner {
             '${config.saveLocally ? '并保存到本地' : ''}',
       );
       _notifyHomeRefresh();
+      if (quoteUid != null) {
+        try {await QuoteKnowledgeWorker().drain(limit: 1);} catch (_) {}
+      }
     } catch (error) {
       await LogDao().add(taskUid: uid, detail: '错误! AI 名人名言获取失败: $error');
       rethrow;

@@ -1,16 +1,12 @@
+import '../quote_knowledge/constellation_view.dart';
+import '../quote_knowledge/repository.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../data/quote_insight_store.dart';
 import '../models/quote_insight.dart';
-import 'cognitive_preferences.dart';
-import 'cognitive_store.dart';
-import 'cognitive_models.dart';
 import 'cognitive_mode.dart';
-import 'quote_concept_catalog.dart';
 import 'reading_scope.dart';
-import 'semantic_scope.dart';
-import 'semantic_scope_view.dart';
 import '../widgets/quote_history_avatar.dart';
 
 class QuoteConceptGroup {
@@ -54,6 +50,9 @@ class HistoryKnowledgeView extends StatefulWidget {
   final VoidCallback onLoadMore;
   final bool hasMore, loading;
   final QuoteInsightStore? store;
+  final QuoteKnowledgeRepository? repository;
+  final String query;
+  final VoidCallback? onCompare;
   const HistoryKnowledgeView({
     super.key,
     required this.rows,
@@ -66,81 +65,15 @@ class HistoryKnowledgeView extends StatefulWidget {
     required this.hasMore,
     required this.loading,
     this.store,
+    this.repository,
+    this.query = '',
+    this.onCompare,
   });
   @override
   State<HistoryKnowledgeView> createState() => _HistoryKnowledgeViewState();
 }
 
 class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
-  Map<String, QuoteAnalysisAddon> _addons = {};
-  List<QuoteConceptGroup>? _groups;
-  String? _selected;
-  String _conceptSearch = '';
-  bool _stars = false;
-  String? _addonError;
-  final Set<String> _chosen = {};
-  int _generation = 0;
-  @override
-  void initState() {
-    super.initState();
-    CognitivePreferenceStore.instance.load();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(HistoryKnowledgeView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.revision != widget.revision ||
-        oldWidget.rows.length != widget.rows.length ||
-        oldWidget.rows.toString() != widget.rows.toString()) {
-      _groups = null;
-      _load();
-    }
-  }
-
-  Future<void> _load() async {
-    final generation = ++_generation;
-    try {
-      final addons = await (widget.store ?? QuoteInsightStore()).readAddons(
-        widget.rows.map(QuoteReference.fromRow).toList(),
-      );
-      final refs = widget.rows.map(QuoteReference.fromRow).toList();
-      List<CognitiveNote> notes = const [];
-      String? warning;
-      try {
-        notes = await CognitiveStore().forRecords(
-          'quote',
-          refs.map((r) => r.id.isEmpty ? r.contentKey : r.id).toList(),
-        );
-      } catch (_) {
-        // A note-store problem must not discard existing quote concept tags.
-        warning = '认识注释暂未读取；当前显示已有概念标注与原主题。';
-      }
-      for (final ref in refs) {
-        final note = QuoteConceptCatalog.currentConceptNote(ref, notes);
-        if (note != null && note.analysis.concepts.isNotEmpty) {
-          addons[ref.contentKey] = QuoteAnalysisAddon.fromStoredJson({
-            ...?addons[ref.contentKey]?.toJson(),
-            'concepts': note.analysis.concepts,
-          });
-        }
-      }
-      if (mounted && generation == _generation)
-        setState(() {
-          _addons = addons;
-          _groups = null;
-          _addonError = warning;
-        });
-    } catch (_) {
-      if (mounted && generation == _generation)
-        setState(() {
-          _addons = {};
-          _groups = null;
-          _addonError = '概念标注暂未读取，当前按原记录主题展示。';
-        });
-    }
-  }
-
   Widget _quote(Map<String, dynamic> row, {bool dark = false}) {
     final ref = QuoteReference.fromRow(row);
     final selected = widget.selectedKeys.contains(ref.contentKey);
@@ -183,74 +116,19 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
       : const SizedBox.shrink();
   @override
   Widget build(BuildContext context) {
+    if (widget.mode == 1)
+      return QuoteKnowledgeConstellation(
+          repository: widget.repository,
+          query: widget.query,
+          selectedKeys: widget.selectedKeys,
+          onOpen: widget.onOpen,
+          onSelect: widget.onSelect,
+          onCompare: widget.onCompare);
     if (widget.rows.isEmpty)
       return const Center(child: Text('暂无匹配名言，可先导入或保存名言。'));
     if (widget.mode == 2) return _timeline();
     if (widget.mode == 3) return _authors();
-    final groups = _groups ??= groupQuoteConcepts(widget.rows, _addons);
-    final filtered = groups
-        .where(
-            (g) => g.title.toLowerCase().contains(_conceptSearch.toLowerCase()))
-        .toList();
-    final selected = groups.where((g) => g.title == _selected).firstOrNull ??
-        groups.firstOrNull;
-    final chosen =
-        groups.where((g) => _chosen.contains(g.title)).take(6).toList();
-    final sources = [
-      for (final entry in chosen.indexed)
-        ScopeSource(String.fromCharCode(65 + entry.$1),
-            '主题概念　${entry.$2.title}\n${entry.$2.rows.take(3).map((r) => QuoteReference.fromRow(r).content).join('\n')}',
-            title: entry.$2.title)
-    ];
-    return ValueListenableBuilder<CognitivePreferences>(
-        valueListenable: CognitivePreferenceStore.instance,
-        builder: (context, prefs, _) =>
-            ListView(padding: const EdgeInsets.all(16), children: [
-              Wrap(spacing: 8, children: [
-                ChoiceChip(
-                    label: const Text('概念含义圈'),
-                    selected: !_stars,
-                    onSelected: (_) => setState(() => _stars = false)),
-                ChoiceChip(
-                    label: const Text('概念星图'),
-                    selected: _stars,
-                    onSelected: (_) => setState(() => _stars = true)),
-              ]),
-              const Text('选择主题概念，分析它们的含义和外延关系。', style: TextStyle(height: 1.5)),
-              Text('已载入 ${widget.rows.length} 条名言。最多选择六个主题概念。',
-                  style: const TextStyle(fontSize: 12)),
-              if (_addonError != null)
-                TextButton(onPressed: _load, child: Text(_addonError!)),
-              TextField(
-                  key: const ValueKey('history-concept-search'),
-                  decoration: const InputDecoration(
-                      labelText: '查找概念', prefixIcon: Icon(Icons.search)),
-                  onChanged: (v) => setState(() => _conceptSearch = v)),
-              Wrap(spacing: 6, runSpacing: 4, children: [
-                if (filtered.isEmpty) const Text('暂无匹配概念。'),
-                for (final group in filtered)
-                  FilterChip(
-                      label: Text('${group.title} ${group.rows.length}'),
-                      selected: _chosen.contains(group.title),
-                      onSelected: (v) => setState(() {
-                            _selected = group.title;
-                            if (v && _chosen.length < 6)
-                              _chosen.add(group.title);
-                            else if (!v) _chosen.remove(group.title);
-                          }))
-              ]),
-              if (prefs.relations && sources.isNotEmpty)
-                SemanticScopePanel(
-                    sources: sources, focus: '所选主题概念的语义与外延关系', stars: _stars)
-              else if (!prefs.relations)
-                const Text('关系图已关闭，可继续查阅主题收录。'),
-              if (selected != null) ...[
-                Text('${selected.title} · 关联收录',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                for (final row in selected.rows) _quote(row),
-              ],
-              _more,
-            ]));
+    return _timeline();
   }
 
   Widget _timeline() {

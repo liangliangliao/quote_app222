@@ -1,10 +1,10 @@
+import 'quote_comparison_prototype.dart';
 import 'package:flutter/material.dart';
 
 import '../models/quote_insight.dart';
 import '../data/quote_insight_store.dart';
 import '../services/quote_comparison_service.dart';
 import '../epistemic/cognitive_preferences.dart';
-import '../epistemic/cognitive_mode.dart';
 import '../epistemic/semantic_scope.dart';
 import '../epistemic/semantic_scope_view.dart';
 import '../epistemic/reading_scope.dart';
@@ -56,6 +56,7 @@ class QuoteComparisonSheet extends StatefulWidget {
 class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
   late final _service = widget.service ?? QuoteComparisonService();
   QuoteComparison? _result;
+  SemanticScope? _semanticOverride;
   bool _busy = true;
   String? _message;
   ComparisonPurpose _purpose = ComparisonPurpose.distinction;
@@ -114,6 +115,7 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
             model: _result!.modelDisplayName);
       } catch (_) {}
     }
+    final expectedContext = _contextKey;
     return SemanticScopePanel(
         key: ValueKey([
           widget.a.contentKey,
@@ -124,7 +126,11 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
         sources: sources,
         focus: widget.recordLabel == '概念' ? '主题概念比较' : '分别分析 A、B 句内概念及跨句关系',
         initial: initial,
-        onResult: _indexConcepts,
+        onResult: (value) {
+          if (!mounted || expectedContext != _contextKey) return;
+          setState(() => _semanticOverride = value);
+          _indexConcepts(value);
+        },
         analysisContext: SemanticContext(
             purpose: _purpose.question, conditions: _appliedConditions));
   }
@@ -148,6 +154,7 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
         old.b.contentKey != widget.b.contentKey) {
       _generation++;
       _result = null;
+      _semanticOverride = null;
       _message = null;
       _completedContext = '';
       _start();
@@ -159,6 +166,7 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
     final purpose = _purpose, conditions = _conditions.text.trim();
     setState(() {
       _busy = true;
+      _semanticOverride = null;
       _deferred = false;
       _message = null;
       if (_completedContext != contextKey) _result = null;
@@ -195,6 +203,7 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
       if (mounted)
         setState(() {
           _result = null;
+          _semanticOverride = null;
           _message = '已清除此比较的缓存。';
         });
     } catch (_) {
@@ -252,195 +261,104 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
   ) =>
       ValueListenableBuilder<CognitivePreferences>(
         valueListenable: CognitivePreferenceStore.instance,
-        builder: (context, prefs, _) => SingleChildScrollView(
-          key: const ValueKey('quote-comparison-scroll'),
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-          child: SelectionArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.title,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '关闭比较',
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                if (!CognitivePreferenceStore.active) ...[
-                  _quoteCard('A', widget.a),
-                  _quoteCard('B', widget.b),
-                ] else ...[
-                  if (similarRecordWording(widget.a, widget.b))
-                    const ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.library_books_outlined),
-                        title: Text('疑似同段引文'),
-                        subtitle: Text('两条收录有较长的相同措辞，可展开核对节选和译文差异。')),
-                  Text('A　${widget.a.content}',
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 6),
-                  Text('B　${widget.b.content}',
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
-                  if (prefs.relations) _semanticPanel(),
-                  if (_deferred)
-                    OutlinedButton(
-                        onPressed: _compare, child: const Text('继续比较两种表述')),
-                  ExpansionTile(
-                      tilePadding: EdgeInsets.zero,
-                      expansionAnimationStyle: cognitiveExpansionStyle(context),
-                      title: const Text('核对 A、B 原文与出处'),
-                      subtitle: Text(
-                          'A　${widget.a.content}\nB　${widget.b.content}'
-                              .replaceAll(RegExp(r'\s+'), ' '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                      children: [
-                        _quoteCard('A', widget.a),
-                        _quoteCard('B', widget.b)
-                      ]),
-                  const Text('判断目的',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  Wrap(
-                    spacing: 6,
-                    children: ComparisonPurpose.values
-                        .map(
-                          (purpose) => ChoiceChip(
-                            selectedColor: const Color(0xffe9d8b9),
-                            backgroundColor: const Color(0xfffffcf6),
-                            side: const BorderSide(color: Color(0xffded4c5)),
-                            label: Text(purpose.label),
-                            selected: _purpose == purpose,
-                            onSelected: _busy
-                                ? null
-                                : (_) {
-                                    setState(() => _purpose = purpose);
-                                    _compare();
-                                  },
-                          ),
-                        )
-                        .toList(),
-                  ),
-                  ExpansionTile(
-                    expansionAnimationStyle: cognitiveExpansionStyle(context),
-                    title: const Text('改变情境或条件'),
-                    subtitle: const Text('目标、资源、风险变化时，重新检验判断'),
+        builder: (context, prefs, _) => CognitivePreferenceStore.active
+            ? QuoteComparisonPrototype(
+                a: widget.a,
+                b: widget.b,
+                result: _result,
+                preferences: prefs,
+                title: widget.title,
+                message: _message,
+                busy: _busy,
+                deferred: _deferred,
+                tab: _tab,
+                purpose: _purpose,
+                onTab: (value) => setState(() => _tab = value),
+                onPurpose: (value) {
+                  setState(() => _purpose = value);
+                  _compare();
+                },
+                onCompare: _compare,
+                onClear: _clear,
+                conditions: _conditions,
+                semanticPanel: _semanticPanel(),
+                semanticOverride: _semanticOverride,
+                quoteCard: _quoteCard)
+            : SingleChildScrollView(
+                key: const ValueKey('quote-comparison-scroll'),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                child: SelectionArea(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TextField(
-                        controller: _conditions,
-                        enabled: !_busy,
-                        maxLength: 1500,
-                        minLines: 2,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          hintText: '只填写愿意用于本次比较的情境',
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _busy ? null : _compare,
-                        child: const Text('按此情境重新比较'),
-                      ),
-                    ],
-                  ),
-                ],
-                if (_busy) ...[
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
-                  const Text('正在比较所选两条名言…', textAlign: TextAlign.center),
-                ],
-                if (_message != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(_message!),
-                  ),
-                if (!_busy && !_deferred && _result == null)
-                  OutlinedButton.icon(
-                    onPressed: _compare,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('重新比较'),
-                  ),
-                if (_result case final result?) ...[
-                  if (!CognitivePreferenceStore.active)
-                    QuoteRelationView(result: result),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'AI 解读 · 一种理解，尚待检验',
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                  if (!CognitivePreferenceStore.active) ...[
-                    _section('共同点', result.common),
-                    _section('决定性差异', result.difference),
-                    _section('不能直接等同的部分', result.notEquivalent),
-                    _section('适用条件与未知', result.limitation),
-                  ] else ...[
-                    Wrap(
-                      spacing: 6,
-                      children: ['共同点', '差异点', '决定性差异', '适用条件与未知']
-                          .asMap()
-                          .entries
-                          .map(
-                            (e) => ChoiceChip(
-                              selectedColor: const Color(0xffe9d8b9),
-                              backgroundColor: const Color(0xfffffcf6),
-                              side: const BorderSide(color: Color(0xffded4c5)),
-                              label: Text(e.value),
-                              selected: _tab == e.key,
-                              onSelected: (_) => setState(() => _tab = e.key),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    _section(
-                      ['共同点', '不能直接等同的部分', '决定性差异', '适用条件与未知'][_tab],
-                      [
-                        result.common,
-                        result.notEquivalent,
-                        result.difference,
-                        result.limitation,
-                      ][_tab],
-                    ),
-                    if (_tab != 3)
-                      ExpansionTile(
-                        expansionAnimationStyle:
-                            cognitiveExpansionStyle(context),
-                        title: const Text('适用条件与未知'),
+                      Row(
                         children: [
-                          Text(
-                            result.limitation,
-                            style: const TextStyle(height: 1.65),
+                          Expanded(
+                            child: Text(
+                              widget.title,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: '关闭比较',
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
                           ),
                         ],
                       ),
-                  ],
-                  const SizedBox(height: 20),
-                  if ((!CognitivePreferenceStore.active || prefs.grounds) &&
-                      result.justification.isNotEmpty)
-                    _section('判断依据（对原句的解释）', result.justification),
-                  const SizedBox(height: 16),
-                  TextButton.icon(
-                    onPressed: _busy ? null : _clear,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('清除此比较缓存'),
+                      _quoteCard('A', widget.a),
+                      _quoteCard('B', widget.b),
+                      if (_busy) ...[
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        const Text('正在比较所选两条名言…', textAlign: TextAlign.center),
+                      ],
+                      if (_message != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(_message!),
+                        ),
+                      if (!_busy && !_deferred && _result == null)
+                        OutlinedButton.icon(
+                          onPressed: _compare,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('重新比较'),
+                        ),
+                      if (_result case final result?) ...[
+                        if (!CognitivePreferenceStore.active)
+                          QuoteRelationView(result: result),
+                        const SizedBox(height: 14),
+                        const Text(
+                          'AI 解读 · 一种理解，尚待检验',
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                        _section('共同点', result.common),
+                        _section('决定性差异', result.difference),
+                        _section('不能直接等同的部分', result.notEquivalent),
+                        _section('适用条件与未知', result.limitation),
+                        const SizedBox(height: 20),
+                        if ((!CognitivePreferenceStore.active ||
+                                prefs.grounds) &&
+                            result.justification.isNotEmpty)
+                          _section('判断依据（对原句的解释）', result.justification),
+                        const SizedBox(height: 16),
+                        TextButton.icon(
+                          onPressed: _busy ? null : _clear,
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('清除此比较缓存'),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ],
-            ),
-          ),
-        ),
+                ),
+              ),
       );
 }
 

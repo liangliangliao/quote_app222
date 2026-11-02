@@ -1,3 +1,6 @@
+import 'package:flutter/services.dart';
+import '../quote_knowledge/constellation_view.dart';
+import '../quote_knowledge/repository.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,9 +22,11 @@ import '../epistemic/quote_cognitive_reader.dart';
 
 class HistoryPage extends StatefulWidget {
   final QuoteDao? dao;
+  final QuoteKnowledgeRepository? knowledgeRepository;
+  final ValueChanged<bool>? onGraphChanged;
   final QuoteComparisonService? comparisonService;
   final QuoteReference? initialComparison;
-  const HistoryPage({super.key, this.dao, this.comparisonService, this.initialComparison});
+  const HistoryPage({super.key, this.dao, this.knowledgeRepository, this.onGraphChanged, this.comparisonService, this.initialComparison});
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
@@ -104,9 +109,17 @@ class _HistoryPageState extends State<HistoryPage> {
     super.dispose();
   }
 
+  void _changeView(int value) {
+    setState(() => _cognitiveView = value);
+    widget.onGraphChanged?.call(value == 1 && CognitivePreferenceStore.active);
+  }
+
   void _preferencesChanged() {
     if (mounted) setState(() {
-      if (!CognitivePreferenceStore.instance.value.enabled) _cognitiveView = 0;
+      if (!CognitivePreferenceStore.instance.value.enabled) {
+        _cognitiveView = 0;
+        widget.onGraphChanged?.call(false);
+      }
     });
   }
 
@@ -235,14 +248,16 @@ class _HistoryPageState extends State<HistoryPage> {
   @override
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
+    final night = _cognitiveView == 1 && CognitivePreferenceStore.active;
     // Wrap entire page in SafeArea with top/bottom disabled so that list content touches edges
-    return Scaffold(backgroundColor: Colors.white, body: SafeArea(
+    return AnnotatedRegion<SystemUiOverlayStyle>(value: night ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      child: Scaffold(backgroundColor: night ? knowledgeNight : Colors.white, body: SafeArea(
       top: false,
       bottom: false,
       child: Column(
         children: [
           // Header row containing search bar and upload button. Place within safe area padding manually
-          Container(
+          if (!night) Container(
             color: Colors.white,
             padding: EdgeInsets.only(top: topPad, left: 8, right: 8),
             height: topPad + kToolbarHeight,
@@ -462,14 +477,28 @@ class _HistoryPageState extends State<HistoryPage> {
               ],
             ),
           ),
-          if (CognitivePreferenceStore.enabledInBuild && CognitivePreferenceStore.instance.value.enabled)
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Wrap(spacing: 8, runSpacing: 4, children: [
+          if (CognitivePreferenceStore.active)
+            Padding(padding: EdgeInsets.fromLTRB(12, night ? topPad + 4 : 4, 12, 4),
+              child: Row(children: [
                 for (final view in ['列表', '关系图', '时间线', '人物'].indexed)
-                  ChoiceChip(label: Text(view.$2), selected: _cognitiveView == view.$1,
-                    onSelected: (_) => setState(() => _cognitiveView = view.$1)),
+                  Expanded(child: InkWell(onTap: () => _changeView(view.$1),
+                    child: Container(padding: const EdgeInsets.symmetric(vertical: 13),
+                      decoration: BoxDecoration(border: Border(bottom: BorderSide(width: 2,
+                        color: _cognitiveView == view.$1 ? (night ? const Color(0xffe1d3a8) : const Color(0xff8a7650)) : Colors.transparent))),
+                      child: Text(view.$2, textAlign: TextAlign.center, style: TextStyle(fontSize: 14,
+                        fontWeight: _cognitiveView == view.$1 ? FontWeight.w600 : FontWeight.normal,
+                        color: night ? Colors.white70 : Colors.black87))))),
+                if (night) IconButton(tooltip: '搜索名言', icon: const Icon(Icons.search, color: Colors.white70), onPressed: () async {
+                  final text = TextEditingController(text: _q);
+                  final value = await showDialog<String>(context: context, builder: (context) => AlertDialog(
+                    title: const Text('搜索全库名言'), content: TextField(controller: text, autofocus: true,
+                      onSubmitted: (value) => Navigator.pop(context, value)), actions: [
+                        TextButton(onPressed: () => Navigator.pop(context, ''), child: const Text('清除')),
+                        TextButton(onPressed: () => Navigator.pop(context, text.text), child: const Text('搜索'))]));
+                  if (value != null && mounted) {setState(() => _q = value);_reload();}
+                }),
               ])),
-          if (QuoteInsightSettings.comparisonEnabled)
+          if (QuoteInsightSettings.comparisonEnabled && !night)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -550,14 +579,15 @@ class _HistoryPageState extends State<HistoryPage> {
               },
             ) : HistoryKnowledgeView(
               key: ValueKey('history-cognition-$_q-$_loadGeneration'),
+              repository: widget.knowledgeRepository, query: _q, onCompare: _compareSelected,
               rows: List.of(_items), mode: _cognitiveView, revision: _insightRevision,
               selectedKeys: _selected.keys.toSet(),
-              onOpen: (row) => _selecting ? _toggleQuote(QuoteReference.fromRow(row)) : _showQuoteDetails(row),
+              onOpen: (row) => _showQuoteDetails(row),
               onSelect: (row) => _toggleQuote(QuoteReference.fromRow(row)),
               onLoadMore: _loadMore, hasMore: !_done, loading: _loading),
           ),
         ],
       ),
-    ));
+    )));
   }
 }
