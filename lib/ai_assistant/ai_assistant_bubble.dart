@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 
 import 'ai_assistant_dao.dart';
 import 'ai_assistant_page.dart';
+import '../widgets/journey_design.dart';
 
 class AiAssistantFloatingBubble extends StatefulWidget {
   const AiAssistantFloatingBubble({
     super.key,
     required this.moduleKey,
+    this.initialAlignment = const Alignment(1, .24),
   });
 
   final String moduleKey;
+  final Alignment initialAlignment;
 
   @override
-  State<AiAssistantFloatingBubble> createState() => _AiAssistantFloatingBubbleState();
+  State<AiAssistantFloatingBubble> createState() =>
+      _AiAssistantFloatingBubbleState();
 }
 
 class _AiAssistantFloatingBubbleState extends State<AiAssistantFloatingBubble> {
@@ -57,7 +61,9 @@ class _AiAssistantFloatingBubbleState extends State<AiAssistantFloatingBubble> {
   }
 
   void _openAssistant() {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiAssistantPage()));
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AiAssistantPage()));
   }
 
   @override
@@ -71,21 +77,33 @@ class _AiAssistantFloatingBubbleState extends State<AiAssistantFloatingBubble> {
     return Positioned.fill(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final width = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+          final width =
+              constraints.maxWidth.isFinite && constraints.maxWidth > 0
               ? constraints.maxWidth
               : MediaQuery.of(context).size.width;
-          final height = constraints.maxHeight.isFinite && constraints.maxHeight > 0
+          final height =
+              constraints.maxHeight.isFinite && constraints.maxHeight > 0
               ? constraints.maxHeight
               : MediaQuery.of(context).size.height;
 
-          final maxX = (width - _size - _margin).clamp(_margin, double.infinity).toDouble();
-          final maxY = (height - _size - _margin).clamp(_margin, double.infinity).toDouble();
+          final maxX = (width - _size - _margin)
+              .clamp(_margin, double.infinity)
+              .toDouble();
+          final maxY = (height - _size - _margin)
+              .clamp(_margin, double.infinity)
+              .toDouble();
 
           if (_dx < 0 || _dy < 0) {
-            _dx = maxX;
+            _dx =
+                _margin +
+                (maxX - _margin) * (widget.initialAlignment.x + 1) / 2;
             // Default to the right side, a little above the lower cards/bottom
             // navigation. This makes the first-run entry easy to notice.
-            _dy = (height * 0.62).clamp(_margin, maxY).toDouble();
+            _dy =
+                (_margin +
+                        (maxY - _margin) * (widget.initialAlignment.y + 1) / 2)
+                    .clamp(_margin, maxY)
+                    .toDouble();
           }
           _dx = _dx.clamp(_margin, maxX).toDouble();
           _dy = _dy.clamp(_margin, maxY).toDouble();
@@ -100,8 +118,12 @@ class _AiAssistantFloatingBubbleState extends State<AiAssistantFloatingBubble> {
                   onPanStart: (_) => setState(() => _dragging = true),
                   onPanUpdate: (details) {
                     setState(() {
-                      _dx = (_dx + details.delta.dx).clamp(_margin, maxX).toDouble();
-                      _dy = (_dy + details.delta.dy).clamp(_margin, maxY).toDouble();
+                      _dx = (_dx + details.delta.dx)
+                          .clamp(_margin, maxX)
+                          .toDouble();
+                      _dy = (_dy + details.delta.dy)
+                          .clamp(_margin, maxY)
+                          .toDouble();
                     });
                   },
                   onPanEnd: (_) async {
@@ -109,48 +131,10 @@ class _AiAssistantFloatingBubbleState extends State<AiAssistantFloatingBubble> {
                     if (!mounted) return;
                     setState(() => _dragging = false);
                   },
-                  child: Material(
-                    elevation: 10,
-                    color: Colors.transparent,
-                    shape: const CircleBorder(),
-                    child: Container(
-                      width: _size,
-                      height: _size,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF2563EB), Color(0xFF7C3AED)],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.22),
-                            blurRadius: 18,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 30),
-                          Positioned(
-                            right: 10,
-                            bottom: 10,
-                            child: Container(
-                              width: 9,
-                              height: 9,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF34D399),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 1.5),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: Semantics(
+                    button: true,
+                    label: '打开 AI 助手',
+                    child: const JourneyAiOrb(size: _size),
                   ),
                 ),
               ),

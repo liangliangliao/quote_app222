@@ -50,7 +50,7 @@ class App : Application(), Application.ActivityLifecycleCallbacks {
     // Location SDK privacy + AK must be set before any LocationClient usage.
     try {
       try { com.baidu.location.LocationClient.setAgreePrivacy(true) } catch (_: Throwable) {}
-      val ak = try { readBaiduAkForMapSdk(applicationContext) } catch (_: Throwable) { "oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh" }
+      val ak = try { readBaiduAkForMapSdk(applicationContext) } catch (_: Throwable) { "" }
 
       // 仅在主进程打印一次：帮助排查百度 AK 与签名(SHA1)/包名不匹配（locType=505）
       if (isMain) {
@@ -67,15 +67,17 @@ class App : Application(), Application.ActivityLifecycleCallbacks {
       }
 
       // Location SDK requires explicit AK; use reflection to avoid version-coupling.
-      invokeBaiduSdkStatic("com.baidu.location.LocationClient", "setKey", ak)
+      if (ak.isNotBlank()) {
+        invokeBaiduSdkStatic("com.baidu.location.LocationClient", "setKey", ak)
 
-      // ---- Baidu Map/Search init (main process only) ----
-      if (isMain) {
-        try { com.baidu.mapapi.SDKInitializer.setAgreePrivacy(applicationContext, true) } catch (_: Throwable) {}
-        invokeBaiduSdkStatic("com.baidu.mapapi.SDKInitializer", "setApiKey", ak)
-        try { com.baidu.mapapi.SDKInitializer.initialize(applicationContext) } catch (_: Throwable) {}
-        try { com.baidu.mapapi.SDKInitializer.setCoordType(com.baidu.mapapi.CoordType.BD09LL) } catch (_: Throwable) {}
-        invokeBaiduSdkStatic("com.baidu.mapapi.SDKInitializer", "setHttpsEnable", true)
+        // ---- Baidu Map/Search init (main process only) ----
+        if (isMain) {
+          try { com.baidu.mapapi.SDKInitializer.setAgreePrivacy(applicationContext, true) } catch (_: Throwable) {}
+          invokeBaiduSdkStatic("com.baidu.mapapi.SDKInitializer", "setApiKey", ak)
+          try { com.baidu.mapapi.SDKInitializer.initialize(applicationContext) } catch (_: Throwable) {}
+          try { com.baidu.mapapi.SDKInitializer.setCoordType(com.baidu.mapapi.CoordType.BD09LL) } catch (_: Throwable) {}
+          invokeBaiduSdkStatic("com.baidu.mapapi.SDKInitializer", "setHttpsEnable", true)
+        }
       }
     } catch (_: Throwable) {}
 
@@ -490,55 +492,24 @@ class App : Application(), Application.ActivityLifecycleCallbacks {
   }
 
 private fun readBaiduAkForMapSdk(ctx: Context): String {
-  // Android AK：用于 Baidu Location/Map/Search SDK（包名+SHA1 绑定）
-  val defAndroid = "oMtxRk6dE7Q8w8SXZ3frrwzAak3gqOTh"
-  val defWeb = "kmHcLsW5heS5miYWLpbRUsrQapGIJ5m2"
+  // Only the user-configured Android SDK key is valid here. A Web API key
+  // belongs to a different Baidu product and must never be reused for the SDK.
   return try {
-    val cc = DbInspector.loadOrLightScan(ctx)
-    val path = cc?.dbPath
-    if (path.isNullOrEmpty()) return defAndroid
-    // 防御：prefs 残留无效 dbPath 时避免 openDatabase 报错
+    val path = com.example.quote_app.data.DbInspector.loadOrLightScan(ctx)?.dbPath
+    if (path.isNullOrEmpty()) return ""
+    val file = java.io.File(path)
+    if (!file.exists() || !file.isFile) return ""
+    val db = android.database.sqlite.SQLiteDatabase.openDatabase(
+      path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY)
     try {
-      val f = java.io.File(path)
-      if (!f.exists() || !f.isFile) return defAndroid
-    } catch (_: Throwable) {
-      return defAndroid
-    }
-    val db = SQLiteDatabase.openDatabase(path, null, SQLiteDatabase.OPEN_READONLY)
-    try {
-      var vAndroid: String? = null
-      try {
-        db.rawQuery("SELECT baidu_ak_android FROM configs LIMIT 1", null).use { c ->
-          if (c.moveToFirst()) vAndroid = c.getString(0)
-        }
-      } catch (_: Throwable) {
-        // ignore when table/column missing
+      db.rawQuery("SELECT baidu_ak_android FROM configs ORDER BY id DESC LIMIT 1", null).use { cursor ->
+        if (cursor.moveToFirst()) cursor.getString(0)?.trim().orEmpty() else ""
       }
-
-      // 兼容老版本：如果新列为空，但旧列里存的是“自定义 AK”（且不是默认 Web AK），则沿用旧列
-      if (vAndroid == null || vAndroid!!.trim().isEmpty()) {
-        var vOld: String? = null
-        try {
-          db.rawQuery("SELECT baidu_ak FROM configs LIMIT 1", null).use { c ->
-            if (c.moveToFirst()) vOld = c.getString(0)
-          }
-        } catch (_: Throwable) {}
-        if (vOld != null) {
-          val vv = vOld!!.trim()
-          if (vv.isNotEmpty() && vv != defWeb) vAndroid = vv
-        }
-      }
-
-      val out = vAndroid?.trim() ?: ""
-      if (out.isEmpty()) defAndroid else out
     } finally {
       try { db.close() } catch (_: Throwable) {}
     }
-  } catch (_: Throwable) {
-    defAndroid
-  }
+  } catch (_: Throwable) { "" }
 }
-
 
   private fun maskAk(ak: String): String {
     return try {

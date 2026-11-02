@@ -28,11 +28,12 @@ import 'xiangji_future_strategist/xiangji_strategist_monitor_service.dart';
 import 'background_tasks.dart';
 import 'pages/home_page.dart';
 import 'pages/history_page.dart';
-import 'pages/logs_page.dart';
 import 'pages/settings_page.dart';
+import 'pages/tasks_page.dart';
 import 'pages/discover_page.dart';
 import 'services/native_guard.dart';
 import 'utils/debug_logger.dart';
+import 'utils/quote_change_bus.dart';
 import 'platform/native_scheduler.dart';
 import 'belief_lab/belief_lab_home_page.dart';
 import 'failure_module/failure_module_home_page.dart';
@@ -101,6 +102,7 @@ Future<void> _bootstrapAfterFirstFrame() async {
   final startedAt = DateTime.now();
   try { SimpleBus.init(); } catch (_) {}
   try { _registerHomeRefreshPort(); } catch (_) {}
+  try { _registerQuoteChangePort(); } catch (_) {}
 
   // 冷启动通知必须先采集，但不能阻塞首帧。
   try { await NotificationService.captureInitialLaunchFromNotification(); } catch (_) {}
@@ -253,6 +255,7 @@ class RootShell extends StatefulWidget {
 class _RootShellState extends State<RootShell> {
   int _idx = 0;
   bool _historyGraphActive = false;
+  final _settingsKey = GlobalKey<SettingsPageState>();
   int _drawerStyleSeed = DateTime.now().microsecondsSinceEpoch;
   int _drawerRevealSeed = DateTime.now().microsecondsSinceEpoch;
   int _drawerHeaderRequestId = 0;
@@ -314,7 +317,6 @@ class _RootShellState extends State<RootShell> {
     if (!mounted || i < 0 || i >= 5) return;
     setState(() { _idx = i; });
     try { SimpleBus.navIndex.value = i; } catch (_) {}
-    if (i == 3) { SimpleBus.pokeLogs(); }
     if (i == 0) { try { SimpleBus.pokeHome(); } catch (_) {} }
   }
 
@@ -671,7 +673,6 @@ class _RootShellState extends State<RootShell> {
       if (i >= 0 && i < 5 && i != _idx) {
         setState(() { _idx = i; });
         try { SimpleBus.navIndex.value = i; } catch (_) {}
-        if (i == 3) { SimpleBus.pokeLogs(); }
         if (i == 0) { try { SimpleBus.pokeHome(); } catch (_) {} }
       }
     });
@@ -946,8 +947,10 @@ class _RootShellState extends State<RootShell> {
       const HomePage(),
       HistoryPage(onGraphChanged: (value) {if (mounted && value != _historyGraphActive) setState(() => _historyGraphActive = value);}),
       const DiscoverPage(),
-      const LogsPage(),
-      const SettingsPage(),
+      TasksPage(active: _idx == 3, openEditor: (task) async {
+        await _settingsKey.currentState?.openTaskEditor(task);
+      }),
+      SettingsPage(key: _settingsKey),
     ];
     final baseEntries = _drawerEntries();
     final randomizedEntries = _drawerEntriesInRandomOrder(baseEntries, _drawerStyleSeed);
@@ -1108,29 +1111,86 @@ class _RootShellState extends State<RootShell> {
       ),
       backgroundColor: _idx == 1 && _historyGraphActive ? const Color(0xff081c26) : Colors.white,
       // 使用 IndexedStack 保持各页面的状态，避免切换时重新构建导致白屏或闪烁
-      body: IndexedStack(index: _idx, children: pages),
+      body: IndexedStack(
+        index: _idx,
+        children: [
+          for (var i = 0; i < pages.length; i++)
+            TickerMode(enabled: i == _idx, child: pages[i]),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: SizedBox(
           height: 60, // reduce bottom bar height by another 10 (total -20)
-          child: NavigationBarTheme(data: _idx == 1 && _historyGraphActive
-            ? NavigationBarThemeData(backgroundColor: const Color(0xff081c26), indicatorColor: const Color(0xff324a51),
-                iconTheme: WidgetStateProperty.all(const IconThemeData(color: Color(0xffcedbd8))),
-                labelTextStyle: WidgetStateProperty.all(const TextStyle(color: Color(0xffcedbd8), fontSize: 11)))
-            : NavigationBarTheme.of(context), child: NavigationBar(
-            elevation: 0,
-            surfaceTintColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            selectedIndex: _idx,
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.home), label: '首页'),
-              NavigationDestination(icon: Icon(Icons.history), label: '历史'),
-              NavigationDestination(icon: Icon(Icons.travel_explore), label: '发现之旅'),
-              NavigationDestination(icon: Icon(Icons.list), label: '日志'),
-              NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
-            ],
-            onDestinationSelected: (i) { _handleSelectTab(i); },
-          )),
+          child: NavigationBarTheme(
+            data: _idx == 1 && _historyGraphActive
+              ? NavigationBarThemeData(backgroundColor: const Color(0xff081c26), indicatorColor: const Color(0xff324a51),
+                  iconTheme: WidgetStateProperty.all(const IconThemeData(color: Color(0xffcedbd8))),
+                  labelTextStyle: WidgetStateProperty.all(const TextStyle(color: Color(0xffcedbd8), fontSize: 11)))
+              : NavigationBarTheme.of(context).copyWith(
+              backgroundColor: Colors.white,
+              indicatorColor: Colors.transparent,
+              iconTheme: WidgetStateProperty.resolveWith(
+                (states) => IconThemeData(
+                  size: 25,
+                  color: states.contains(WidgetState.selected)
+                      ? (_idx == 4
+                            ? const Color(0xff6860bd)
+                            : const Color(0xff405e55))
+                      : const Color(0xff77757d),
+                ),
+              ),
+              labelTextStyle: WidgetStateProperty.resolveWith(
+                (states) => TextStyle(
+                  fontSize: 11,
+                  fontWeight: states.contains(WidgetState.selected)
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                  color: states.contains(WidgetState.selected)
+                      ? (_idx == 4
+                            ? const Color(0xff6860bd)
+                            : const Color(0xff405e55))
+                      : const Color(0xff85818a),
+                ),
+              ),
+            ),
+            child: NavigationBar(
+              elevation: 0,
+              surfaceTintColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              selectedIndex: _idx,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: '首页',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.history_toggle_off_rounded),
+                  selectedIcon: Icon(Icons.history_rounded),
+                  label: '历史',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.explore_outlined),
+                  selectedIcon: Icon(Icons.explore_rounded),
+                  label: '发现之旅',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.event_note_outlined),
+                  selectedIcon: Icon(Icons.event_note_rounded),
+                  label: '任务',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.settings_outlined),
+                  selectedIcon: Icon(Icons.settings_rounded),
+                  label: '设置',
+                ),
+              ],
+              onDestinationSelected: (i) {
+                _handleSelectTab(i);
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -2242,6 +2302,13 @@ void _registerHomeRefreshPort() {
   port.listen((_) {
     try { SimpleBus.pokeHome(); } catch (_) {}
   });
+}
+
+void _registerQuoteChangePort() {
+  ui.IsolateNameServer.removePortNameMapping(QuoteChangeBus.portName);
+  final port = ReceivePort();
+  ui.IsolateNameServer.registerPortWithName(port.sendPort, QuoteChangeBus.portName);
+  port.listen((_) => QuoteChangeBus.deliver());
 }
 
 Future<bool> _isFirstOpenAndMark() async {

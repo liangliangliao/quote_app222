@@ -6,15 +6,19 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 import '../data/dao.dart';
 import '../models/quote_insight.dart';
 import '../services/quote_comparison_service.dart';
 import '../services/quote_insight_settings.dart';
 import '../widgets/quote_comparison_sheet.dart';
 import '../widgets/quote_history_avatar.dart';
+import '../utils/quote_change_bus.dart';
+import '../utils/simple_bus.dart';
 import '../widgets/quote_reading_insights.dart';
 import '../epistemic/history_knowledge_view.dart';
 import '../epistemic/cognitive_preferences.dart';
@@ -26,12 +30,15 @@ class HistoryPage extends StatefulWidget {
   final ValueChanged<bool>? onGraphChanged;
   final QuoteComparisonService? comparisonService;
   final QuoteReference? initialComparison;
-  const HistoryPage({super.key, this.dao, this.knowledgeRepository, this.onGraphChanged, this.comparisonService, this.initialComparison});
+  const HistoryPage({super.key, this.dao, this.knowledgeRepository, this.onGraphChanged, this.comparisonService, this.initialComparison, this.loadQuotes});
+  final Future<List<Map<String, dynamic>>> Function({
+    required int limit, required int offset, String? q,
+  })? loadQuotes;
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
-class _HistoryPageState extends State<HistoryPage> {
+class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
         
   Future<String?> _saveAvatarTemp(File file) async {
     final docs = await getApplicationDocumentsDirectory();
@@ -42,13 +49,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _reload() async {
-    _items.clear();
-    _offset = 0;
-    _done = false;
-    _loadGeneration++;
-    _loading = false;
-    await _loadMore();
-    if (mounted) setState((){});
+    await _refresh();
   }
 
   late final _dao = widget.dao ?? QuoteDao();
@@ -58,7 +59,6 @@ class _HistoryPageState extends State<HistoryPage> {
   int _offset = 0;
   bool _loading = false;
   bool _done = false;
-  int _loadGeneration = 0;
   bool _selecting = false;
   int _cognitiveView = 0;
   int _insightRevision = 0;
@@ -84,6 +84,20 @@ class _HistoryPageState extends State<HistoryPage> {
     await showQuoteComparison(context, pair[0], pair[1], service: widget.comparisonService);
   }
 
+  bool _refreshing = false;
+  bool _refreshAgain = false;
+  int _generation = 0;
+  Timer? _searchTimer;
+  Timer? _changeTimer;
+  Timer? _pollTimer;
+
+  Future<List<Map<String, dynamic>>> _query(int limit, int offset, String query) {
+    final loader = widget.loadQuotes;
+    return loader != null
+        ? loader(limit: limit, offset: offset, q: query.isEmpty ? null : query)
+        : _dao.latest(limit: limit, offset: offset, q: query.isEmpty ? null : query);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -94,7 +108,19 @@ class _HistoryPageState extends State<HistoryPage> {
       _selected[initial.contentKey] = initial;
       _selecting = true;
     }
-    _loadMore();
+    WidgetsBinding.instance.addObserver(this);
+    QuoteChangeBus.changes.addListener(_onQuoteChange);
+    SimpleBus.navIndex.addListener(_onNavigation);
+    _refresh();
+    // Native writers cannot signal a Dart isolate. Check only while this tab is
+    // visible, and rebuild only when the loaded rows actually changed.
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (SimpleBus.navIndex.value == 1 &&
+          (WidgetsBinding.instance.lifecycleState == null ||
+              WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed)) {
+        _checkForNewQuotes();
+      }
+    });
     _scroll.addListener(() {
       if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 100 && !_loading && !_done) {
         _loadMore();
@@ -105,6 +131,12 @@ class _HistoryPageState extends State<HistoryPage> {
   @override
   void dispose() {
     CognitivePreferenceStore.instance.removeListener(_preferencesChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    QuoteChangeBus.changes.removeListener(_onQuoteChange);
+    SimpleBus.navIndex.removeListener(_onNavigation);
+    _searchTimer?.cancel();
+    _changeTimer?.cancel();
+    _pollTimer?.cancel();
     _scroll.dispose();
     super.dispose();
   }
@@ -123,22 +155,83 @@ class _HistoryPageState extends State<HistoryPage> {
     });
   }
 
-  Future<void> _loadMore() async {
-    if (_loading || _done) return;
-    final generation = _loadGeneration;
-    _loading = true;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && SimpleBus.navIndex.value == 1) {
+      _refresh();
+    }
+  }
+
+  void _onNavigation() {
+    if (SimpleBus.navIndex.value == 1) _refresh();
+  }
+
+  void _onQuoteChange() {
+    _changeTimer?.cancel();
+    _changeTimer = Timer(const Duration(milliseconds: 120), _refresh);
+  }
+
+  Future<void> _checkForNewQuotes() async {
+    if (_refreshing) return;
+    final query = _q;
     try {
-      final rows = await _dao.latest(limit: 100, offset: _offset, q: _q.isEmpty ? null : _q);
-      if (!mounted || generation != _loadGeneration) return;
-      _offset += rows.length;
-      _items.addAll(rows);
-      _done = rows.length < 100;
+      final head = await _query(1, 0, query);
+      if (!mounted || query != _q) return;
+      final latestId = head.isEmpty
+          ? null
+          : head.first['quote_uid'] ?? head.first['id'];
+      final visibleId = _items.isEmpty
+          ? null
+          : _items.first['quote_uid'] ?? _items.first['id'];
+      if (latestId != visibleId) await _refresh();
     } catch (_) {
-      if (mounted && generation == _loadGeneration) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('名言列表暂未加载，请重新搜索后重试')));
-      }
+      // The next visible-tab check can retry if a native write is in progress.
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_refreshing) {
+      _refreshAgain = true;
+      return;
+    }
+    _refreshing = true;
+    final generation = ++_generation;
+    final query = _q;
+    final limit = _items.length > 100 ? _items.length : 100;
+    try {
+      final rows = await _query(limit, 0, query);
+      if (!mounted || generation != _generation || query != _q) return;
+      final changed = rows.length != _items.length ||
+          List.generate(rows.length, (i) => i).any((i) => !mapEquals(rows[i], _items[i]));
+      _offset = rows.length;
+      _done = rows.length < limit;
+      if (changed) setState(() => _items = rows);
+    } catch (_) {
+      // Keep the visible snapshot if the database is temporarily busy.
     } finally {
-      if (mounted && generation == _loadGeneration) setState(() => _loading = false);
+      _refreshing = false;
+      if (_refreshAgain && mounted) {
+        _refreshAgain = false;
+        unawaited(_refresh());
+      }
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _refreshing || _done) return;
+    _loading = true;
+    final generation = _generation;
+    final query = _q;
+    try {
+      final rows = await _query(100, _offset, query);
+      if (!mounted || generation != _generation || query != _q) return;
+      _offset += rows.length;
+      _done = rows.length < 100;
+      if (rows.isNotEmpty) setState(() => _items.addAll(rows));
+    } catch (_) {
+      // A later scroll or refresh can retry without clearing the list.
+    } finally {
+      _loading = false;
     }
   }
 
@@ -275,7 +368,8 @@ class _HistoryPageState extends State<HistoryPage> {
                     ),
                     onChanged: (v) {
                       _q = v;
-                      _reload();
+                      _searchTimer?.cancel();
+                      _searchTimer = Timer(const Duration(milliseconds: 220), _refresh);
                     },
                   ),
                 ),
@@ -540,6 +634,12 @@ class _HistoryPageState extends State<HistoryPage> {
               controller: _scroll,
               padding: EdgeInsets.zero,
               itemCount: _items.length,
+              findChildIndexCallback: (key) {
+                if (key is! ValueKey<String>) return null;
+                final index = _items.indexWhere((item) =>
+                    'quote-${item['quote_uid'] ?? item['id']}' == key.value);
+                return index < 0 ? null : index;
+              },
               itemBuilder: (_, i) {
                 final e = _items[i];
                 final reference = QuoteReference.fromRow(e);
@@ -559,7 +659,7 @@ class _HistoryPageState extends State<HistoryPage> {
                   key: ValueKey('quote-history-row-${reference.id.isEmpty ? reference.contentKey : reference.id}'),
                   minVerticalPadding: 8,
                   leading: QuoteHistoryAvatar(
-                    key: ValueKey('quote-history-list-avatar-$i'),
+                    key: ValueKey('quote-history-list-avatar-${e['quote_uid'] ?? e['id']}'),
                     image: avatar,
                     diameter: 56,
                   ),
@@ -578,7 +678,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 );
               },
             ) : HistoryKnowledgeView(
-              key: ValueKey('history-cognition-$_q-$_loadGeneration'),
+              key: ValueKey('history-cognition-$_q-$_generation'),
               repository: widget.knowledgeRepository, query: _q, onCompare: _compareSelected,
               rows: List.of(_items), mode: _cognitiveView, revision: _insightRevision,
               selectedKeys: _selected.keys.toSet(),

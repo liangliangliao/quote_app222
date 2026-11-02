@@ -81,9 +81,18 @@ String _compactDuration(Duration value) {
 }
 
 class TaskScheduleStatusView extends StatefulWidget {
-  const TaskScheduleStatusView({super.key, required this.task});
+  const TaskScheduleStatusView({
+    super.key,
+    required this.task,
+    this.activeColor = const Color(0xff4f46e5),
+    this.live = true,
+    this.showIcons = false,
+  });
 
   final Map<String, dynamic> task;
+  final Color activeColor;
+  final bool live;
+  final bool showIcons;
 
   @override
   State<TaskScheduleStatusView> createState() => _TaskScheduleStatusViewState();
@@ -93,20 +102,33 @@ class _TaskScheduleStatusViewState extends State<TaskScheduleStatusView> {
   @override
   void initState() {
     super.initState();
-    _TaskScheduleClock.acquire();
+    if (widget.live) _TaskScheduleClock.acquire();
+  }
+
+  @override
+  void didUpdateWidget(covariant TaskScheduleStatusView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.live == widget.live) return;
+    if (widget.live) {
+      _TaskScheduleClock.acquire();
+    } else {
+      _TaskScheduleClock.release();
+    }
   }
 
   @override
   void dispose() {
-    _TaskScheduleClock.release();
+    if (widget.live) _TaskScheduleClock.release();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<DateTime>(
-        valueListenable: _TaskScheduleClock.now,
-        builder: (context, now, _) => _buildStatus(now),
-      );
+  Widget build(BuildContext context) => !widget.live
+      ? _buildStatus(DateTime.now())
+      : ValueListenableBuilder<DateTime>(
+          valueListenable: _TaskScheduleClock.now,
+          builder: (context, now, _) => _buildStatus(now),
+        );
 
   Widget _buildStatus(DateTime now) {
     final task = widget.task;
@@ -119,42 +141,74 @@ class _TaskScheduleStatusViewState extends State<TaskScheduleStatusView> {
     final status = !enabled
         ? '已关闭'
         : !autoEnabled
-            ? 'AI 自动获取已暂停'
-            : '已开启';
+        ? 'AI 自动获取已暂停'
+        : '已开启';
     final nextText = !active
         ? '已暂停'
         : nextRun == null
-            ? '正在等待系统安排'
-            : formatTaskScheduleTime(nextRun);
+        ? '正在等待系统安排'
+        : formatTaskScheduleTime(nextRun);
     final liveText = !active
         ? '暂停中，不会触发通知'
         : nextRun == null
-            ? '正在恢复后台计划'
-            : taskScheduleCountdown(nextRun, now);
+        ? '正在恢复后台计划'
+        : taskScheduleCountdown(nextRun, now);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '最近成功执行：${lastRun == null ? '尚未执行' : formatTaskScheduleTime(lastRun)}',
-          key: const ValueKey('task-last-run'),
-        ),
-        const SizedBox(height: 2),
-        Text('下次计划执行：$nextText', key: const ValueKey('task-next-run')),
-        const SizedBox(height: 2),
-        Text(
-          '实时状态：$liveText',
-          key: const ValueKey('task-countdown'),
-          style: TextStyle(
-            color: active ? const Color(0xff4f46e5) : Colors.black54,
-            fontWeight: FontWeight.w500,
+        _statusRow(
+          Icons.access_time_rounded,
+          Text(
+            '最近成功执行：${lastRun == null ? '尚未执行' : formatTaskScheduleTime(lastRun)}',
+            key: const ValueKey('task-last-run'),
           ),
         ),
         const SizedBox(height: 2),
-        Text('计划规则：${taskScheduleFrequencyLabel(task)}  ·  任务状态：$status'),
+        _statusRow(
+          Icons.calendar_today_outlined,
+          Text('下次计划执行：$nextText', key: const ValueKey('task-next-run')),
+        ),
+        const SizedBox(height: 2),
+        _statusRow(
+          Icons.hourglass_bottom_rounded,
+          Text(
+            '实时状态：$liveText',
+            key: const ValueKey('task-countdown'),
+            style: TextStyle(
+              color: active ? widget.activeColor : Colors.black54,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          color: active ? widget.activeColor : null,
+        ),
+        const SizedBox(height: 2),
+        _statusRow(
+          Icons.sync_rounded,
+          Text('计划规则：${taskScheduleFrequencyLabel(task)}  ·  任务状态：$status'),
+        ),
       ],
     );
   }
+
+  Widget _statusRow(IconData icon, Widget child, {Color? color}) =>
+      !widget.showIcons
+      ? child
+      : Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(
+                icon,
+                size: 12,
+                color: color ?? const Color(0xff92998f),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(child: child),
+          ],
+        );
 }
 
 class _TaskScheduleClock {
@@ -165,6 +219,7 @@ class _TaskScheduleClock {
   static int _listeners = 0;
 
   static void acquire() {
+    if (_listeners == 0) now.value = DateTime.now();
     _listeners += 1;
     _timer ??= Timer.periodic(const Duration(seconds: 1), (_) {
       now.value = DateTime.now();

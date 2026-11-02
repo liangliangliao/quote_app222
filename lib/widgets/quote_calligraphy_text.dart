@@ -45,15 +45,14 @@ bool quotePrefersLiteraryEnglish(String text) {
 TextStyle quoteLiteraryTextStyle(
   TextStyle base, [
   QuoteEnglishFontStyle style = QuoteEnglishFontStyle.baskerville,
-]) =>
-    base.copyWith(
-      fontFamily: style.fontFamily,
-      fontWeight: FontWeight.w600,
-      fontStyle: FontStyle.normal,
-      height: 1.56,
-      letterSpacing: .12,
-      color: const Color(0xff211d19),
-    );
+]) => base.copyWith(
+  fontFamily: style.fontFamily,
+  fontWeight: base.fontWeight ?? FontWeight.w600,
+  fontStyle: FontStyle.normal,
+  height: base.height ?? 1.56,
+  letterSpacing: base.letterSpacing ?? .12,
+  color: base.color ?? const Color(0xff211d19),
+);
 
 /// Builds mixed-script signature spans without changing source order, spaces,
 /// punctuation or explicit line breaks.
@@ -79,8 +78,8 @@ TextSpan quoteAuthorSignatureSpan(String text, TextStyle baseStyle) {
     if (script == _SignatureScript.han) {
       return baseStyle.copyWith(
         fontFamily: quoteChineseSignatureFont,
-        fontSize: (baseStyle.fontSize ?? 14) * 1.08,
-        fontWeight: FontWeight.w500,
+        fontSize: baseStyle.fontSize ?? 14,
+        fontWeight: baseStyle.fontWeight ?? FontWeight.w500,
         fontStyle: FontStyle.normal,
         letterSpacing: .25,
         height: 1.30,
@@ -88,8 +87,8 @@ TextSpan quoteAuthorSignatureSpan(String text, TextStyle baseStyle) {
     }
     return baseStyle.copyWith(
       fontFamily: quoteLatinSignatureFont,
-      fontSize: (baseStyle.fontSize ?? 14) * 1.23,
-      fontWeight: FontWeight.w500,
+      fontSize: baseStyle.fontSize ?? 14,
+      fontWeight: baseStyle.fontWeight ?? FontWeight.w500,
       fontStyle: FontStyle.normal,
       letterSpacing: .12,
       height: 1.23,
@@ -140,12 +139,12 @@ class QuoteAuthorSignature extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text.rich(
-        quoteAuthorSignatureSpan(text, style),
-        textAlign: textAlign,
-        maxLines: maxLines,
-        overflow: overflow,
-        softWrap: softWrap,
-      );
+    quoteAuthorSignatureSpan(text, style),
+    textAlign: textAlign,
+    maxLines: maxLines,
+    overflow: overflow,
+    softWrap: softWrap,
+  );
 }
 
 TextStyle quoteCalligraphyTextStyle(
@@ -155,18 +154,19 @@ TextStyle quoteCalligraphyTextStyle(
   final fontSize = base.fontSize ?? 20;
   return base.copyWith(
     fontFamily: style.fontFamily,
-    fontSize: style == QuoteCalligraphyStyle.caoshu
-        ? fontSize * 1.06
-        : fontSize,
-    fontWeight: FontWeight.w500,
+    fontSize: fontSize,
+    fontWeight: base.fontWeight ?? FontWeight.w500,
     fontStyle: FontStyle.normal,
-    height: style == QuoteCalligraphyStyle.kaishu ? 1.50 : 1.47,
-    letterSpacing: switch (style) {
-      QuoteCalligraphyStyle.xingshu => .9,
-      QuoteCalligraphyStyle.kaishu => 1.3,
-      QuoteCalligraphyStyle.caoshu => 1.05,
-    },
-    color: const Color(0xff211a16),
+    height:
+        base.height ?? (style == QuoteCalligraphyStyle.kaishu ? 1.50 : 1.47),
+    letterSpacing:
+        base.letterSpacing ??
+        switch (style) {
+          QuoteCalligraphyStyle.xingshu => .9,
+          QuoteCalligraphyStyle.kaishu => 1.3,
+          QuoteCalligraphyStyle.caoshu => 1.05,
+        },
+    color: base.color ?? const Color(0xff211a16),
   );
 }
 
@@ -179,8 +179,7 @@ TextSpan quoteBodyTextSpan(
   TextStyle baseStyle,
   QuoteCalligraphyStyle calligraphyStyle, [
   QuoteEnglishFontStyle englishFontStyle = QuoteEnglishFontStyle.baskerville,
-]
-) {
+]) {
   final characters = text.characters.toList(growable: false);
   var firstScript = _QuoteBodyScript.han;
   for (final character in characters) {
@@ -194,10 +193,9 @@ TextSpan quoteBodyTextSpan(
     }
   }
 
-  TextStyle styleFor(_QuoteBodyScript script) =>
-      script == _QuoteBodyScript.han
-          ? quoteCalligraphyTextStyle(baseStyle, calligraphyStyle)
-          : quoteLiteraryTextStyle(baseStyle, englishFontStyle);
+  TextStyle styleFor(_QuoteBodyScript script) => script == _QuoteBodyScript.han
+      ? quoteCalligraphyTextStyle(baseStyle, calligraphyStyle)
+      : quoteLiteraryTextStyle(baseStyle, englishFontStyle);
 
   final spans = <TextSpan>[];
   var active = firstScript;
@@ -250,8 +248,7 @@ class CalligraphyWritingText extends StatefulWidget {
   final TextAlign textAlign;
 
   @override
-  State<CalligraphyWritingText> createState() =>
-      _CalligraphyWritingTextState();
+  State<CalligraphyWritingText> createState() => _CalligraphyWritingTextState();
 }
 
 class _CalligraphyWritingTextState extends State<CalligraphyWritingText>
@@ -297,42 +294,45 @@ class _CalligraphyWritingTextState extends State<CalligraphyWritingText>
       widget.calligraphyStyle,
       widget.englishFontStyle,
     );
-    return LayoutBuilder(builder: (context, constraints) {
-      final painter = TextPainter(
-        text: span,
-        textDirection: Directionality.of(context),
-        textAlign: widget.textAlign,
-        textScaler: TextScaler.noScaling,
-        maxLines: widget.maxLines,
-        ellipsis: widget.overflow == TextOverflow.ellipsis ? '…' : null,
-      )..layout(maxWidth: constraints.maxWidth);
-      final height = painter.height;
-      painter.dispose();
-      final disableAnimation =
-          MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-      return Semantics(
-        label: widget.text,
-        child: SizedBox(
-          width: constraints.maxWidth,
-          height: height,
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) => CustomPaint(
-              painter: _InkWritingPainter(
-                text: widget.text,
-                textSpan: span,
-                textDirection: Directionality.of(context),
-                textAlign: widget.textAlign,
-                maxLines: widget.maxLines,
-                ellipsis:
-                    widget.overflow == TextOverflow.ellipsis ? '…' : null,
-                progress: disableAnimation ? 1 : _controller.value,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: span,
+          textDirection: Directionality.of(context),
+          textAlign: widget.textAlign,
+          textScaler: TextScaler.noScaling,
+          maxLines: widget.maxLines,
+          ellipsis: widget.overflow == TextOverflow.ellipsis ? '…' : null,
+        )..layout(maxWidth: constraints.maxWidth);
+        final height = painter.height;
+        painter.dispose();
+        final disableAnimation =
+            MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+        return Semantics(
+          label: widget.text,
+          child: SizedBox(
+            width: constraints.maxWidth,
+            height: height,
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) => CustomPaint(
+                painter: _InkWritingPainter(
+                  text: widget.text,
+                  textSpan: span,
+                  textDirection: Directionality.of(context),
+                  textAlign: widget.textAlign,
+                  maxLines: widget.maxLines,
+                  ellipsis: widget.overflow == TextOverflow.ellipsis
+                      ? '…'
+                      : null,
+                  progress: disableAnimation ? 1 : _controller.value,
+                ),
               ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }
 
@@ -388,7 +388,9 @@ class _InkWritingPainter extends CustomPainter {
 
     final scaled = progress.clamp(0.0, 1.0) * units.length;
     final completed = scaled.floor().clamp(0, units.length).toInt();
-    final currentProgress = Curves.easeOutCubic.transform(scaled - scaled.floor());
+    final currentProgress = Curves.easeOutCubic.transform(
+      scaled - scaled.floor(),
+    );
     final reveal = Path();
     for (var index = 0; index < completed; index++) {
       for (final box in units[index]) {
@@ -399,12 +401,14 @@ class _InkWritingPainter extends CustomPainter {
       for (final box in units[completed]) {
         final rect = box.toRect().inflate(.7);
         final diagonalLead = math.max(.08, currentProgress);
-        reveal.addRect(Rect.fromLTRB(
-          rect.left,
-          rect.top,
-          rect.left + rect.width * diagonalLead,
-          rect.bottom,
-        ));
+        reveal.addRect(
+          Rect.fromLTRB(
+            rect.left,
+            rect.top,
+            rect.left + rect.width * diagonalLead,
+            rect.bottom,
+          ),
+        );
       }
     }
     canvas.save();

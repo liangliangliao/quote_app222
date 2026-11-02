@@ -9,20 +9,72 @@ import 'package:path_provider/path_provider.dart';
 
 import '../utils/debug_logger.dart';
 import '../models/quote_insight.dart';
+import 'quote_author_signature_service.dart';
 import 'unified_ai_service.dart';
 
 /// Built-in representatives are intentionally grouped by field so the task
 /// editor can offer meaningful multi-select choices without tying generation
 /// to a single hard-coded author.
 const Map<String, List<String>> quoteFigureCatalog = <String, List<String>>{
-  '哲学与思想': <String>['孔子', '苏格拉底', '尼采', '王阳明'],
-  '科学与探索': <String>['爱因斯坦', '牛顿', '居里夫人', '达尔文'],
-  '文学与写作': <String>['莎士比亚', '鲁迅', '泰戈尔', '托尔斯泰'],
-  '心理学与意义': <String>['威廉·詹姆斯', '卡尔·荣格', '维克多·弗兰克尔', '马丁·塞利格曼'],
-  '管理与创造': <String>['彼得·德鲁克', '稻盛和夫', '史蒂夫·乔布斯', '沃伦·巴菲特'],
-  '社会与公共生活': <String>['林肯', '甘地', '马丁·路德·金', '纳尔逊·曼德拉'],
-  '艺术与审美': <String>['达·芬奇', '贝多芬', '毕加索', '宫崎骏'],
-  '体育与竞技': <String>['穆罕默德·阿里', '迈克尔·乔丹', '科比·布莱恩特', '比利·简·金'],
+  '哲学与思想': <String>[
+    '孔子', '苏格拉底', '尼采', '王阳明', '老子', '庄子', '孟子', '柏拉图',
+    '亚里士多德', '笛卡尔', '斯宾诺莎', '康德', '黑格尔', '叔本华',
+    '克尔凯郭尔', '萨特', '西蒙娜·德·波伏娃', '汉娜·阿伦特', '维特根斯坦', '马可·奥勒留',
+    '休谟', '朱熹', '张载', '列维纳斯',
+  ],
+  '科学与探索': <String>[
+    '爱因斯坦', '牛顿', '居里夫人', '达尔文', '伽利略', '哥白尼',
+    '开普勒', '麦克斯韦', '法拉第', '理查德·费曼', '尼尔斯·玻尔',
+    '艾伦·图灵', '阿达·洛夫莱斯', '卡尔·萨根', '史蒂芬·霍金',
+    '珍妮·古道尔', '屠呦呦', '袁隆平', '钱学森', '吴健雄',
+    '罗莎琳德·富兰克林', '埃米·诺特', '弗朗西斯·克里克', '薛定谔',
+  ],
+  '文学与写作': <String>[
+    '莎士比亚', '鲁迅', '泰戈尔', '托尔斯泰', '莫言', '加西亚·马尔克斯',
+    '欧内斯特·海明威', '阿尔贝·加缪', '托妮·莫里森', '托马斯·曼',
+    '赫尔曼·黑塞', '奥尔加·托卡尔丘克', '石黑一雄', '爱丽丝·门罗',
+    '奥尔罕·帕慕克', '马里奥·巴尔加斯·略萨', '帕布罗·聂鲁达',
+    '川端康成', '大江健三郎', '高行健', '安妮·埃尔诺', '路易丝·格丽克',
+    '弗吉尼亚·伍尔夫', '陀思妥耶夫斯基', '阿卜杜勒拉扎克·古尔纳',
+    '韩江', '约恩·福瑟', '奥克塔维奥·帕斯',
+  ],
+  '心理学与意义': <String>[
+    '威廉·詹姆斯', '卡尔·荣格', '维克多·弗兰克尔', '马丁·塞利格曼',
+    '西格蒙德·弗洛伊德', '阿尔弗雷德·阿德勒', '阿尔伯特·班杜拉',
+    '塔尔·本-沙哈尔（Tal Ben-Shahar）', '卡尔·罗杰斯', '亚伯拉罕·马斯洛',
+    '埃里克·埃里克森', '让·皮亚杰', '列夫·维果茨基', '丹尼尔·卡尼曼',
+    '阿龙·贝克', '阿尔伯特·埃利斯', '约翰·鲍尔比', '玛丽·安斯沃斯',
+    '米哈里·契克森米哈赖', '卡罗尔·德韦克', '罗洛·梅', '安娜·弗洛伊德',
+    '凯伦·霍妮', '奥利弗·萨克斯',
+  ],
+  '管理与创造': <String>[
+    '彼得·德鲁克', '稻盛和夫', '史蒂夫·乔布斯', '沃伦·巴菲特',
+    '本杰明·格雷厄姆', '查理·芒格', '安德鲁·格罗夫', '彼得·圣吉',
+    '克莱顿·克里斯坦森', '赫伯特·西蒙', '埃莉诺·奥斯特罗姆',
+    '亨利·明茨伯格', '玛丽·帕克·福莱特', 'W·爱德华兹·戴明',
+    '英格瓦·坎普拉德', '松下幸之助', '张瑞敏', '黄仁勋', '杰森·弗里德',
+    '简·雅各布斯', '雷·达里奥', '乔治·伊斯曼', '英迪拉·努伊', '张忠谋',
+  ],
+  '社会与公共生活': <String>[
+    '林肯', '甘地', '马丁·路德·金', '纳尔逊·曼德拉', '埃莉诺·罗斯福',
+    '罗莎·帕克斯', '苏珊·安东尼', '弗雷德里克·道格拉斯', '德斯蒙德·图图',
+    '瓦茨拉夫·哈维尔', '马拉拉·优素福扎伊', '简·亚当斯', '海伦·凯勒',
+    '南丁格尔', '特蕾莎修女', '蔡元培', '宋庆龄', '费孝通', '阿马蒂亚·森', '西蒙娜·韦伊',
+    '弗朗西斯·帕金斯', '凯撒·查韦斯', '艾达·B·韦尔斯', '鲁斯·巴德·金斯伯格',
+  ],
+  '艺术与审美': <String>[
+    '达·芬奇', '贝多芬', '毕加索', '宫崎骏', '米开朗基罗', '伦勃朗',
+    '莫奈', '梵高', '弗里达·卡罗', '保罗·克利', '乔治娅·欧姬芙',
+    '齐白石', '徐悲鸿', '张大千', '巴赫', '莫扎特', '肖邦', '德彪西',
+    '黑泽明', '安德烈·塔可夫斯基', '古斯塔夫·克里姆特', '罗丹', '王羲之', '坂本龙一',
+  ],
+  '体育与竞技': <String>[
+    '穆罕默德·阿里', '迈克尔·乔丹', '科比·布莱恩特', '比利·简·金',
+    '塞雷娜·威廉姆斯', '罗杰·费德勒', '拉斐尔·纳达尔', '诺瓦克·德约科维奇',
+    '西蒙·拜尔斯', '迈克尔·菲尔普斯', '尤塞恩·博尔特', '杰西·欧文斯',
+    '贝利', '梅西', '克里斯蒂亚诺·罗纳尔多', '郎平', '姚明', '李娜',
+    '刘翔', '谷爱凌', '费尔南多·阿隆索', '斯特芬·库里', '纳迪娅·科马内奇', '埃鲁德·基普乔格',
+  ],
 };
 
 const List<String> quoteThemeOptions = <String>[
@@ -235,6 +287,7 @@ class QuotePracticeActivity {
 class GeneratedQuote {
   final String content;
   final String author;
+  final String originalAuthorName;
   final String source;
   final String theme;
   final String coreMatch;
@@ -254,6 +307,7 @@ class GeneratedQuote {
   const GeneratedQuote({
     required this.content,
     required this.author,
+    this.originalAuthorName = '',
     required this.source,
     required this.theme,
     required this.coreMatch,
@@ -304,6 +358,7 @@ class GeneratedQuote {
     return GeneratedQuote(
       content: content,
       author: author,
+      originalAuthorName: originalAuthorName,
       source: source,
       theme: theme,
       coreMatch: coreMatch,
@@ -327,11 +382,14 @@ class GeneratedQuote {
 class QuoteAiService {
   final UnifiedAiService _ai;
   final QuoteAvatarDownloader _avatarDownloader;
+  final QuoteAuthorSignatureService _signatures;
 
   QuoteAiService({
     UnifiedAiService? ai,
     QuoteAvatarDownloader? avatarDownloader,
+    QuoteAuthorSignatureService? signatures,
   })  : _ai = ai ?? UnifiedAiService(),
+        _signatures = signatures ?? QuoteAuthorSignatureService.shared,
         _avatarDownloader = avatarDownloader ?? QuoteAvatarDownloader();
 
   Future<GeneratedQuote> generate(Map<String, dynamic> task) async {
@@ -368,6 +426,14 @@ class QuoteAiService {
       fallbackTheme: config.theme,
       nextCursor: cursor + 1,
     );
+
+    // Cache the name from this same response. A scheduled quote still makes
+    // exactly one model request, and cache errors cannot prevent its reminder.
+    if (result.originalAuthorName.isNotEmpty) {
+      try {
+        await _signatures.remember(result.author, result.originalAuthorName);
+      } catch (_) { /* The foreground can resolve it again when needed. */ }
+    }
 
     if (config.downloadAvatar) {
       try {
@@ -445,11 +511,13 @@ ${jsonEncode({'theme': theme, 'description': description})}
 13. concrete_example 写一个具体、可观察的生活情境，明确为“示例/模拟”，不得冒充史实；可以复用本次 practice_activities。commonality 与 critical_difference 说明容易混淆的两种行为哪里相似、关键区别何在；boundary 至少给出一个例外、限制或未知。analysis_basis 指明对应原句中的哪些词，不用作者声望代替根据。缺乏把握可留空，不要补造。
 
 14. cognition返回认识展开结构：abstractions包含2–4个{term,definition,observed,retained,omitted,counter_example}，分别写概念定义、对应的具体材料、共同规定、省略的处境和非成员。concept_scopes在适合外延关系时给出[{relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,illustration}]，关系限equal/partition/siblings/overlap/subset/superset/disjoint；basis逐字引原句，构造的分类模型必须illustration:true；不适合就[]，不可强行画圈。此结构复用本次请求，不另行调用模型。
+15. author_original_name 返回作者本人在其作品中常用的原文姓名或笔名（例如 Sigmund Freud、Jean-Paul Sartre、莫言），不将外国作者译成中文，保留原文拼写/变音符号/原文字母。这里只要姓名，不要破折号、书名、国籍、译名对照或手写签名图；不能确定时留空。author 字段仍按规则 2 原样返回，两个字段用途不同。
 
 JSON 字段必须完整：
 {
   "quote": "名言正文",
   "author": "署名",
+  "author_original_name": "作者原文姓名或空字符串",
   "source": "出处或出处待考",
   "theme": "主题",
   "core_match": "它与用户描述核心思想的匹配依据",
@@ -559,6 +627,10 @@ JSON 字段必须完整：
     return GeneratedQuote(
       content: content,
       author: author,
+      originalAuthorName: QuoteAuthorSignatureService.knownName(author) ??
+          QuoteAuthorSignatureService.cleanOriginalName(_readString(map, const [
+            'author_original_name', 'original_author_name', 'original_name',
+          ])) ?? '',
       source: source,
       theme: theme,
       coreMatch: _readString(map, const <String>[

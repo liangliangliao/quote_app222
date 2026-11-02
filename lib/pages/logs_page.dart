@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 
 import '../data/dao.dart';
 import '../services/native_guard.dart';
 import '../utils/debug_logger.dart';
 
 class LogsPage extends StatefulWidget {
-  const LogsPage({super.key});
+  const LogsPage({super.key, this.loadLogs});
+  final Future<List<Map<String, dynamic>>> Function({
+    required int limit, required int offset, required String keyword,
+    required bool deepseekOnly, required bool errorOnly,
+  })? loadLogs;
   @override
   State<LogsPage> createState() => _LogsPageState();
 }
@@ -53,6 +59,9 @@ class _LogsPageState extends State<LogsPage> {
   int _offset = 0;
   bool _done = false;
   bool _loading = false;
+  int _generation = 0;
+  Timer? _searchTimer;
+  Timer? _busTimer;
   _LogFilter _filter = _LogFilter.all;
   _LogType _type = _LogType.all;
   String _moduleFilter = '全部模块';
@@ -75,39 +84,72 @@ class _LogsPageState extends State<LogsPage> {
   @override
   void dispose() {
     SimpleBus.logsTick.removeListener(_onBus);
+    _searchTimer?.cancel();
+    _busTimer?.cancel();
     _scroll.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged() => _reload();
-
-  void _reload() {
-    if (!mounted) return;
-    setState(() {
-      _items.clear();
-      _offset = 0;
-      _done = false;
-    });
-    _loadMore();
+  void _onSearchChanged() {
+    _searchTimer?.cancel();
+    _searchTimer = Timer(const Duration(milliseconds: 200), _reload);
   }
 
-  void _onBus() => _reload();
+  Future<List<Map<String, dynamic>>> _query(int limit, int offset, String keyword, _LogFilter filter) {
+    final loader = widget.loadLogs;
+    if (loader != null) {
+      return loader(limit: limit, offset: offset, keyword: keyword,
+          deepseekOnly: filter == _LogFilter.ai, errorOnly: filter == _LogFilter.error);
+    }
+    return _dao.latest(limit: limit, offset: offset, keyword: keyword,
+        deepseekOnly: filter == _LogFilter.ai, errorOnly: filter == _LogFilter.error);
+  }
+
+  Future<void> _reload() async {
+    final generation = ++_generation;
+    final keyword = _searchCtrl.text.trim();
+    final filter = _filter;
+    final limit = _items.length > 50 ? _items.length : 50;
+    try {
+      final rows = await _query(limit, 0, keyword, filter);
+      if (!mounted || generation != _generation || keyword != _searchCtrl.text.trim() || filter != _filter) return;
+      final changed = rows.length != _items.length ||
+          List.generate(rows.length, (i) => i).any((i) => !mapEquals(rows[i], _items[i]));
+      _offset = rows.length;
+      _done = rows.length < limit;
+      if (changed) setState(() => _items..clear()..addAll(rows));
+    } catch (_) {
+      // Keep the current snapshot until the next successful refresh.
+    }
+  }
+
+  void _onBus() {
+    _busTimer?.cancel();
+    _busTimer = Timer(const Duration(milliseconds: 150), _reload);
+  }
 
   Future<void> _loadMore() async {
+    if (_loading || _done) return;
     _loading = true;
-    final rows = await _dao.latest(
-      limit: 50,
-      offset: _offset,
-      keyword: _searchCtrl.text.trim(),
-      deepseekOnly: _filter == _LogFilter.ai,
-      errorOnly: _filter == _LogFilter.error,
-    );
-    _offset += rows.length;
-    _items.addAll(rows);
-    _loading = false;
-    if (mounted) setState(() {});
-    if (rows.length < 50) _done = true;
+    final generation = _generation;
+    final keyword = _searchCtrl.text.trim();
+    final filter = _filter;
+    try {
+      final rows = await _query(50, _offset, keyword, filter);
+      if (!mounted || generation != _generation || keyword != _searchCtrl.text.trim() || filter != _filter) return;
+      _offset += rows.length;
+      _done = rows.length < 50;
+      _loading = false;
+      setState(() => _items.addAll(rows));
+    } catch (_) {
+      // The user can retry by scrolling or changing the filter.
+    } finally {
+      if (_loading) {
+        _loading = false;
+        if (mounted) setState(() {});
+      }
+    }
   }
 
   String _fmt(String? s) {
@@ -295,6 +337,7 @@ class _LogsPageState extends State<LogsPage> {
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ExpansionTile(
+        key: PageStorageKey('log-${e.raw['log_uid'] ?? e.raw['id']}'),
         tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         leading: CircleAvatar(
