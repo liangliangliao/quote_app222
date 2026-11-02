@@ -124,6 +124,10 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
         final concepts = _conceptNote?.analysis.concepts.isNotEmpty == true
             ? _conceptNote!.analysis.concepts
             : _addon.concepts;
+        final epistemicPath =
+            _conceptNote?.analysis.epistemicPath.hasContent == true
+                ? _conceptNote!.analysis.epistemicPath
+                : _addon.epistemicPath;
         final quoteStyle = quotePrefersLiteraryEnglish(widget.quote.content)
             ? quoteLiteraryTextStyle(
                 const TextStyle(fontSize: 21, height: 1.65))
@@ -203,6 +207,31 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                           topic: widget.topic, quote: widget.quote.content),
                     ],
                     if (_tab == 1) ...[
+                      if (epistemicPath.proposition.isNotEmpty)
+                        _block('原句的判断 · 不是主题词',
+                            epistemicPath.proposition,
+                            icon: Icons.format_quote_outlined),
+                      if (epistemicPath.sharedFeature.isNotEmpty)
+                        _block('抽象留下的共同规定 · 共相',
+                            epistemicPath.sharedFeature,
+                            icon: Icons.join_inner_outlined),
+                      if (epistemicPath.particularDifferences.isNotEmpty)
+                        _block('不能抹去的具体差异 · 殊相',
+                            epistemicPath.particularDifferences,
+                            icon: Icons.difference_outlined),
+                      if (epistemicPath.abstractionLoss.isNotEmpty)
+                        _block('概念概括时遗漏了什么',
+                            epistemicPath.abstractionLoss,
+                            icon: Icons.filter_alt_off_outlined),
+                      if (epistemicPath.hasContent)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            '当前分析的关系：${epistemicPath.relationLabel} · AI 暂定解释，并非原典事实核验',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.black54),
+                          ),
+                        ),
                       _block(
                           '从经验到概念',
                           _conceptNote?.analysis.summary ??
@@ -243,6 +272,17 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                           child: const Text('选择另一句比较')),
                     ],
                     if (_tab == 3) ...[
+                      if (epistemicPath.judgmentPurpose.isNotEmpty)
+                        _block('判断目的与决定性差异',
+                            epistemicPath.judgmentPurpose,
+                            icon: Icons.rule_outlined),
+                      if (epistemicPath.quoteExcerpt.isNotEmpty)
+                        _block('定位到原句的文字依据',
+                            '“${epistemicPath.quoteExcerpt}”\n这只能定位作者的文字，不能证明其经验命题。'),
+                      if (epistemicPath.groundLimit.isNotEmpty)
+                        _block('认识根据支持到哪里',
+                            epistemicPath.groundLimit,
+                            icon: Icons.fact_check_outlined),
                       _block(
                           '哪些条件下不成立',
                           _addon.boundary.isEmpty
