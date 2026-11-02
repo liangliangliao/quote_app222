@@ -4,7 +4,13 @@ import '../models/quote_insight.dart';
 import 'cognitive_models.dart';
 import 'cognitive_store.dart';
 
-enum ConceptQuoteReason { savedConcept, acceptedNote, proposedNote, textMatch }
+enum ConceptQuoteReason {
+  savedConcept,
+  acceptedNote,
+  proposedNote,
+  semanticAnalysis,
+  textMatch
+}
 
 class ConceptQuoteMatch {
   final Map<String, dynamic> row;
@@ -16,6 +22,7 @@ class ConceptQuoteMatch {
         ConceptQuoteReason.acceptedNote => '已采纳的概念注释 · 一种理解',
         ConceptQuoteReason.proposedNote => '待确认的概念注释',
         ConceptQuoteReason.textMatch => '文字匹配 · 不表示概念等同',
+        ConceptQuoteReason.semanticAnalysis => '当前原文的概念分析 · AI 暂定理解',
       };
 }
 
@@ -70,6 +77,7 @@ class QuoteConceptCatalog {
       if (rows.isEmpty) return ConceptQuotePage(matches, cursor, false);
       final refs = rows.map(QuoteReference.fromRow).toList();
       final addons = await insights.readAddons(refs);
+      final semantic = await insights.readSemanticConcepts(refs);
       final annotations = await notes.forRecords('quote',
           refs.map((q) => q.id.isEmpty ? q.contentKey : q.id).toList());
       for (var i = 0; i < rows.length; i++) {
@@ -85,14 +93,19 @@ class QuoteConceptCatalog {
           'theme',
           'explanation'
         ].any((key) => '${rows[i][key] ?? ''}'.toLowerCase().contains(query));
-        if (tagged || literal) {
-          final reason = !tagged
-              ? ConceptQuoteReason.textMatch
-              : note?.analysis.concepts.isNotEmpty == true
-                  ? note!.accepted
-                      ? ConceptQuoteReason.acceptedNote
-                      : ConceptQuoteReason.proposedNote
-                  : ConceptQuoteReason.savedConcept;
+        final analyzed = semantic[ref.contentKey]
+                ?.any((s) => s.trim().toLowerCase() == query) ==
+            true;
+        if (tagged || literal || analyzed) {
+          final reason = !tagged && analyzed
+              ? ConceptQuoteReason.semanticAnalysis
+              : !tagged
+                  ? ConceptQuoteReason.textMatch
+                  : note?.analysis.concepts.isNotEmpty == true
+                      ? note!.accepted
+                          ? ConceptQuoteReason.acceptedNote
+                          : ConceptQuoteReason.proposedNote
+                      : ConceptQuoteReason.savedConcept;
           matches.add(ConceptQuoteMatch(rows[i], reason));
         }
         if (matches.length == limit) {

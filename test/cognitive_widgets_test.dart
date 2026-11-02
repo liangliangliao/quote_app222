@@ -556,6 +556,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('quote-read-more')));
     await waitFor(tester, find.text('概念含义圈 · 部分交集'));
     final diagram = find.byKey(const ValueKey('quote-set-diagram'));
+    await tester.ensureVisible(diagram);
+    await settle(tester);
     expect(diagram.hitTestable(), findsOneWidget);
     await tester.tapAt(tester.getCenter(diagram));
     await settle(tester);
@@ -603,6 +605,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('quote-read-more')));
     await waitFor(tester, find.text('概念含义圈 · 同属上位范围但未穷尽'));
     await capture(tester, 'real-hegel-reading');
+    await tester.ensureVisible(find.byKey(const ValueKey('quote-set-diagram')));
+    await settle(tester);
     expect(find.byKey(const ValueKey('quote-set-diagram')).hitTestable(),
         findsOneWidget);
     final diagram = find.byKey(const ValueKey('quote-set-diagram'));
@@ -652,13 +656,17 @@ void main() {
         width: 390,
         height: 850);
     await waitFor(tester, find.text('概念含义圈 · 同属上位范围但未穷尽'));
-    expect(find.text('B 句内　待确定'), findsOneWidget);
-    expect(find.text('跨材料　待确定'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, '判断力'), findsOneWidget);
+    expect(find.textContaining('待确定'), findsNothing);
     await capture(tester, 'semantic-pair-A');
-    await tester.tap(find.text('跨材料　待确定'));
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '判断力'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '判断力'));
     await settle(tester);
     expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
     expect(find.textContaining('尚不能推出外延关系'), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '四重根据'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '四重根据'));
+    await settle(tester);
     await tester.ensureVisible(find.text('生成根据 · 因果条件'));
     await settle(tester);
     await capture(tester, 'semantic-pair-ground');

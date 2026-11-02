@@ -11,17 +11,26 @@ import 'cognitive_mode.dart';
 import 'cognitive_preferences.dart';
 import 'quote_concept_catalog.dart';
 import 'quote_cognitive_reader.dart';
+import 'concept_hierarchy_view.dart';
 
 class ConceptExplorer extends StatefulWidget {
   final String title;
   final String? nodeUid, parentUid;
   final QuoteConceptCatalog? catalog;
+  final List<ScopeSource> contextSources;
+  final SemanticScope? contextScope;
+  final String? focusNodeId;
+  final int initialTab;
   const ConceptExplorer({
     super.key,
     required this.title,
     this.nodeUid,
     this.parentUid,
     this.catalog,
+    this.contextSources = const [],
+    this.contextScope,
+    this.focusNodeId,
+    this.initialTab = 0,
   });
   @override
   State<ConceptExplorer> createState() => _ConceptExplorerState();
@@ -44,12 +53,20 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
         module: 'concept',
         recordId: _id,
         title: widget.title,
-        fullText: widget.title,
+        fullText: widget.contextSources.isEmpty
+            ? widget.title
+            : widget.contextSources.map((s) => s.text).join("\n"),
       );
   @override
   void initState() {
     super.initState();
-    _load();
+    _tab = widget.initialTab;
+    if (widget.contextSources.isEmpty) {
+      _load();
+    } else {
+      _loading = false;
+    }
+    if (_tab == 2) _loadQuotes();
   }
 
   Future<void> _load() async {
@@ -196,7 +213,7 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
       selection: _selection,
       task: CognitiveTask.concept,
     );
-    if (mounted) await _load();
+    if (mounted && widget.contextSources.isEmpty) await _load();
   }
 
   Future<void> _choosePair() async {
@@ -327,7 +344,16 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
                   ),
                 ),
               ),
-              if (_tab == 0) ...[
+              if (_tab == 0 && widget.contextSources.isNotEmpty) ...[
+                if (widget.contextScope case final scope?)
+                  ConceptHierarchyView(value: scope)
+                else
+                  SemanticScopePanel(
+                      sources: widget.contextSources,
+                      focus: '原文中的概念层级：${widget.title}',
+                      preferredView: EpistemicViewKind.hierarchy),
+              ],
+              if (_tab == 0 && widget.contextSources.isEmpty) ...[
                 if (_alternatives.isNotEmpty) ...[
                   const Text('发现多个同名分类，请选择具体含义；它们不会被自动合并。'),
                   for (final node in _alternatives)
@@ -395,9 +421,21 @@ class _ConceptExplorerState extends State<ConceptExplorer> {
               ],
               if (_tab == 1) ...[
                 if (CognitivePreferenceStore.instance.value.relations)
-                  SemanticScopePanel(sources: [
-                    ScopeSource('A', '主题概念　${widget.title}\n${_selection.text}',title:widget.title)
-                  ], focus: '主题概念的含义与相关概念关系'),
+                  SemanticScopePanel(
+                      sources: [
+                        ...widget.contextSources.isNotEmpty
+                            ? widget.contextSources
+                            : [
+                                ScopeSource('A',
+                                    '主题概念　${widget.title}\n${_selection.text}',
+                                    title: widget.title)
+                              ]
+                      ],
+                      focus: '主题概念的含义与相关概念关系',
+                      initial: widget.contextScope,
+                      analysisContext: SemanticContext(
+                          conceptId: widget.focusNodeId ?? '',
+                          conceptLabel: widget.title)),
                 Text(
                   _note?.analysis.boundary ?? '没有充分材料时，不把词语相似或同属一个分类画成外延交集。',
                   style: const TextStyle(height: 1.7),

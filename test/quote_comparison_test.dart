@@ -67,7 +67,8 @@ void main() {
     expect(restored.canDrawSets, isFalse);
   });
 
-  test('new comparisons reject shallow results and cross-passage evidence', () {
+  test('partial readings preserve useful prose and reject misplaced evidence',
+      () {
     final data = response()
       ..addAll({
         'semantic_map': unresolvedMap(
@@ -84,15 +85,17 @@ void main() {
           ]
         }
       });
-    expect(
-        () => QuoteComparisonService.parseResponse(jsonEncode(data), a, b,
-            requireReadings: true),
-        throwsFormatException);
+    final partial = QuoteComparisonService.parseResponse(jsonEncode(data), a, b,
+        requireReadings: true);
+    expect(partial.readingB, isEmpty);
+    expect(partial.common, isNotEmpty);
+    expect(partial.semanticMap['issues'], isNotEmpty);
     data['reading_b'] = {...data['reading_a'] as Map, 'anchor': '每个学者'};
     expect(
-        () => QuoteComparisonService.parseResponse(jsonEncode(data), a, b,
-            requireReadings: true),
-        throwsFormatException);
+        QuoteComparisonService.parseResponse(jsonEncode(data), a, b,
+                requireReadings: true)
+            .readingB,
+        isEmpty);
     data['reading_b']['anchor'] = '学习者';
     expect(
         QuoteComparisonService.parseResponse(jsonEncode(data), a, b,

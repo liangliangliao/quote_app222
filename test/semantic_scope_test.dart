@@ -208,16 +208,19 @@ void main() {
         expect(restored.relations.single.scope!.parts.length, 3);
     }
   });
-  test('a comparison needs A, B and a grounded cross-passage relation', () {
+  test('independent views survive absent or invalid cross-passage geometry',
+      () {
     const two = [ScopeSource('A', '轻视不等于恨'), ScopeSource('B', '欣赏生活美好')];
     final m = unresolvedMap(two);
     expect(SemanticScope.parse(m, two).relations.length, 3);
     final broken = jsonDecode(jsonEncode(m)) as Map<String, dynamic>;
     (broken['relations'] as List).removeLast();
-    expect(() => SemanticScope.parse(broken, two), throwsFormatException);
+    expect(SemanticScope.parse(broken, two).relations.length, 2);
     final wrong = jsonDecode(jsonEncode(m)) as Map<String, dynamic>;
     wrong['relations'][2]['references'][1]['excerpt'] = '原文没有的证据';
-    expect(() => SemanticScope.parse(wrong, two), throwsFormatException);
+    final partial = SemanticScope.parse(wrong, two);
+    expect(partial.relations.length, 2);
+    expect(partial.issues.single.message, contains('原文不符'));
   });
   test('counts and isolated single concepts cannot establish a diagram', () {
     final invalid = relationFixture('disjoint');
@@ -327,6 +330,7 @@ void main() {
                               value: value, sources: sources)))))));
       await tester.pumpAndSettle();
       if (type == 'partition') {
+        await tester.ensureVisible(find.text('2　直角三角形'));
         await tester.tap(find.text('2　直角三角形'));
         await tester.pumpAndSettle();
         expect(find.textContaining('30度、60度、90度'), findsOneWidget);

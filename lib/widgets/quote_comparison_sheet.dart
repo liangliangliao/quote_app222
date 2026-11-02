@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/quote_insight.dart';
+import '../data/quote_insight_store.dart';
 import '../services/quote_comparison_service.dart';
 import '../epistemic/cognitive_preferences.dart';
 import '../epistemic/cognitive_mode.dart';
@@ -62,9 +63,18 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
   String _appliedConditions = '';
   int _tab = 0;
   bool _deferred = false;
+  int _generation = 0;
+  String _completedContext = '';
+  String get _contextKey => [
+        widget.a.contentKey,
+        widget.b.contentKey,
+        _purpose.name,
+        _conditions.text.trim()
+      ].join('|');
 
   Future<void> _start() async {
     CognitivePreferenceStore.instance.load();
+    if (!mounted) return;
     if (CognitivePreferenceStore.active) {
       if (similarRecordWording(widget.a, widget.b)) {
         setState(() {
@@ -77,6 +87,21 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
     await _compare();
   }
 
+  Future<void> _indexConcepts(SemanticScope value) async {
+    try {
+      final store = QuoteInsightStore();
+      for (final entry in [('A', widget.a), ('B', widget.b)]) {
+        await store.saveSemanticConcepts(
+            entry.$2,
+            value.concepts
+                .where((n) =>
+                    n.kind == 'concept' &&
+                    n.references.any((r) => r.source == entry.$1))
+                .map((n) => n.label));
+      }
+    } catch (_) {}
+  }
+
   Widget _semanticPanel() {
     final sources = [
       ScopeSource('A', widget.a.content),
@@ -86,14 +111,22 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
     if (_result?.semanticMap.isNotEmpty == true) {
       try {
         initial = SemanticScope.parse(_result!.semanticMap, sources,
-            model: _result!.modelInfo);
+            model: _result!.modelDisplayName);
       } catch (_) {}
     }
     return SemanticScopePanel(
-        key: ValueKey([widget.a.contentKey, widget.b.contentKey].join('|')),
+        key: ValueKey([
+          widget.a.contentKey,
+          widget.b.contentKey,
+          _purpose.name,
+          _appliedConditions
+        ].join('|')),
         sources: sources,
         focus: widget.recordLabel == '概念' ? '主题概念比较' : '分别分析 A、B 句内概念及跨句关系',
-        initial: initial);
+        initial: initial,
+        onResult: _indexConcepts,
+        analysisContext: SemanticContext(
+            purpose: _purpose.question, conditions: _appliedConditions));
   }
 
   @override
@@ -108,33 +141,49 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(QuoteComparisonSheet old) {
+    super.didUpdateWidget(old);
+    if (old.a.contentKey != widget.a.contentKey ||
+        old.b.contentKey != widget.b.contentKey) {
+      _generation++;
+      _result = null;
+      _message = null;
+      _completedContext = '';
+      _start();
+    }
+  }
+
   Future<void> _compare() async {
+    final n = ++_generation, contextKey = _contextKey;
+    final purpose = _purpose, conditions = _conditions.text.trim();
     setState(() {
       _busy = true;
       _deferred = false;
       _message = null;
-      _result = null;
-      _appliedConditions = _conditions.text.trim();
+      if (_completedContext != contextKey) _result = null;
+      _appliedConditions = conditions;
     });
     try {
       final result = await _service.compareForPurpose(
-        widget.a,
-        widget.b,
-        _purpose,
-        _appliedConditions,
-      );
-      if (mounted) setState(() => _result = result);
+          widget.a, widget.b, purpose, conditions);
+      if (mounted && n == _generation)
+        setState(() {
+          _result = result;
+          _completedContext = contextKey;
+        });
     } on FormatException catch (error) {
-      if (mounted) setState(() => _message = error.message);
+      if (mounted && n == _generation) setState(() => _message = error.message);
     } catch (_) {
-      if (mounted)
-        setState(() => _message = '暂时无法比较。请检查网络和全局 AI 设置后重试；原句仍可阅读。');
+      if (mounted && n == _generation)
+        setState(() => _message = '暂时无法比较。请检查网络和全局 AI 设置后重试；原句与已有分析仍可阅读。');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && n == _generation) setState(() => _busy = false);
     }
   }
 
   Future<void> _clear() async {
+    _generation++;
     setState(() => _busy = true);
     try {
       await _service.clearPurposeCache(

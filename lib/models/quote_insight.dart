@@ -266,7 +266,7 @@ class QuoteComparison {
   final String relationDirection, universe;
   final Map<String, dynamic> readingA, readingB, semanticMap;
   final bool groundedInQuotes;
-  final String modelInfo;
+  final String modelInfo, modelDisplayName;
 
   const QuoteComparison(
       {required this.common,
@@ -282,6 +282,7 @@ class QuoteComparison {
       this.basisB = '',
       this.groundedInQuotes = false,
       this.modelInfo = '',
+      this.modelDisplayName = '',
       this.semanticMap = const {},
       this.readingA = const {},
       this.readingB = const {},
@@ -336,6 +337,7 @@ class QuoteComparison {
         'basis_a': basisA,
         'basis_b': basisB,
         'model_info': modelInfo,
+        'model_display_name': modelDisplayName,
         'semantic_map': semanticMap,
         'reading_a': readingA,
         'reading_b': readingB,
