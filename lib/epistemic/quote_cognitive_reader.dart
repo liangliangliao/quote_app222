@@ -214,15 +214,15 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                       if (epistemicPath.sharedFeature.isNotEmpty)
                         _block('抽象留下的共同规定 · 共相',
                             epistemicPath.sharedFeature,
-                            icon: Icons.join_inner_outlined),
+                            icon: Icons.hub_outlined),
                       if (epistemicPath.particularDifferences.isNotEmpty)
                         _block('不能抹去的具体差异 · 殊相',
                             epistemicPath.particularDifferences,
-                            icon: Icons.difference_outlined),
+                            icon: Icons.compare_arrows),
                       if (epistemicPath.abstractionLoss.isNotEmpty)
                         _block('概念概括时遗漏了什么',
                             epistemicPath.abstractionLoss,
-                            icon: Icons.filter_alt_off_outlined),
+                            icon: Icons.info_outline),
                       if (epistemicPath.hasContent)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
@@ -275,7 +275,7 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                       if (epistemicPath.judgmentPurpose.isNotEmpty)
                         _block('判断目的与决定性差异',
                             epistemicPath.judgmentPurpose,
-                            icon: Icons.rule_outlined),
+                            icon: Icons.rule),
                       if (epistemicPath.quoteExcerpt.isNotEmpty)
                         _block('定位到原句的文字依据',
                             '“${epistemicPath.quoteExcerpt}”\n这只能定位作者的文字，不能证明其经验命题。'),
