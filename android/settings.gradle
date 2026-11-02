@@ -13,9 +13,18 @@ pluginManagement {
 			google()
 			mavenCentral()
 			// Flutter engine Maven repo (required for io.flutter:* artifacts)
-			maven { url 'https://storage.flutter-io.cn/download.flutter.io' }
-			maven { url 'https://storage.googleapis.com/download.flutter.io' }
-			maven { url 'https://pub.dev/download.flutter.io' }
+			maven {
+			    url 'https://storage.flutter-io.cn/download.flutter.io'
+			    content { includeGroup 'io.flutter' }
+			}
+			maven {
+			    url 'https://storage.googleapis.com/download.flutter.io'
+			    content { includeGroup 'io.flutter' }
+			}
+			maven {
+			    url 'https://pub.dev/download.flutter.io'
+			    content { includeGroup 'io.flutter' }
+			}
 			// Gradle plugin mirror is kept only for plugin resolution.
 			maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
 			// Fallback mirrors.
@@ -39,10 +48,20 @@ dependencyResolutionManagement {
         repositories {
             google()
             mavenCentral()
-            // Flutter engine Maven repo (required for io.flutter:* artifacts)
-            maven { url 'https://storage.flutter-io.cn/download.flutter.io' }
-            maven { url 'https://storage.googleapis.com/download.flutter.io' }
-            maven { url 'https://pub.dev/download.flutter.io' }
+            // Keep AndroidX version metadata out of Flutter-only mirrors; a
+            // mirror 522 must not block artifacts available from Google Maven.
+            maven {
+                url 'https://storage.flutter-io.cn/download.flutter.io'
+                content { includeGroup 'io.flutter' }
+            }
+            maven {
+                url 'https://storage.googleapis.com/download.flutter.io'
+                content { includeGroup 'io.flutter' }
+            }
+            maven {
+                url 'https://pub.dev/download.flutter.io'
+                content { includeGroup 'io.flutter' }
+            }
             // NOTE: do NOT include the Aliyun gradle-plugin mirror here.
             // It can return 502 for ordinary runtime artifacts (for example Baidu LBS SDK),
             // which aborts dependency resolution before Gradle can try healthier mirrors.
