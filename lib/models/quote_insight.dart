@@ -9,6 +9,7 @@ enum ContentKind { quote, example, interpretation, prediction }
 enum SourceStatus { verified, unverified, disputed }
 
 enum QuoteRelation {
+  equivalent,
   overlap,
   subset,
   superset,
@@ -361,6 +362,7 @@ class QuoteComparison {
   EpistemicStatus get status => EpistemicStatus.provisional;
   bool get canDrawSets =>
       const [
+        QuoteRelation.equivalent,
         QuoteRelation.overlap,
         QuoteRelation.subset,
         QuoteRelation.superset,
@@ -373,6 +375,7 @@ class QuoteComparison {
       setB.isNotEmpty;
 
   String get relationLabel => const {
+        QuoteRelation.equivalent: '外延重合（A = B）',
         QuoteRelation.overlap: '部分交集',
         QuoteRelation.subset: 'A 包含于 B',
         QuoteRelation.superset: 'A 包含 B',

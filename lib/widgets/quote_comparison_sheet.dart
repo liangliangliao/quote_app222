@@ -349,7 +349,10 @@ class _SetsPainter extends CustomPainter {
     var centerA = center.translate(-r * .55, 0);
     var centerB = center.translate(r * .55, 0);
     var radiusA = r, radiusB = r;
-    if (relation == QuoteRelation.disjoint) {
+    if (relation == QuoteRelation.equivalent) {
+      centerA = center;
+      centerB = center;
+    } else if (relation == QuoteRelation.disjoint) {
       centerA = center.translate(-r * 1.15, 0);
       centerB = center.translate(r * 1.15, 0);
     } else if (relation == QuoteRelation.subset ||
@@ -374,7 +377,9 @@ class _SetsPainter extends CustomPainter {
     }
 
     // Draw the outer set first so its border stays visible for either direction.
-    if (relation == QuoteRelation.subset) {
+    if (relation == QuoteRelation.equivalent) {
+      circle(center, r, Colors.indigo);
+    } else if (relation == QuoteRelation.subset) {
       circle(centerB, radiusB, Colors.teal);
       circle(centerA, radiusA, Colors.indigo);
     } else {
@@ -394,7 +399,9 @@ class _SetsPainter extends CustomPainter {
       text.paint(canvas, position - Offset(text.width / 2, text.height / 2));
     }
 
-    if (relation == QuoteRelation.subset) {
+    if (relation == QuoteRelation.equivalent) {
+      label('A = B', center);
+    } else if (relation == QuoteRelation.subset) {
       label('A', center);
       label('B', center.translate(0, -r * .8));
     } else if (relation == QuoteRelation.superset) {

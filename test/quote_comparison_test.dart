@@ -71,6 +71,28 @@ void main() {
         contains('成员资格'));
   });
 
+  test('explicit reversible concept extensions may coincide without proving intension identity', () {
+    const first = QuoteReference(
+        id: 'square', content: '所有正方形都是四边相等且四角直角的四边形。');
+    const second = QuoteReference(
+        id: 'definition', content: '所有四边相等且四角直角的四边形都是正方形。');
+    final map = response()
+      ..addAll({
+        'relation_type': 'equivalent',
+        'relation_scope': 'extension',
+        'set_a': '正方形',
+        'set_b': '四边相等且四角直角的四边形',
+        'basis_a': '所有正方形都是四边相等且四角直角的四边形',
+        'basis_b': '所有四边相等且四角直角的四边形都是正方形',
+        'relation_justification': '两个定义互为包含，暂定为外延重合',
+      });
+    final result = QuoteComparisonService.parseResponse(
+        jsonEncode(map), first, second);
+    expect(result.canDrawSets, isTrue);
+    expect(result.relationLabel, contains('外延重合'));
+    expect(result.status, EpistemicStatus.provisional);
+  });
+
   test('causal and evidence relations never become circles', () {
     for (final type in [
       'cause',

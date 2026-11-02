@@ -149,8 +149,8 @@ ${jsonEncode({
 根据本次判断目的与情境指出共同讨论的问题、决定性差异、不能直接等同的部分、适用条件与未知。在 limitation 中说明什么条件改变会让结论改变；未给出情境就明确条件未知，不替用户编造。
 不要把解释当成事实，不推断作者真实心理。出处只是原记录，未经外部核对。
 不能由交集推出因果；先后发生不证明因果；作者声望不代替证据。
-relation_type 仅可为 overlap/subset/superset/disjoint/analogy/contrast/cause/condition/evidence/unknown。
-subset 表示 A 包含于 B，superset 表示 A 包含 B。因果只能作为有条件的假设。
+relation_type 仅可为 equivalent/overlap/subset/superset/disjoint/analogy/contrast/cause/condition/evidence/unknown。
+equivalent 表示在明确限定的对象范围内 A 与 B 的外延完全重合，不意味着两者内涵或全部意义相同。subset 表示 A 包含于 B，superset 表示 A 包含 B。因果只能作为有条件的假设。
 只有两句明确描述了可定义的对象集合、明确成员资格与可判断的外延范围，且原句能直接支持范围关系时，relation_scope 才可为 extension；必须在 relation_justification 交代成员资格依据。不要因同一主题、词语重合、思想相似或样本共现就输出 overlap/subset/superset/disjoint。不能证明外延的就降级为 features。只有两句明确描述了可定义的对象集合，且原句能直接支持范围关系时，relation_scope 才可为 extension，填写 set_a/set_b、逐字摘自 A/B 的 basis_a/basis_b 和 relation_justification。概念特征相似、修辞类比或不确定时用 contrast/unknown，relation_scope 为 features，不要强行画圈。
 任何关系都要说明限制、可能反例以及还需要什么证据。
 relation_direction 为 A_to_B/B_to_A/unknown，表示因果或条件的前项到后项，或证据支持判断的方向；不能确定时为 unknown，不画箭头。
