@@ -252,6 +252,7 @@ class CognitiveAnalysis {
   final List<CognitiveExample> examples;
   final List<CognitiveEvidence> evidence;
   final Map<GroundLens, String> lenses;
+  final QuoteEpistemicPath epistemicPath;
   const CognitiveAnalysis(
       {this.summary = '',
       this.common = '',
@@ -265,7 +266,8 @@ class CognitiveAnalysis {
       this.spans = const [],
       this.examples = const [],
       this.evidence = const [],
-      this.lenses = const {}});
+      this.lenses = const {},
+      this.epistemicPath = const QuoteEpistemicPath()});
 
   factory CognitiveAnalysis.fromJson(dynamic value, String original) {
     final m = insightObject(value);
@@ -290,6 +292,8 @@ class CognitiveAnalysis {
         basis: insightText(m, 'basis'),
         unknown: insightText(m, 'unknown'),
         concepts: cognitiveTexts(m['concepts']),
+        epistemicPath: QuoteEpistemicPath.fromJson(m['epistemic_path'],
+            originalText: original),
         questions: cognitiveTexts(m['questions']),
         spans: CognitiveSpan.parse(m['spans'], original),
         examples: examples,
@@ -309,6 +313,7 @@ class CognitiveAnalysis {
       unknown: unknown,
       concepts: concepts,
       questions: questions,
+      epistemicPath: epistemicPath,
       spans: value,
       examples: examples,
       evidence: evidence,
@@ -323,6 +328,7 @@ class CognitiveAnalysis {
         'unknown': unknown,
         'concepts': concepts,
         'questions': questions,
+        'epistemic_path': epistemicPath.toJson(),
         'spans': spans.map((e) => e.toJson()).toList(),
         'examples': examples.map((e) => e.toJson()).toList(),
         'evidence_refs': evidence.map((e) => e.toJson()).toList(),
