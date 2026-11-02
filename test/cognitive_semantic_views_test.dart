@@ -504,8 +504,9 @@ void main() {
     expect(indexed!.values.single, contains('过程中的幸福'));
     expect(find.widgetWithText(ChoiceChip, '概念树'), findsOneWidget);
     await capture(tester, 'reading-tree');
-    await tester.ensureVisible(find.widgetWithText(ActionChip, '沿山路前进的体验'));
-    await tester.tap(find.widgetWithText(ActionChip, '沿山路前进的体验'));
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('grounding-node-walk')));
+    await tester.tap(find.byKey(const ValueKey('grounding-node-walk')));
     await settle(tester);
     expect(find.textContaining('具体经验 · 模拟示例'), findsOneWidget);
     await tester.ensureVisible(find.text('相关名言与概念详情'));

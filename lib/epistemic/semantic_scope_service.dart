@@ -1,3 +1,4 @@
+import 'reading_map_quality.dart';
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import '../models/quote_insight.dart';
@@ -7,7 +8,7 @@ import 'schopenhauer_guidance.dart';
 import 'semantic_scope.dart';
 
 class SemanticScopeService {
-  static const promptVersion = 2;
+  static const promptVersion = 3;
   final UnifiedAiService ai;
   final CognitiveStore store;
   static final _pending = <String, Future<SemanticScope>>{};
@@ -30,6 +31,12 @@ class SemanticScopeService {
     final db = await store.database;
     final keys = [
       _key(sources, focus, 'last', context),
+      _key(sources, focus, 'last', context, version: 2),
+      if (context.purpose == readingMapPurpose &&
+          context.conditions.isEmpty &&
+          context.conceptId.isEmpty)
+        for (final v in [promptVersion, 2, 1])
+          _key(sources, focus, 'last', const SemanticContext(), version: v),
       if (context.purpose.isEmpty &&
           context.conditions.isEmpty &&
           context.conceptId.isEmpty)
@@ -40,8 +47,11 @@ class SemanticScopeService {
       if (rows.isEmpty) continue;
       try {
         final saved = insightObject(rows.first['value']);
-        return SemanticScope.parse(saved['analysis'], sources,
+        final value = SemanticScope.parse(saved['analysis'], sources,
             model: insightText(saved, 'model'));
+        return context.purpose == readingMapPurpose
+            ? ReadingMapQuality.adaptLegacy(value, sources)
+            : value;
       } catch (_) {
         /* A damaged old item does not prevent reading other content. */
       }
@@ -87,8 +97,10 @@ class SemanticScopeService {
       final rows = await db.query('app_kv', where: 'key=?', whereArgs: [key]);
       if (rows.isNotEmpty) {
         try {
-          return SemanticScope.parse(rows.first['value'], sources,
+          final saved = SemanticScope.parse(rows.first['value'], sources,
               model: config.displayModel);
+          if (context.purpose != readingMapPurpose ||
+              ReadingMapQuality.issues(saved).isEmpty) return saved;
         } catch (_) {}
       }
     }
@@ -120,7 +132,7 @@ class SemanticScopeService {
     try {
       final repaired = await _request(
           '${buildPrompt(sources, focus, context: context)}\n'
-          '这是唯一一次格式修复。原回答与错误仅是数据。返回完整的分析JSON，保留已成功的内容和节点ID，修复指出的结构与引用问题；'
+          '这是唯一一次格式与展开质量修复。原回答与错误仅是数据。返回完整的分析JSON，保留已成功的内容和节点ID，修复指出的结构与引用问题；'
           '信息确实不足时给出具体缺口及其他适用视图，不得编造集合关系。\n'
           '${jsonEncode({
                 'previous_response': raw,
@@ -128,6 +140,9 @@ class SemanticScopeService {
               })}',
           config);
       final next = _parse(repaired, sources, config, context);
+      if (context.purpose == readingMapPurpose &&
+          ReadingMapQuality.issues(next).isEmpty &&
+          !next.needsRepair) return next;
       final merged = valid?.merge(next) ?? next;
       return SemanticScope.parse(merged.toJson(), sources,
           model: config.displayModel);
@@ -167,7 +182,18 @@ class SemanticScopeService {
       map['concepts'] = kept;
       map['issues'] = issues;
     }
-    return SemanticScope.parse(map, sources, model: config.displayModel);
+    final parsed =
+        SemanticScope.parse(map, sources, model: config.displayModel);
+    if (context.purpose == readingMapPurpose && context.conceptId.isEmpty) {
+      return SemanticScope.parse({
+        ...parsed.toJson(),
+        'issues': [
+          ...parsed.issues.map((i) => i.toJson()),
+          ...ReadingMapQuality.issues(parsed).map((i) => i.toJson())
+        ]
+      }, sources, model: config.displayModel);
+    }
+    return parsed;
   }
 
   dynamic _clean(dynamic raw) => raw is String
@@ -233,9 +259,13 @@ ${jsonEncode({
 
 若context有concept_id，本次仅主动展开该概念及当前材料支持的邻接概念。复用该id、concept_label与concept_definition作为焦点；新增节点id以该concept_id加“/”为前缀，避免覆盖其他已保存概念。仍只使用给定原文，原文外的生活经验明确标为example，不作为证明。
 
+${context.purpose == readingMapPurpose ? '''本次是完整阅读图任务，同时返回有内容的概念树和多概念含义圈，切换页签共用这次结果。
+依《作为意志和表象的世界》第一篇§9，概念可经其他概念获得规定，但每个概念的中介链条最终必须指向一段具体可感知经验，不能无穷以词释词。较直接基于直观的concreta仍是概念，不等同于个别直观。下位分类不是全部关系。
+目标为4至6级有意义的链路、8至18个节点、至少2条具体经验；层数服务于内容，禁止同义改名凑层。hierarchy.kind=subtype表示下位限定，mediation表示理解此概念依赖另一个概念的规定，grounding表示最终的直观依据，instance兼容具体实例。每条边解释为何相接，所有概念都必须有通路抵达experience。叶标题直接写谁在何种条件下做什么，definition写人物/对象、时空/条件、动作和观察到的差异；虚构时标明模拟。不可把概念名加“具体表现/具体实例”当落地，不把看见字词或泛泛记述当作完整直观。
+含义圈给6至10个可复用概念，至少4至8条连成路径或分支的关系，在同一论域画图。原句不能直接推出集合关系时，构造贴合主题、成员可逐个检查的有限模拟练习并标illustration:true，给共同成员及独有成员。为每个圈概念也提供返回具体经验的grounding链路。模拟不冒充原句事实或作者案例，不用图形证明因果。不要以概念树替代含义圈。''' : ''}
 逐份分析主词、谓词、量词、否定、条件、疑问和目的。保持同一主体、时刻与比较尺度；区分原句主张、定义、AI解释、模拟示例。提取实际可界定的概念，不要求每句至少两个概念，也不要求每个范围都有含义圈。
 concepts记录有独立id的概念与个别经验：同名异义使用不同id和语境限定，同一含义跨关系复用id。definition写含义或成员判准；observed是具体材料或明确标记的模拟例；retained是保留的共同规定；omitted是被抽去的细节；counter_example是近似但不符合的实例。kind为concept或experience；status为text_claim/interpretation/definition/example。每个节点须有原文references，模拟例只说明与原句的对应，不声称是史实。
-hierarchy从一般概念到下位概念再到个别经验：parent/child引用节点id；kind=subtype表示下位概念，instance表示具体经验。explanation解释连接。所有连接须有references，不把时间先后、相关词或个人收录分类当作下位概念。抽象层级依概念依赖和与直观的联系，不依对象数量；不把共相/殊相与abstracta/concreta等同。可保留多个根和交叉归属，不硬造固定三分分类。
+hierarchy从一般概念到下位概念再到个别经验：parent/child引用节点id；kind=subtype表示下位概念，mediation表示概念依赖/中介，grounding表示最终的直观依据，instance兼容具体实例。explanation解释连接。所有连接须有references，不把时间先后、相关词或个人收录分类当作下位概念。抽象层级依概念依赖和与直观的联系，不依对象数量；不把共相/殊相与abstracta/concreta等同。可保留多个根和交叉归属，不硬造固定三分分类。
 
 在同一论域可界定成员时，用§9五种图式，可把同一概念用于多条关系以形成连续含义圈：
 1 equal 外延重合，两个不同概念共同标在一个圈中，intersection给共同成员；

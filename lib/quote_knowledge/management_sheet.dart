@@ -1,3 +1,5 @@
+import 'cost_policy.dart';
+import 'hierarchy_statistics_view.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'models.dart';
@@ -29,9 +31,13 @@ class QuoteKnowledgeManagement extends StatefulWidget {
 
 class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
   QuoteKnowledgeGraph? _graph;
+  ClassificationUsage? _usage;
+  int _requestLimit = ClassificationCostPolicy.defaultRequests;
   List<Map<String, dynamic>> _proof = [], _review = [];
   int _reviewLimit = 20;
   StreamSubscription<void>? _changes;
+  Timer? _refresh;
+  int _loadGeneration = 0;
   final _selected = <String>{};
   bool _busy = false;
   String? _message;
@@ -39,19 +45,26 @@ class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
   void initState() {
     super.initState();
     _load();
-    _changes = QuoteKnowledgeEvents.changes.listen((_) => _load());
+    _changes = QuoteKnowledgeEvents.changes.listen((_) {
+      _refresh?.cancel();
+      _refresh = Timer(const Duration(milliseconds: 180), _load);
+    });
   }
 
   @override
   void dispose() {
     _changes?.cancel();
+    _refresh?.cancel();
     super.dispose();
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     try {
       await widget.repository.bootstrapLegacy();
       final graph = await widget.repository.snapshot();
+      final usage = await widget.repository.usage();
+      if (_graph == null) _requestLimit = usage.limit;
       final review = await widget.repository.reviewQueue(limit: _reviewLimit);
       var proof = <Map<String, dynamic>>[];
       if (widget.quote != null) {
@@ -60,9 +73,10 @@ class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
         proof = rows;
         if (_graph == null) _selected.addAll(rows.map((r) => '${r['id']}'));
       }
-      if (mounted)
+      if (mounted && generation == _loadGeneration)
         setState(() {
           _graph = graph;
+          _usage = usage;
           _proof = proof;
           _review = review;
         });
@@ -166,7 +180,7 @@ class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
     return ExpansionTile(
         key: ValueKey('knowledge-category-${c.id}'),
         title: title,
-        subtitle: Text(c.definition),
+        subtitle: Text('${c.definition}\n直属子类 ${children.length} 个'),
         children: [
           Wrap(spacing: 8, children: [
             TextButton.icon(
@@ -199,27 +213,72 @@ class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
                   tooltip: '关闭分类管理',
                   icon: const Icon(Icons.close))
             ]),
-            const Text('新增名言自动归类；优先复用已有类别，必要时建立下位类别。自动归类保留原句依据，可人工调整。',
+            const Text('先复用已有结果和本地主题初分，减少AI调用；需要深入细分时合并处理，每批最多8条。原句依据和人工调整保留。',
                 style: TextStyle(height: 1.6)),
             if (_graph case final g?) ...[
               Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Text(
                       '全库 ${g.quoteCount} 条 · 队列 ${g.pending} 条 · 待复核 ${g.needsReview} 条 · 旧记录待整理 ${g.legacyRemaining} 条')),
+              if (_usage case final u?)
+                Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                        color: const Color(0xfff5f2fa),
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                              '本轮 AI ${u.used}/${u.limit} 次 · 本地初分 ${u.local} 条 · 复用 ${u.cached} 条'),
+                          const SizedBox(height: 6),
+                          Text(
+                              '本轮预留用量估算 ${u.estimatedUsed}/${u.estimatedLimit}；不是供应商实际计费Token。',
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.black54)),
+                          if (u.stopped || u.exhausted)
+                            const Text('本轮预算已达上限，AI已暂停；可按需开始下一轮。'),
+                          DropdownButtonFormField<int>(
+                              initialValue: _requestLimit,
+                              decoration: const InputDecoration(
+                                  labelText: '本轮AI请求上限（含重试）'),
+                              items: [
+                                for (final n in [1, 3, 6])
+                                  DropdownMenuItem(
+                                      value: n, child: Text('最多 $n 次'))
+                              ],
+                              onChanged: _busy
+                                  ? null
+                                  : (v) =>
+                                      setState(() => _requestLimit = v ?? 3)),
+                          const Text('首次失败后最多再重试3次，成功项不重发；每次重试均计入本轮预算，用完暂停。',
+                              style: TextStyle(fontSize: 11, height: 1.5)),
+                        ])),
               Wrap(spacing: 8, children: [
                 FilledButton.icon(
                     key: const ValueKey('knowledge-backfill'),
                     onPressed: _busy
                         ? null
-                        : () => _run(widget.repository.enqueueBackfill,
-                            '已加入整理队列，可暂停后继续。'),
+                        : () => _run(
+                            () => widget.repository
+                                .enqueueBackfill(requestLimit: _requestLimit),
+                            '已开始本地优先整理，AI调用受本轮预算限制。'),
                     icon: const Icon(Icons.auto_awesome),
                     label: const Text('一键分批整理旧记录')),
+                TextButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(
+                            () => widget.repository.enqueueBackfill(
+                                semantic: true, requestLimit: _requestLimit),
+                            '已加入AI批量细分队列，原主题初分可继续阅读。'),
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: const Text('AI 批量细分')),
                 TextButton(
                     onPressed: _busy
                         ? null
                         : () => _run(widget.repository.pauseBackfill,
-                            '已暂停旧记录队列；正在处理的一条会完成。'),
+                            '已暂停旧记录队列；正在处理的一批会完成。'),
                     child: const Text('暂停旧记录整理')),
                 TextButton(
                     onPressed: _busy
@@ -231,6 +290,7 @@ class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
                     icon: const Icon(Icons.add),
                     label: const Text('新增根类别')),
               ]),
+              CategoryHierarchyStatisticsView(categories: g.categories),
               if (widget.quote != null) ...[
                 Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),

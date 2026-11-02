@@ -1,3 +1,4 @@
+import 'semantic_scope_service.dart';
 import 'package:flutter/material.dart';
 import '../data/quote_insight_store.dart';
 import '../models/quote_insight.dart';
@@ -23,6 +24,7 @@ class QuoteCognitiveReader extends StatefulWidget {
   final QuoteReference quote;
   final String topic, authorLabel, note;
   final String? imagePath;
+  final SemanticScopeService? semanticService;
   const QuoteCognitiveReader({
     super.key,
     required this.quote,
@@ -30,6 +32,7 @@ class QuoteCognitiveReader extends StatefulWidget {
     required this.authorLabel,
     required this.note,
     this.imagePath,
+    this.semanticService,
   });
   @override
   State<QuoteCognitiveReader> createState() => _QuoteCognitiveReaderState();
@@ -188,6 +191,7 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
               _addon.cognition, widget.quote.content);
           final scopePanel = PassageScopeView(
               text: widget.quote.content,
+              service: widget.semanticService,
               scopes: detail.scopes.isNotEmpty ? detail.scopes : saved.scopes,
               abstractions: detail.abstractions.isNotEmpty
                   ? detail.abstractions
@@ -350,6 +354,7 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                         key: ValueKey(
                             'reading-concepts-${widget.quote.contentKey}'),
                         text: widget.quote.content,
+                        service: widget.semanticService,
                         imagePath: widget.imagePath,
                         showCircles: prefs.relations,
                         scopes: detail.scopes.isNotEmpty

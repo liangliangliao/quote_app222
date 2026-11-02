@@ -1,3 +1,4 @@
+import 'grounding_path_view.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -286,11 +287,13 @@ Future<void> inspectConcept(
 
 class ConceptHierarchyView extends StatefulWidget {
   final SemanticScope value;
+  final bool traceGrounding;
   final ValueChanged<String>? onExpand, onOpen;
   final Map<String, String> imagePaths;
   const ConceptHierarchyView(
       {super.key,
       required this.value,
+      this.traceGrounding = false,
       this.onExpand,
       this.onOpen,
       this.imagePaths = const {}});
@@ -300,8 +303,22 @@ class ConceptHierarchyView extends StatefulWidget {
 
 class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
   String? selected;
+  bool _fullTree = false;
   @override
   Widget build(BuildContext context) {
+    if (widget.traceGrounding && !_fullTree)
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        GroundingPathView(
+            value: widget.value,
+            onInspect: (id) => inspectConcept(context, id, widget.value,
+                onExpand: widget.onExpand,
+                onOpen: widget.onOpen,
+                imagePaths: widget.imagePaths)),
+        TextButton.icon(
+            onPressed: () => setState(() => _fullTree = true),
+            icon: const Icon(Icons.account_tree_outlined),
+            label: const Text('查看完整概念树与分支')),
+      ]);
     final nodes = widget.value.concepts, edges = widget.value.hierarchy;
     if (nodes.isEmpty) return const Text('尚无概念层级。可主动分析当前原文，已有解读仍可阅读。');
     final depths = {for (final n in nodes) n.id: 0};
@@ -407,7 +424,11 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
                                     ]))))),
               ),
           ])),
-      const Text('实线：下位概念　虚线：具体实例；分类与示例不表示因果或穷尽。',
+      if (widget.traceGrounding)
+        TextButton(
+            onPressed: () => setState(() => _fullTree = false),
+            child: const Text('返回概念的直观链路')),
+      const Text('实线：下位限定；虚线：概念依赖或直观依据。点选节点核对关系，链路最终回到具体经验。',
           style: TextStyle(fontSize: 12)),
       Wrap(spacing: 6, children: [
         for (final n in nodes)
@@ -447,7 +468,7 @@ class _HierarchyLinks extends CustomPainter {
         ..lineTo(from.dx, (from.dy + to.dy) / 2)
         ..lineTo(to.dx, (from.dy + to.dy) / 2)
         ..lineTo(to.dx, to.dy);
-      if (e.kind == 'instance') {
+      if (e.kind != 'subtype') {
         for (final metric in path.computeMetrics()) {
           for (double d = 0; d < metric.length; d += 10) {
             canvas.drawPath(

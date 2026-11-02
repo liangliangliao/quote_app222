@@ -261,6 +261,8 @@ jobs:
             '{source_sha: $source_sha, build_sha: $build_sha, ref: $ref, run_url: $run_url}' \
             > build/apk-delivery/build-info.json
           (cd build/apk-delivery && sha256sum "${package_name}.apk" > SHA256SUMS)
+          cp docs/quote_knowledge_economy_v6.md build/apk-delivery/QUOTE-KNOWLEDGE-V6.md
+          cp docs/reading_concept_grounding_v7.md build/apk-delivery/READING-GROUNDING-V7.md
           cp docs/quote_knowledge_prototypes_v5.md build/apk-delivery/QUOTE-KNOWLEDGE-V5.md
           cp docs/quote_epistemic_p0_implementation.md build/apk-delivery/READING-AND-COMPARISON.md
           cp docs/cognitive_prototypes_2_10.md build/apk-delivery/COGNITIVE-MODES.md

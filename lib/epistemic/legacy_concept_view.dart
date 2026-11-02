@@ -1,3 +1,5 @@
+import 'reading_illustration.dart';
+import 'reading_map_quality.dart';
 import '../models/quote_insight.dart';
 import 'concept_analysis.dart';
 import 'semantic_scope.dart';
@@ -5,6 +7,8 @@ import 'semantic_scope.dart';
 /// Adapt only actual saved definitions and examples. No inferred subtype edges.
 SemanticScope? legacyConceptView(String text,
     List<ConceptAbstraction> abstractions, List<ConceptScope> scopes) {
+  final illustration = readingIllustration(text);
+  if (illustration != null) return illustration;
   if (abstractions.isEmpty && scopes.isEmpty) return null;
   final refs = [ScopeReference('A', text)];
   final nodes = <SemanticConcept>[];
@@ -21,10 +25,13 @@ SemanticScope? legacyConceptView(String text,
         counterExample: a.counterExample,
         references: refs));
     final example = a.memberExample.isNotEmpty ? a.memberExample : a.observed;
-    if (example.isNotEmpty) {
+    if (example.isNotEmpty && !ReadingMapQuality.placeholder(example)) {
       nodes.add(SemanticConcept(
           id: '$id/example',
-          label: '“${a.term}”的具体表现',
+          label: String.fromCharCodes(example
+              .replaceFirst(RegExp(r'^(?:模拟|示例|例子)[：:]\s*'), '')
+              .runes
+              .take(36)),
           definition: example,
           kind: 'experience',
           status: 'example',

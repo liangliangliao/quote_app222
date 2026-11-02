@@ -336,10 +336,11 @@ class SemanticScope {
             !nodes.containsKey(child) ||
             parent == child ||
             nodes[parent]!.kind != 'concept' ||
-            !['subtype', 'instance'].contains(kind) ||
-            (kind == 'instance') != (nodes[child]!.kind == 'experience') ||
+            !['subtype', 'mediation', 'grounding', 'instance'].contains(kind) ||
+            (['instance', 'grounding'].contains(kind)) !=
+                (nodes[child]!.kind == 'experience') ||
             insightText(m, 'explanation').isEmpty) {
-          throw const FormatException('层级须区分下位概念与个别实例，且连接已知节点');
+          throw const FormatException('链路须区分下位限定、概念依赖和直观依据，且连接已知节点');
         }
         bool reaches(String at, Set<String> seen) =>
             at == parent ||

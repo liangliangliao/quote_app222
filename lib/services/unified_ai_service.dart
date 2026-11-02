@@ -1,3 +1,4 @@
+import '../quote_knowledge/cost_policy.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -585,11 +586,14 @@ class UnifiedAiService {
     }
     final cfg = await resolveGlobalConfig(forcedProvider: forcedProvider, forcedModel: forcedModel);
     final requestCfg = await _requestSettings.getConfig();
-    final effectiveMaxTokens = requestCfg.resolveMaxTokens(maxTokens);
+    final classificationBatch = purpose == 'quote_knowledge.batch.v2';
+    final effectiveMaxTokens = classificationBatch
+        ? ClassificationCostPolicy.capOutput(maxTokens, requestCfg.resolveMaxTokens(maxTokens))
+        : requestCfg.resolveMaxTokens(maxTokens);
     final effectiveTemperature = requestCfg.resolveTemperature(temperature);
     final effectiveTopP = requestCfg.resolveTopP();
     var effectiveTimeout = requestCfg.resolveTimeout(const Duration(seconds: 90));
-    var effectiveRetryCount = requestCfg.resolveRetryCount();
+    var effectiveRetryCount = classificationBatch ? 0 : requestCfg.resolveRetryCount();
     var effectiveRetryDelayMs = requestCfg.resolveRetryDelayMs();
     // Movie episode generation calls many small JSON tasks. OpenRouter may
     // return temporary upstream 429 for a selected provider even when the

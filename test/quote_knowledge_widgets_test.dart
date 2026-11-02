@@ -1,3 +1,4 @@
+import 'package:quote_app/quote_knowledge/hierarchy_statistics_view.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -283,6 +284,47 @@ void main() {
                 repository: repository, quote: rows.first)),
         width: 320,
         scale: 2);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+      'management shows economical controls, layer chart and per-parent descendant counts',
+      (tester) async {
+    final happy = (await tester.runAsync(() => repository.categories()))!
+        .firstWhere((c) => c.name == '幸福');
+    await tester.runAsync(() async {
+      final process =
+          (await repository.categories()).firstWhere((c) => c.name == '过程性的幸福');
+      final target = await repository.createCategory('有方向的体验', '朝向目标时的体验',
+          parentId: process.id);
+      final learning = await repository.createCategory('学习中的幸福', '在学习中体验幸福',
+          parentId: target);
+      await repository
+          .assignManually(knowledgeQuoteKey(rows.first), [learning]);
+    });
+    await mount(tester,
+        Scaffold(body: QuoteKnowledgeManagement(repository: repository)));
+    expect(find.text('本轮 AI 0/3 次 · 本地初分 0 条 · 复用 0 条'), findsOneWidget);
+    expect(find.textContaining('首次失败后最多再重试3次'), findsOneWidget);
+    await capture(tester, 'management-budget');
+    await tester.scrollUntilVisible(find.text('概念分类结构'), 260,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.byType(CategoryHierarchyStatisticsView), findsOneWidget);
+    expect(find.text('总层数 4'), findsOneWidget);
+    await capture(tester, 'management-levels');
+    await tester.ensureVisible(find.text('父子结构图'));
+    await tester.tap(find.text('父子结构图'));
+    await settle(tester);
+    await tester.ensureVisible(find.byKey(ValueKey('stats-node-${happy.id}')));
+    await tester.tap(find.text('幸福'));
+    await settle(tester);
+    expect(find.text('直属子类 1 · 全部下位类 3'), findsOneWidget);
+    await capture(tester, 'management-tree');
+    await mount(tester,
+        Scaffold(body: QuoteKnowledgeManagement(repository: repository)),
+        width: 320, scale: 2);
+    expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(find.text('概念分类结构'), 260,
+        scrollable: find.byType(Scrollable).first);
     expect(tester.takeException(), isNull);
   });
 }
