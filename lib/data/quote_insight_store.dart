@@ -39,16 +39,55 @@ class QuoteInsightStore {
   Future<void> saveAddon(QuoteReference quote, QuoteAnalysisAddon addon) =>
       _write('quote_insight.addon.${quote.contentKey}', addon.toJson());
 
-  Future<Map<String, QuoteAnalysisAddon>> readAddons(List<QuoteReference> quotes) async {
+  Future<Map<String, QuoteAnalysisAddon>> readAddons(
+      List<QuoteReference> quotes) async {
     final db = await _ready();
     final result = <String, QuoteAnalysisAddon>{};
-    final keys = quotes.map((q) => 'quote_insight.addon.${q.contentKey}').toSet().toList();
+    final keys = quotes
+        .map((q) => 'quote_insight.addon.${q.contentKey}')
+        .toSet()
+        .toList();
     for (var offset = 0; offset < keys.length; offset += 200) {
       final batch = keys.skip(offset).take(200).toList();
-      final rows = await db.query('app_kv', where: 'key IN (${List.filled(batch.length, '?').join(',')})', whereArgs: batch);
+      final rows = await db.query('app_kv',
+          where: 'key IN (${List.filled(batch.length, '?').join(',')})',
+          whereArgs: batch);
       for (final row in rows) {
         final key = row['key'] as String;
-        result[key.substring('quote_insight.addon.'.length)] = QuoteAnalysisAddon.fromStoredJson(row['value']);
+        result[key.substring('quote_insight.addon.'.length)] =
+            QuoteAnalysisAddon.fromStoredJson(row['value']);
+      }
+    }
+    return result;
+  }
+
+  Future<void> saveSemanticConcepts(
+          QuoteReference quote, Iterable<String> labels) =>
+      _write('quote_insight.semantic_concepts.${quote.contentKey}', {
+        'labels': labels
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toSet()
+            .take(36)
+            .toList(),
+      });
+
+  Future<Map<String, List<String>>> readSemanticConcepts(
+      List<QuoteReference> quotes) async {
+    final db = await _ready();
+    const prefix = 'quote_insight.semantic_concepts.';
+    final keys = quotes.map((q) => '$prefix${q.contentKey}').toSet().toList();
+    final result = <String, List<String>>{};
+    for (var start = 0; start < keys.length; start += 200) {
+      final batch = keys.skip(start).take(200).toList();
+      final rows = await db.query('app_kv',
+          columns: ['key', 'value'],
+          where: 'key IN (${List.filled(batch.length, '?').join(',')})',
+          whereArgs: batch);
+      for (final row in rows) {
+        final labels = insightObject(row['value'])['labels'];
+        result[(row['key'] as String).substring(prefix.length)] =
+            labels is List ? labels.whereType<String>().toList() : [];
       }
     }
     return result;

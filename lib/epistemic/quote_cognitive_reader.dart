@@ -17,6 +17,7 @@ import 'cognitive_usage.dart';
 import 'concept_meaning_diagram.dart';
 import 'quote_intuitive_gallery.dart';
 import 'passage_scope_view.dart';
+import 'semantic_scope.dart';
 
 class QuoteCognitiveReader extends StatefulWidget {
   final QuoteReference quote;
@@ -40,6 +41,8 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
   int _tab = 0;
   bool _choseTab = false;
   int _artRevision = 0;
+  int _conceptTab = 0;
+  SemanticScope? _semanticConcepts;
   String get _recordId =>
       widget.quote.id.isEmpty ? widget.quote.contentKey : widget.quote.id;
   CognitiveSelection get _selection => CognitiveSelection.fromText(
@@ -82,6 +85,33 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
       task: CognitiveTask.concept,
     );
     if (mounted) await _load();
+  }
+
+  Future<void> _indexConcepts(SemanticScope value) async {
+    try {
+      await QuoteInsightStore().saveSemanticConcepts(
+          widget.quote,
+          value.concepts
+              .where((n) =>
+                  n.kind == 'concept' &&
+                  n.references.any((r) => r.source == 'A'))
+              .map((n) => n.label));
+    } catch (_) {/* Related quotes can still fall back to literal matches. */}
+  }
+
+  Future<void> _openContextConcept(String id, SemanticScope value,
+      {bool related = false}) async {
+    final node = value.concepts.where((n) => n.id == id).firstOrNull;
+    if (node == null) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ConceptExplorer(
+                title: node.label,
+                contextSources: [ScopeSource('A', widget.quote.content)],
+                contextScope: value,
+                focusNodeId: id,
+                initialTab: related ? 2 : 0)));
   }
 
   Future<void> _observe() async {
@@ -258,7 +288,7 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                         ),
                     ],
                   ),
-                  if (prefs.relations && (_tab == 0 || _tab == 1)) scopePanel,
+                  if (prefs.relations && _tab == 0) scopePanel,
                   if (_tab == 0) ...[
                     QuoteIntuitiveGallery(
                       topic: widget.topic,
@@ -306,43 +336,92 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                     ),
                   ],
                   if (_tab == 1) ...[
-                    if (detail.abstractions.isNotEmpty ||
-                        detail.scopes.isNotEmpty)
-                      ConceptAnalysisView(
-                        abstractions: detail.abstractions,
-                        scopes: const [],
+                    Wrap(spacing: 8, runSpacing: 4, children: [
+                      for (final entry in ['概念树', '含义圈', '相关名言'].indexed)
+                        if (entry.$1 != 1 || prefs.relations)
+                          ChoiceChip(
+                              label: Text(entry.$2),
+                              selected: _conceptTab == entry.$1,
+                              onSelected: (_) =>
+                                  setState(() => _conceptTab = entry.$1)),
+                    ]),
+                    if (_conceptTab != 2)
+                      PassageScopeView(
+                        key: ValueKey(
+                            'reading-concepts-${widget.quote.contentKey}'),
+                        text: widget.quote.content,
+                        imagePath: widget.imagePath,
+                        showCircles: prefs.relations,
+                        scopes: detail.scopes.isNotEmpty
+                            ? detail.scopes
+                            : saved.scopes,
+                        abstractions: detail.abstractions.isNotEmpty
+                            ? detail.abstractions
+                            : saved.abstractions,
+                        preferredView: _conceptTab == 1 && prefs.relations
+                            ? EpistemicViewKind.circles
+                            : EpistemicViewKind.hierarchy,
+                        onResult: (value) {
+                          if (mounted) {
+                            setState(() => _semanticConcepts = value);
+                            _indexConcepts(value);
+                          }
+                        },
+                        onOpenConcept: (id, value) =>
+                            _openContextConcept(id, value),
                       ),
-                    _block(
-                      '从经验到概念',
-                      _conceptNote?.analysis.summary ??
-                          '概念提取共同规定，也会省略具体经验的细节。可以查看一个实例、反例和适用边界。',
-                      icon: Icons.hub_outlined,
-                    ),
-                    if (concepts.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: [
-                            for (final concept in concepts)
-                              ActionChip(
-                                label: Text(concept),
-                                onPressed: () => Navigator.push(
+                    if (_conceptTab != 2 &&
+                        concepts.isNotEmpty &&
+                        (_semanticConcepts?.concepts.isEmpty ?? true))
+                      Wrap(spacing: 8, children: [
+                        for (final concept in concepts)
+                          ActionChip(
+                              label: Text(concept),
+                              onPressed: () => Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) =>
-                                        ConceptExplorer(title: concept),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    TextButton(
-                      onPressed: _expandConcept,
-                      child: const Text('概念、实例与边界'),
-                    ),
+                                      builder: (_) => ConceptExplorer(
+                                              title: concept,
+                                              contextSources: [
+                                                ScopeSource(
+                                                    'A', widget.quote.content)
+                                              ]))))
+                      ]),
+                    if (_conceptTab == 2) ...[
+                      const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('选择当前原文中的概念，查看本地相关名言。文字匹配与概念建议均不表示已核实。')),
+                      if (_semanticConcepts?.concepts.isNotEmpty == true)
+                        Wrap(spacing: 8, children: [
+                          for (final node in _semanticConcepts!.concepts
+                              .where((n) => n.kind == 'concept'))
+                            ActionChip(
+                                label: Text(node.label),
+                                onPressed: () => _openContextConcept(
+                                    node.id, _semanticConcepts!,
+                                    related: true))
+                        ])
+                      else if (concepts.isNotEmpty)
+                        Wrap(spacing: 8, children: [
+                          for (final concept in concepts)
+                            ActionChip(
+                                label: Text(concept),
+                                onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => ConceptExplorer(
+                                            title: concept,
+                                            contextSources: [
+                                              ScopeSource(
+                                                  'A', widget.quote.content)
+                                            ],
+                                            initialTab: 2))))
+                        ])
+                      else
+                        TextButton(
+                            onPressed: () => setState(() => _conceptTab = 0),
+                            child: const Text('先分析当前原文的概念')),
+                    ],
                     if (_addon.boundary.isNotEmpty)
                       _block('概念遗漏了什么', _addon.boundary),
                   ],

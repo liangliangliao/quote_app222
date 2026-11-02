@@ -1,14 +1,16 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'concept_meaning_diagram.dart';
+import 'concept_meaning_network.dart';
+import 'concept_hierarchy_view.dart';
 import 'semantic_scope.dart';
+import 'cognitive_mode.dart';
 import 'semantic_scope_service.dart';
 
 String scopeStatus(String value) => switch (value) {
       'text_claim' => '按原句主张',
       'definition' => '依所列定义',
       'interpretation' => 'AI 暂定解释',
-      _ => '关系尚待确定'
+      _ => '需要补充具体条件',
     };
 
 class SemanticScopePanel extends StatefulWidget {
@@ -16,14 +18,26 @@ class SemanticScopePanel extends StatefulWidget {
   final String focus;
   final SemanticScope? initial;
   final SemanticScopeService? service;
-  final bool stars;
+  final bool stars, allowCircles, showViewSelector;
+  final SemanticContext analysisContext;
+  final EpistemicViewKind? preferredView;
+  final ValueChanged<SemanticScope>? onResult;
+  final void Function(String, SemanticScope)? onOpenConcept;
+  final Map<String, String> imagePaths;
   const SemanticScopePanel(
       {super.key,
       required this.sources,
       this.focus = '句中概念',
       this.initial,
       this.service,
-      this.stars = false});
+      this.stars = false,
+      this.allowCircles = true,
+      this.showViewSelector = true,
+      this.analysisContext = const SemanticContext(),
+      this.preferredView,
+      this.onResult,
+      this.onOpenConcept,
+      this.imagePaths = const {}});
   @override
   State<SemanticScopePanel> createState() => _SemanticScopePanelState();
 }
@@ -38,23 +52,31 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
   void initState() {
     super.initState();
     result = widget.initial;
-    if (result == null) _load();
+    _load();
   }
 
   @override
   void didUpdateWidget(SemanticScopePanel old) {
     super.didUpdateWidget(old);
-    if (widget.initial?.toJson().toString() !=
-            old.initial?.toJson().toString() ||
-        widget.sources.map((s) => s.toJson()).toString() !=
+    if (widget.sources.map((s) => s.toJson()).toString() !=
             old.sources.map((s) => s.toJson()).toString() ||
-        widget.focus != old.focus) {
+        widget.focus != old.focus ||
+        widget.analysisContext.toJson().toString() !=
+            old.analysisContext.toJson().toString()) {
       generation++;
       result = widget.initial;
       busy = false;
       readingCache = false;
       error = null;
-      if (result == null) _load();
+      _load();
+    } else if (widget.initial?.toJson().toString() !=
+            old.initial?.toJson().toString() &&
+        widget.initial != null) {
+      generation++;
+      result = widget.initial;
+      busy = false;
+      readingCache = false;
+      error = null;
     }
   }
 
@@ -62,25 +84,55 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
     final n = ++generation;
     readingCache = true;
     try {
-      final v = await service.cached(widget.sources, widget.focus);
-      if (mounted && n == generation) setState(() => result = v);
+      final value = await service.cached(widget.sources, widget.focus,
+          context: widget.analysisContext);
+      if (mounted && n == generation) {
+        setState(() => result = value ?? result);
+        if (result != null) widget.onResult?.call(result!);
+      }
     } catch (_) {
     } finally {
       if (mounted && n == generation) setState(() => readingCache = false);
     }
   }
 
-  Future<void> _analyze() async {
+  Future<void> _analyze([String? conceptId]) async {
     final n = ++generation;
     setState(() {
       busy = true;
       readingCache = false;
       error = null;
     });
+    final node = result?.concepts.where((c) => c.id == conceptId).firstOrNull;
+    final context = node == null
+        ? widget.analysisContext
+        : SemanticContext(
+            purpose: widget.analysisContext.purpose,
+            conditions: widget.analysisContext.conditions,
+            conceptId: node.id,
+            conceptLabel: node.label,
+            conceptDefinition: node.definition);
     try {
-      final v = await service.analyze(widget.sources, widget.focus,
-          force: result != null);
-      if (mounted && n == generation) setState(() => result = v);
+      final value = await service.analyze(widget.sources, widget.focus,
+          force: conceptId == null && result != null, context: context);
+      if (mounted && n == generation) {
+        final combined = result != null && (node != null || value.needsRepair)
+            ? result!.merge(value)
+            : value;
+        final next = SemanticScope.parse(combined.toJson(), widget.sources,
+            model: combined.model);
+        setState(() => result = next);
+        widget.onResult?.call(next);
+        if (node != null) {
+          try {
+            await service.remember(widget.sources, widget.focus, next,
+                context: widget.analysisContext);
+          } catch (_) {
+            if (mounted && n == generation)
+              setState(() => error = '展开内容已显示，暂未保存；可稍后重试。');
+          }
+        }
+      }
     } catch (e) {
       if (mounted && n == generation)
         setState(() => error = e is FormatException
@@ -106,15 +158,25 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
         const Text('概念关系与根据图',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         Text(widget.focus, style: const TextStyle(fontSize: 12)),
-        if (result case final v?)
+        if (result case final value?)
           SemanticScopeView(
-              value: v, sources: widget.sources, stars: widget.stars)
+              value: value,
+              sources: widget.sources,
+              stars: widget.stars,
+              allowCircles: widget.allowCircles,
+              showViewSelector: widget.showViewSelector,
+              preferredView: widget.preferredView,
+              imagePaths: widget.imagePaths,
+              onExpand: busy ? null : (id) => _analyze(id),
+              onOpenConcept: widget.onOpenConcept == null
+                  ? null
+                  : (id) => widget.onOpenConcept!(id, value))
         else
           const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
-              child: Text('由 AI 分析所选材料中的概念、判准和关系，再按第九节的五种图式绘制。')),
+              child: Text('分析当前原文，连接一般概念与具体经验，并选择适合的含义圈、根据图或判断力视图。')),
         if (error != null)
-          Text(error!,
+          Text('$error${result != null ? ' 已保留已有分析。' : ''}',
               style: TextStyle(color: Theme.of(context).colorScheme.error)),
         if (busy || readingCache) const LinearProgressIndicator(),
         OutlinedButton.icon(
@@ -131,239 +193,227 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
 class SemanticScopeView extends StatefulWidget {
   final SemanticScope value;
   final List<ScopeSource> sources;
-  final bool stars;
+  final bool stars, allowCircles, showViewSelector;
+  final EpistemicViewKind? preferredView;
+  final ValueChanged<String>? onExpand, onOpenConcept;
+  final Map<String, String> imagePaths;
   const SemanticScopeView(
       {super.key,
       required this.value,
       required this.sources,
-      this.stars = false});
+      this.stars = false,
+      this.allowCircles = true,
+      this.showViewSelector = true,
+      this.preferredView,
+      this.onExpand,
+      this.onOpenConcept,
+      this.imagePaths = const {}});
   @override
   State<SemanticScopeView> createState() => _SemanticScopeViewState();
 }
 
 class _SemanticScopeViewState extends State<SemanticScopeView> {
   int selected = 0;
+  EpistemicViewKind? chosen;
+  @override
+  void didUpdateWidget(SemanticScopeView old) {
+    super.didUpdateWidget(old);
+    if (old.preferredView != widget.preferredView ||
+        old.sources.map((s) => s.toJson()).toString() !=
+            widget.sources.map((s) => s.toJson()).toString()) {
+      chosen = null;
+      selected = 0;
+    }
+  }
+
+  String where(String placement) => placement == 'cross'
+      ? '跨材料'
+      : widget.sources.length == 1
+          ? '当前原文'
+          : '$placement 句内';
   @override
   Widget build(BuildContext context) {
-    final all = widget.value.relations;
-    final i = selected.clamp(0, all.length - 1),
-        relation = all[i],
-        scope = relation.scope;
-    String label(SemanticRelation r) {
-      final named = widget.sources.where((s) => s.id == r.placement && s.title.isNotEmpty).firstOrNull;
-      final where = r.placement == 'cross'
-          ? '跨材料'
-          : named != null ? '主题 ${named.title}' : widget.sources.length == 1
-              ? '句内概念'
-              : '${r.placement} 句内';
-      return '$where　${r.scope == null ? '待确定' : '${r.scope!.setA} / ${r.scope!.setB}'}';
-    }
-
+    final value = widget.value;
+    final views = value.availableViews
+        .where(
+            (view) => widget.allowCircles || view != EpistemicViewKind.circles)
+        .toList();
+    final preferred = chosen ?? widget.preferredView;
+    final active = views.contains(preferred)
+        ? preferred
+        : views.contains(value.primaryView)
+            ? value.primaryView
+            : views.firstOrNull;
+    final drawable = value.relations.where((r) => r.scope != null).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (widget.value.model.isNotEmpty)
-        Text('AI 分析 · ${widget.value.model}',
+      if (readableModelName(value.model).isNotEmpty)
+        Text('AI 分析 · ${readableModelName(value.model)}',
             style: const TextStyle(fontSize: 12)),
-      if (widget.stars)
-        _RelationAtlas(
-            relations: all,
-            selected: i,
-            onSelect: (n) => setState(() => selected = n)),
-      if (all.length > 1)
-        Wrap(spacing: 6, runSpacing: 4, children: [
-          for (final entry in all.indexed)
-            ChoiceChip(
-                label: Text(label(entry.$2)),
-                selected: i == entry.$1,
-                onSelected: (_) => setState(() => selected = entry.$1))
-        ]),
-      Text(scopeStatus(relation.status), style: const TextStyle(fontSize: 12)),
-      if (scope != null) ...[
-        ConceptMeaningDiagram(
-            key: ValueKey(scope.toJson().toString()),
-            relation: scope.relation,
-            setA: scope.setA,
-            setB: scope.setB,
-            universe: scope.universe,
-            onlyA: scope.onlyA,
-            onlyB: scope.onlyB,
-            intersection: scope.intersection,
-            otherMember: scope.otherMember,
-            parts: scope.parts),
-        Text(scope.justification),
+      if (value.needsRepair)
         ExpansionTile(
+            expansionAnimationStyle: cognitiveExpansionStyle(context),
             tilePadding: EdgeInsets.zero,
-            title: const Text('概念判准与原文依据'),
-            children: [
-              Text(
-                  'A　${scope.setA}\n${scope.criterionA}\nB　${scope.setB}\n${scope.criterionB}'),
-              for (final p in scope.parts)
-                Text('${p.term}　${p.criterion}\n${p.example}'),
-              for (final ref in relation.references)
-                Text('${ref.source}　「${ref.excerpt}」'),
-            ])
+            title:
+                const Text('部分内容返回不完整，已保留可用分析', style: TextStyle(fontSize: 13)),
+            children: [for (final issue in value.issues) Text(issue.message)]),
+      if (widget.preferredView == EpistemicViewKind.circles &&
+          !views.contains(EpistemicViewKind.circles))
+        Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('当前内容更适合${active?.label ?? '概念分析'}，可从下方查看其原文依据与适用条件。')),
+      if (widget.showViewSelector && views.length > 1)
+        Wrap(spacing: 6, runSpacing: 4, children: [
+          for (final view in views)
+            ChoiceChip(
+                label: Text(view.label),
+                selected: active == view,
+                onSelected: (_) => setState(() => chosen = view))
+        ]),
+      if (active == EpistemicViewKind.hierarchy)
+        ConceptHierarchyView(
+            value: value,
+            imagePaths: widget.imagePaths,
+            onExpand: widget.onExpand,
+            onOpen: widget.onOpenConcept),
+      if (active == EpistemicViewKind.abstraction) ...[
+        const Text('具体材料 → 保留的共同规定 → 被省略的个别细节',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        for (final node in value.concepts.where((n) =>
+            n.kind == 'concept' &&
+            [n.observed, n.retained, n.omitted].any((s) => s.isNotEmpty)))
+          ConceptDetails(
+              node: node,
+              onExpand: widget.onExpand,
+              imagePath: widget.imagePaths[node.id]),
       ],
+      if (active == EpistemicViewKind.circles) ...[
+        ConceptMeaningNetwork(
+            value: value,
+            onExpand: widget.onExpand,
+            onOpen: widget.onOpenConcept,
+            onRelation: (i) => setState(() => selected = i)),
+        if (drawable.length > 1)
+          Wrap(spacing: 6, children: [
+            for (final r in drawable)
+              ChoiceChip(
+                  label: Text(
+                      '${where(r.placement)}　${r.scope!.setA} / ${r.scope!.setB}'),
+                  selected: value.relations.indexOf(r) == selected,
+                  onSelected: (_) =>
+                      setState(() => selected = value.relations.indexOf(r)))
+          ]),
+        if (drawable.isNotEmpty)
+          _relation(value.relations.elementAtOrNull(selected)?.scope == null
+              ? drawable.first
+              : value.relations[selected]),
+      ],
+      if (active == EpistemicViewKind.grounds) ...[
+        const Text('四重根据 · 按原文材料展开',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        for (final root in [
+          '生成根据 · 因果与条件',
+          '认识根据 · 判断的依据',
+          '存在根据 · 时间与空间',
+          '行动根据 · 动机'
+        ])
+          if (value.grounds.any((g) => g.root == root)) ...[
+            Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: Text(root,
+                    style: const TextStyle(fontWeight: FontWeight.w600))),
+            for (final ground in value.grounds.where((g) => g.root == root))
+              GroundRelationView(ground),
+          ],
+      ],
+      if (active == EpistemicViewKind.judgment) ...[
+        const Text('判断力 · 围绕当前目的辨清同异',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        for (final j in value.judgments)
+          Card(
+              elevation: 0,
+              color: const Color(0xfffffcf6),
+              child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('${where(j.placement)} · ${j.question}',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                        for (final field in [
+                          ('共同规定', j.common),
+                          ('关键区分', j.difference),
+                          ('决定性差异', j.decisive),
+                          ('适用条件', j.conditions),
+                          ('判断依据', j.basis),
+                          ('需要补充的材料', j.unknown)
+                        ])
+                          if (field.$2.isNotEmpty)
+                            Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: Text('${field.$1}：${field.$2}',
+                                    style: const TextStyle(height: 1.65))),
+                        _references(j.references),
+                      ]))),
+        for (final r in value.relations.where((r) => r.scope == null))
+          Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                        '${where(r.placement)} · ${r.outcome == 'needs_context' ? '还需明确具体条件' : '采用概念与主张对照'}',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(r.statement, style: const TextStyle(height: 1.65)),
+                    _references(r.references),
+                  ])),
+      ],
+      if (active == null) const Text('当前分析未形成可展示的视图，可保留原文后重新分析。'),
+    ]);
+  }
+
+  Widget _references(List<ScopeReference> references) => ExpansionTile(
+          expansionAnimationStyle: cognitiveExpansionStyle(context),
+          tilePadding: EdgeInsets.zero,
+          title: const Text('查看原文依据'),
+          children: [
+            for (final r in references)
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('${r.source}　「${r.excerpt}」',
+                      style: const TextStyle(height: 1.6)))
+          ]);
+  Widget _relation(SemanticRelation relation) {
+    final scope = relation.scope!;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(scopeStatus(relation.status), style: const TextStyle(fontSize: 12)),
+      ConceptMeaningDiagram(
+          key: ValueKey(scope.toJson().toString()),
+          relation: scope.relation,
+          setA: scope.setA,
+          setB: scope.setB,
+          universe: scope.universe,
+          onlyA: scope.onlyA,
+          onlyB: scope.onlyB,
+          intersection: scope.intersection,
+          otherMember: scope.otherMember,
+          parts: scope.parts),
+      Text(scope.justification, style: const TextStyle(height: 1.6)),
       Text(relation.statement, style: const TextStyle(height: 1.6)),
-      if (scope == null)
-        for (final ref in relation.references)
-          Text('${ref.source}　「${ref.excerpt}」'),
-      if (widget.value.grounds.isNotEmpty) ...[
-        const Divider(height: 28),
-        const Text('根据律视角', style: TextStyle(fontWeight: FontWeight.bold)),
-        for (final g in widget.value.grounds) GroundRelationView(g),
-      ],
+      ExpansionTile(
+          expansionAnimationStyle: cognitiveExpansionStyle(context),
+          tilePadding: EdgeInsets.zero,
+          title: const Text('概念判准与原文依据'),
+          children: [
+            Text(
+                'A　${scope.setA}\n${scope.criterionA}\nB　${scope.setB}\n${scope.criterionB}'),
+            for (final p in scope.parts)
+              Text('${p.term}　${p.criterion}\n${p.example}'),
+            for (final r in relation.references)
+              Text('${r.source}　「${r.excerpt}」'),
+          ]),
     ]);
   }
-}
-
-/// Each mini-map uses its semantic geometry. No link is inferred from counts.
-class _RelationAtlas extends StatelessWidget {
-  final List<SemanticRelation> relations;
-  final int selected;
-  final ValueChanged<int> onSelect;
-  const _RelationAtlas(
-      {required this.relations,
-      required this.selected,
-      required this.onSelect});
-  @override
-  Widget build(BuildContext context) {
-    final names = <String>{};
-    for (final r in relations) {
-      if (r.scope case final s?) {
-        names.addAll([s.setA, s.setB]);
-        if (s.parts.isNotEmpty)
-          names.addAll([s.universe, ...s.parts.map((p) => p.term)]);
-        if (s.relation.name == 'siblings') names.add(s.universe);
-      }
-    }
-    final nodes = names.toList();
-    final positions = <String, Offset>{
-      for (final n in nodes.indexed)
-        n.$2: Offset(
-            325 +
-                245 * math.cos(2 * math.pi * n.$1 / math.max(1, nodes.length)),
-            325 +
-                245 * math.sin(2 * math.pi * n.$1 / math.max(1, nodes.length)))
-    };
-    return Column(children: [
-      const Text('概念星图 · 连线按语义分析标注关系图式',
-          style: TextStyle(fontWeight: FontWeight.bold)),
-      if (nodes.isNotEmpty)
-        SizedBox(
-            height: 300,
-            child: ClipRect(
-                child: InteractiveViewer(
-                    minScale: 1,
-                    maxScale: 4,
-                    child: FittedBox(
-                        child: GestureDetector(
-                            onTapUp: (tap) {
-                              var best = 50.0;
-                              int? found;
-                              for (final r in relations.indexed) {
-                                final s = r.$2.scope;
-                                if (s == null) continue;
-                                final midpoint =
-                                    (positions[s.setA]! + positions[s.setB]!) /
-                                        2;
-                                final d =
-                                    (midpoint - tap.localPosition).distance;
-                                if (d < best) {
-                                  best = d;
-                                  found = r.$1;
-                                }
-                              }
-                              if (found != null) onSelect(found);
-                            },
-                            child: CustomPaint(
-                                size: const Size(650, 650),
-                                painter: _SemanticNetwork(
-                                    relations,
-                                    positions,
-                                    Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.fontFamily))))))),
-      const Text('① 重合　② 包含　③ 穷尽划分　④ 相交　⑤ 同属上位范围',
-          style: TextStyle(fontSize: 12)),
-    ]);
-  }
-}
-
-class _SemanticNetwork extends CustomPainter {
-  final List<SemanticRelation> relations;
-  final Map<String, Offset> positions;
-  final String? font;
-  const _SemanticNetwork(this.relations, this.positions, this.font);
-  void label(Canvas c, String text, Offset at, double width, double size) {
-    final t = TextPainter(
-        text: TextSpan(
-            text: text,
-            style: TextStyle(
-                color: const Color(0xff313b3e),
-                fontFamily: font,
-                fontSize: size)),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.center,
-        maxLines: 3,
-        ellipsis: '…')
-      ..layout(maxWidth: width);
-    c.drawRect(
-        Rect.fromCenter(center: at, width: t.width + 6, height: t.height + 4),
-        Paint()..color = const Color(0xfffcf7eb));
-    t.paint(c, at - Offset(t.width / 2, t.height / 2));
-  }
-
-  @override
-  void paint(Canvas c, Size size) {
-    for (final entry in relations.indexed) {
-      final s = entry.$2.scope;
-      if (s == null) continue;
-      final a = positions[s.setA]!, b = positions[s.setB]!;
-      if (s.parts.isNotEmpty || s.relation.name == 'siblings') {
-        final parent = positions[s.universe]!;
-        for (final term in s.parts.isNotEmpty
-            ? s.parts.map((p) => p.term)
-            : [s.setA, s.setB]) {
-          c.drawLine(
-              parent,
-              positions[term]!,
-              Paint()
-                ..color = const Color(0xffb0a68d)
-                ..strokeWidth = 2);
-          label(c, '②', (parent + positions[term]!) / 2, 38, 16);
-        }
-      }
-      c.drawLine(
-          a,
-          b,
-          Paint()
-            ..color = const Color(0xff8b8474)
-            ..strokeWidth = 2);
-      label(
-          c,
-          '${entry.$1 + 1} · ${scopePattern(s.relation.name).substring(0, 1)}',
-          (a + b) / 2,
-          90,
-          18);
-    }
-    for (final node in positions.entries) {
-      c.drawCircle(node.value, 53, Paint()..color = const Color(0xffece3d3));
-      c.drawCircle(
-          node.value,
-          53,
-          Paint()
-            ..color = const Color(0xffa78b54)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2);
-      label(c, node.key, node.value, 92, 20);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_SemanticNetwork old) =>
-      old.relations != relations ||
-      old.positions.toString() != positions.toString() ||
-      old.font != font;
 }
 
 String scopePattern(String name) => switch (name) {
@@ -372,7 +422,7 @@ String scopePattern(String name) => switch (name) {
       'partition' => '③ 互斥且穷尽上位范围',
       'overlap' => '④ 部分相交',
       'siblings' => '⑤ 同属上位范围且未穷尽',
-      _ => '尚待确定'
+      _ => '需要补充具体条件',
     };
 
 class GroundRelationView extends StatelessWidget {
