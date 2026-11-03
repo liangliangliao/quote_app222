@@ -1,3 +1,4 @@
+import '../widgets/ai_budget_panel.dart';
 import '../diary/diary_settings_page.dart';
 import 'package:path/path.dart' as p;
 import '../services/sport_music_service.dart';
@@ -4377,12 +4378,12 @@ Future<String?> _saveAvatarTemp(File file) async {
       ),
       const SizedBox(height: 8),
       const Text(
-        '统一最大输出 Tokens',
+        '统一最大输出 Tokens（全局上限）',
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
       const SizedBox(height: 4),
       const Text(
-        '含义：限制模型单次最多输出多少内容。留空则沿用模块默认；数值越小越省 token，但回答可能被截断。',
+        '这是额度上限，不是实际消费。最终取任务预算、此上限与已知模型限制的最小值；90000 不会让每个任务都输出 90000。推理模型的额度可能同时包含推理与正文，实际用量以服务返回为准。',
         style: TextStyle(fontSize: 12, color: Colors.grey),
       ),
       TextField(
@@ -4395,6 +4396,8 @@ Future<String?> _saveAvatarTemp(File file) async {
         ),
       ),
       const SizedBox(height: 8),
+      TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiUsagePage())),
+          icon: const Icon(Icons.receipt_long_outlined), label: const Text('查看任务额度与实际用量')),
       const Text(
         '统一 Temperature',
         style: TextStyle(fontWeight: FontWeight.bold),
