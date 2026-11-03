@@ -17,12 +17,19 @@ class _GroundingPathViewState extends State<GroundingPathView> {
     final node = widget.value.concepts.where((c) => c.id == id).firstOrNull;
     if (node == null) return [];
     if (['experience', 'formal'].contains(node.kind)) return [node];
-    var best = <SemanticConcept>[];
+    var best = <SemanticConcept>[], priority = 99;
+    const roles = {'mediation': 0, 'grounding': 1, 'instance': 2, 'subtype': 3};
     for (final e in widget.value.hierarchy.where((e) => e.parent == id)) {
       final child = _path(e.child, {...visited});
+      final nextPriority = roles[e.kind] ?? 99;
+      // Prefer an explicitly stated content dependency over a longer class
+      // branch. Length alone does not establish a concept's content.
       if (child.isNotEmpty &&
           ['experience', 'formal'].contains(child.last.kind) &&
-          child.length > best.length) best = child;
+          nextPriority < priority) {
+        best = child;
+        priority = nextPriority;
+      }
     }
     return [node, ...best];
   }
@@ -45,7 +52,7 @@ class _GroundingPathViewState extends State<GroundingPathView> {
           const Text('概念如何获得内容 · 沿中介链回到直观',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          const Text('概念仍是抽象表象。下位限定、概念依赖与直观依据分别核对；模拟描述是返回经验的线索。',
+          const Text('概念仍是抽象表象。这里追踪一条内容链，优先核对概念中介；下位限定和实例保留各自角色，模拟描述是返回经验的线索。',
               style: TextStyle(fontSize: 12, height: 1.6)),
           Wrap(spacing: 6, runSpacing: 4, children: [
             for (final c in concepts)

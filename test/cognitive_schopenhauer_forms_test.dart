@@ -155,7 +155,12 @@ void main() {
     expect(find.byType(ConceptCirclePreview),findsNothing);expect(edges.first.label,'以持志为目标');
     await capture(tester,'wang-class-tree');
     await tester.ensureVisible(find.text('追踪概念的直观链路'));await tester.tap(find.text('追踪概念的直观链路'));await tester.pumpAndSettle();
-    expect(find.byType(GroundingPathView),findsOneWidget);expect(find.textContaining('教学情境：'),findsWidgets);
+    expect(find.byType(GroundingPathView),findsOneWidget);
+    final focus=find.widgetWithText(ChoiceChip,'专注收摄式持志');
+    await tester.ensureVisible(focus);await tester.tap(focus);await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('grounding-node-M')),findsOneWidget);
+    expect(find.byKey(const ValueKey('grounding-node-E')),findsOneWidget);
+    expect(find.textContaining('教学情境：'),findsWidgets);
     await capture(tester,'wang-content-trace');
   });
   testWidgets('meaning canvas uses real regions, canonical selection and analytic status',(tester) async {
