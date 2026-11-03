@@ -11,7 +11,9 @@ import 'schopenhauer_guidance.dart';
 import 'semantic_scope.dart';
 
 class SemanticScopeService {
-  static const promptVersion = 4;
+  static const promptVersion = 5;
+  // Accounting strips the version suffix, preserving user task budgets.
+  static const requestPurpose = 'cognition.semantic.v5';
   final UnifiedAiService ai;
   final CognitiveStore store;
   static final _pending = <String, Future<SemanticScope>>{};
@@ -29,7 +31,12 @@ class SemanticScopeService {
                     : ({...s.toJson()}..remove('origin')))
                 .toList(),
             if (version >= 4)
-              [SchopenhauerGuidance.version, MeaningCircleContract.version],
+              version == 4
+                  ? [5, 3]
+                  : [
+                      SchopenhauerGuidance.version,
+                      MeaningCircleContract.version
+                    ],
             focus,
             model,
             if (version >= 2) context.toJson(),
@@ -40,11 +47,12 @@ class SemanticScopeService {
     final db = await store.database;
     final keys = [
       _key(sources, focus, 'last', context),
-      for (final v in [3, 2]) _key(sources, focus, 'last', context, version: v),
+      for (final v in [4, 3, 2])
+        _key(sources, focus, 'last', context, version: v),
       if (context.purpose == readingMapPurpose &&
           context.conditions.isEmpty &&
           context.conceptId.isEmpty)
-        for (final v in [promptVersion, 3, 2, 1])
+        for (final v in [promptVersion, 4, 3, 2, 1])
           _key(sources, focus, 'last', const SemanticContext(), version: v),
       if (context.purpose.isEmpty &&
           context.conditions.isEmpty &&
@@ -115,7 +123,8 @@ class SemanticScopeService {
         try {
           final saved = SemanticScope.parse(rows.first['value'], sources,
               model: config.displayModel);
-          if (context.purpose != readingMapPurpose ||
+          if (context.conceptId.isNotEmpty ||
+              context.purpose != readingMapPurpose ||
               ReadingMapQuality.issues(saved).isEmpty) return saved;
         } catch (_) {}
       }
@@ -144,7 +153,7 @@ class SemanticScopeService {
     final config = await ai.resolveGlobalConfig();
     if (!config.available) throw StateError('请先配置文字 AI');
     final raw = await _request(
-        '只修复指出的项目，返回语义图v3增量JSON，不重写整图。'
+        '只修复指出的项目，返回语义图v4增量JSON，不重写整图。'
         '保留已有概念id；返回resolved_paths列出实际修复的错误路径，不得仅声称修复。\n'
         '${buildPrompt(sources, focus, context: context)}\n'
         '${jsonEncode({
@@ -162,7 +171,26 @@ class SemanticScopeService {
         maxTokens: 2000,
         action: 'repair');
     final map = insightObject(_clean(raw));
-    final patch = _parse(map, sources, config, context);
+    final branchIssue = previous.issues
+        .where((i) => i.path == 'expansion.connections')
+        .firstOrNull;
+    final focusId = branchIssue?.originalItem?['focus_id'];
+    final focusNode =
+        previous.concepts.where((c) => c.id == focusId).firstOrNull;
+    final patch = _parse(
+        map,
+        sources,
+        config,
+        SemanticContext(
+            purpose: context.purpose,
+            conditions: context.conditions,
+            conceptId: focusNode?.id ?? '',
+            conceptLabel: focusNode?.label ?? '',
+            conceptDefinition: focusNode?.definition ?? '',
+            existingConcepts: previous.concepts,
+            existingHierarchy: previous.hierarchy,
+            existingLinks: previous.meaningLinks,
+            existingRelations: previous.relations));
     final resolved = map['resolved_paths'] is List
         ? (map['resolved_paths'] as List).whereType<String>().toSet()
         : <String>{};
@@ -171,13 +199,29 @@ class SemanticScopeService {
       if (!resolved.contains(issue.path) || issue.originalItem == null)
         return false;
       final item = issue.originalItem!;
+      if (issue.path == 'expansion.connections' &&
+          item['concept_ids'] is List) {
+        final oldIds = previous.concepts.map((c) => c.id).toSet();
+        return (item['concept_ids'] as List).every((id) =>
+                !oldIds.contains(id) &&
+                patch.concepts.any((n) => n.id == id)) &&
+            !patch.issues.any((i) => i.path == 'expansion.connections');
+      }
       // A model's "resolved" assertion is insufficient: require a locally
       // parsed replacement with the same identity and role.
       if (issue.path.startsWith('concepts['))
-        return patch.concepts.any((n) => n.id == item['id']);
+        return (map['concepts'] is List &&
+                (map['concepts'] as List)
+                    .any((n) => n is Map && n['id'] == item['id'])) &&
+            patch.concepts.any((n) => n.id == item['id']);
       if (issue.path.startsWith('hierarchy['))
         return patch.hierarchy
             .any((e) => e.parent == item['parent'] && e.child == item['child']);
+      if (issue.path.startsWith('meaning_links['))
+        return patch.meaningLinks.any((e) =>
+            e.from == item['from'] &&
+            e.to == item['to'] &&
+            e.kind == item['kind']);
       if (issue.path.startsWith('relations[')) {
         final scope = insightObject(item['scope']);
         return patch.relations.any((r) =>
@@ -265,6 +309,45 @@ class SemanticScopeService {
   SemanticScope _parse(dynamic raw, List<ScopeSource> sources,
       UnifiedAiResolvedConfig config, SemanticContext context) {
     final map = insightObject(_clean(raw));
+    if (context.conceptId.isNotEmpty && context.existingConcepts.isNotEmpty) {
+      final oldIds = context.existingConcepts.map((c) => c.id).toSet();
+      final aliases = <String, String>{};
+      for (final rawNode
+          in map['concepts'] is List ? map['concepts'] as List : const []) {
+        final id = insightText(insightObject(rawNode), 'id');
+        if (id.isNotEmpty &&
+            !oldIds.contains(id) &&
+            !id.startsWith('${context.conceptId}/'))
+          aliases[id] = '${context.conceptId}/$id';
+      }
+      String identity(dynamic id) => aliases[id] ?? (id is String ? id : '');
+      void rewrite(String key, List<String> fields) {
+        if (map[key] is! List) return;
+        map[key] = (map[key] as List).map((value) {
+          final item = insightObject(value);
+          for (final field in fields) {
+            if (item.containsKey(field)) item[field] = identity(item[field]);
+          }
+          return item;
+        }).toList();
+      }
+
+      rewrite('concepts', ['id']);
+      rewrite('hierarchy', ['parent', 'child']);
+      rewrite('meaning_links', ['from', 'to']);
+      if (map['relations'] is List) {
+        map['relations'] = (map['relations'] as List).map((value) {
+          final item = insightObject(value);
+          for (final key in ['node_ids', 'part_ids']) {
+            if (item[key] is List)
+              item[key] = (item[key] as List).map(identity).toList();
+          }
+          if (item.containsKey('universe_id'))
+            item['universe_id'] = identity(item['universe_id']);
+          return item;
+        }).toList();
+      }
+    }
     if (context.conceptId.isNotEmpty && map['concepts'] is List) {
       final kept = <dynamic>[];
       final issues = <dynamic>[
@@ -274,13 +357,15 @@ class SemanticScopeService {
         final node = insightObject(rawNode),
             id = insightText(insightObject(rawNode), 'id');
         final target = id == context.conceptId;
-        final valid = target
-            ? (context.conceptLabel.isEmpty ||
-                    insightText(node, 'label') == context.conceptLabel) &&
-                (context.conceptDefinition.isEmpty ||
-                    insightText(node, 'definition') ==
-                        context.conceptDefinition)
-            : id.startsWith('${context.conceptId}/');
+        final known = context.existingConcepts.any((c) => c.id == id);
+        final valid = known ||
+            (target
+                ? (context.conceptLabel.isEmpty ||
+                        insightText(node, 'label') == context.conceptLabel) &&
+                    (context.conceptDefinition.isEmpty ||
+                        insightText(node, 'definition') ==
+                            context.conceptDefinition)
+                : id.startsWith('${context.conceptId}/'));
         if (valid) {
           kept.add(rawNode);
         } else {
@@ -292,8 +377,91 @@ class SemanticScopeService {
       map['concepts'] = kept;
       map['issues'] = issues;
     }
-    final parsed =
-        SemanticScope.parse(map, sources, model: config.displayModel);
+    var parsed = SemanticScope.parse(map, sources,
+        model: config.displayModel, knownConcepts: context.existingConcepts);
+    if (context.conceptId.isNotEmpty && context.existingConcepts.isNotEmpty) {
+      final graph = <String, Set<String>>{};
+      void connect(String a, String b) {
+        graph.putIfAbsent(a, () => {}).add(b);
+        graph.putIfAbsent(b, () => {}).add(a);
+      }
+
+      for (final e in [...context.existingHierarchy, ...parsed.hierarchy]) {
+        connect(e.parent, e.child);
+      }
+      for (final e in [...context.existingLinks, ...parsed.meaningLinks]) {
+        connect(e.from, e.to);
+      }
+      for (final r in [...context.existingRelations, ...parsed.relations]
+          .where((r) => r.nodeIds.length == 2)) {
+        connect(r.nodeIds[0], r.nodeIds[1]);
+        if (r.universeId.isNotEmpty) {
+          for (final id in [...r.nodeIds, ...r.partIds]) {
+            connect(r.universeId, id);
+          }
+        }
+      }
+      final reachable = <String>{context.conceptId},
+          queue = [context.conceptId];
+      for (var i = 0; i < queue.length; i++) {
+        for (final id in graph[queue[i]] ?? <String>{}) {
+          if (reachable.add(id)) queue.add(id);
+        }
+      }
+      final oldIds = context.existingConcepts.map((c) => c.id).toSet();
+      final orphans = parsed.concepts
+          .where((c) => !oldIds.contains(c.id) && !reachable.contains(c.id))
+          .map((c) => c.id)
+          .toSet();
+      if (orphans.isNotEmpty) {
+        final connected = parsed.toJson();
+        connected['concepts'] = parsed.concepts
+            .where((c) => !orphans.contains(c.id))
+            .map((c) => c.toJson())
+            .toList();
+        connected['hierarchy'] = parsed.hierarchy
+            .where((e) =>
+                !orphans.contains(e.parent) && !orphans.contains(e.child))
+            .map((e) => e.toJson())
+            .toList();
+        connected['meaning_links'] = parsed.meaningLinks
+            .where((e) => !orphans.contains(e.from) && !orphans.contains(e.to))
+            .map((e) => e.toJson())
+            .toList();
+        connected['relations'] = parsed.relations
+            .where((r) =>
+                !r.nodeIds.any(orphans.contains) &&
+                !r.partIds.any(orphans.contains) &&
+                !orphans.contains(r.universeId))
+            .map((r) => r.toJson())
+            .toList();
+        connected['issues'] = [
+          ...parsed.issues.map((i) => i.toJson()),
+          AnalysisIssue('expansion.connections',
+              '展开结果的 ${orphans.length} 个新节点没有连回所选概念，未加入原图；请修复缺少的连接。',
+              originalItem: {
+                'focus_id': context.conceptId,
+                'concept_ids': orphans.toList(),
+                'concepts': parsed.concepts
+                    .where((c) => orphans.contains(c.id))
+                    .map((c) => c.toJson())
+                    .toList(),
+                'hierarchy': parsed.hierarchy
+                    .where((e) =>
+                        orphans.contains(e.parent) || orphans.contains(e.child))
+                    .map((e) => e.toJson())
+                    .toList(),
+                'meaning_links': parsed.meaningLinks
+                    .where((e) =>
+                        orphans.contains(e.from) || orphans.contains(e.to))
+                    .map((e) => e.toJson())
+                    .toList(),
+              }).toJson()
+        ];
+        parsed =
+            SemanticScope.parse(connected, sources, model: config.displayModel);
+      }
+    }
     if (context.purpose == readingMapPurpose && context.conceptId.isEmpty) {
       return SemanticScope.parse({
         ...parsed.toJson(),
@@ -318,8 +486,9 @@ class SemanticScopeService {
       ai.generateText(
           prompt: prompt,
           systemPrompt: SchopenhauerGuidance.core,
-          purpose:
-              'cognition.semantic.${action.isEmpty ? '' : '$action.'}v$promptVersion',
+          purpose: action.isEmpty
+              ? requestPurpose
+              : 'cognition.semantic.$action.v$promptVersion',
           expectJson: true,
           maxTokens: maxTokens,
           temperature: .2,
@@ -369,21 +538,22 @@ ${jsonEncode({
             'context': context.toJson()
           })}
 
-若context有concept_id，本次仅主动展开该概念及当前材料支持的邻接概念。复用该id、concept_label与concept_definition作为焦点；新增节点id以该concept_id加“/”为前缀，避免覆盖其他已保存概念。仍只使用给定原文，原文外的生活经验明确标为example，不作为证明。
+若context有concept_id，本次是连接原图的增量展开：existing_concepts是不可改写的原图身份表，existing_hierarchy/existing_links是已有连线。直接引用这些旧id，不必重复输出旧节点；特别不能只记住焦点而忘记其他旧节点。新增节点id以concept_id加“/”为前缀。每个新增节点须通过hierarchy、meaning_links或有依据的relations连回焦点或焦点已有的连通分支；不得只返回一批孤立新概念，不得用猜测的边补齐。根据原文补上新→旧、旧→新及新→新的必要连线。仍只用给定材料，教学模拟标example。
 
 ${context.purpose == readingMapPurpose ? '''本次生成紧凑且语义充分的阅读图；概念树和含义圈共享同一次结果。
 依第一篇§9：概念经必要中介取得规定，最终返回直观内容。concreta仍是概念，不是个别直观。不得无限以词释词，也不得把共相/殊相等同于abstracta/concreta。
-按材料性质决定深度：简单事实只需事件与条件；定义可直接给准确包含和形式构造；经验论证保留必要的中间概念、前提和直观依据；隐喻说明对应和边界。没有固定层数、节点数、圈数、例子数或最低字数。
+按材料性质决定深度：简单事实保留事件与条件；定义给准确包含和形式构造；经验论证保留必要的中间概念、前提与直观依据。隐喻先解释意象在句中的功能，再分别展示意象、可能指向与对照关系，标清解释状态；不能把同一概念加“一个”或换近义词冒充下位概念。没有固定层数、节点数、圈数、例子数或最低字数。
 经验叶标题直接描述可辨认的对象或动作，不用“某概念的具体表现”占位；形式直观用kind:formal标明构造。模拟例子只作可选教学，不补成原文证据。
-有可靠成员依据时以复用节点展示必要的多概念圈图与较长链路；无依据时明确缺口和适用视图，不虚构一批圆来凑图。''' : ''}
+有可靠成员依据时复用节点展示多概念外延圈图；原文是隐喻、对照、偏好或主谓关系时，用meaning_links构成可阅读的概念关系网，不能因为没有集合成员就只返回独立概念。''' : ''}
 ${MeaningCircleContract.prompt}
 先识别命题、根据与结论，再选择图形。material_kind从fact/definition/metaphor/argument/experience/unknown选择，经验与论证尚无直观根据时如实标明缺口，不编造模拟补足。propositions按需记录id、subject、predicate、quantifier、polarity、condition、modality、conclusion、逐字evidence及origin；区分原文明示、定义、推测和教学模拟。不得把弱量词、否定或有条件命题强化为普遍必然结论。
-逐份分析主词、谓词、量词、否定、条件、疑问和目的。保持同一主体、时刻与比较尺度；区分原句主张、定义、AI解释、模拟示例。提取实际可界定的概念，不要求每句至少两个概念，也不要求每个范围都有含义圈。
+逐份分析主词、谓词、量词、否定、条件、疑问和目的。先给出最贴合句法与语境的正面理解和理由，再说明不同读法的边界；解释文学意象的合理指向，不能把“字面还是隐喻未知”当作完整解释。保持同一主体、时刻与比较尺度；区分原句主张、定义、AI解释、模拟示例。condition只填实际限制命题适用范围的条件，未明示时留空；不把背景、对文本的说明或“按原句”填作条件。提取实际可界定的概念，不凑数量。
 concepts记录有独立id的概念与个别经验：同名异义使用不同id和语境限定，同一含义跨关系复用id。definition写含义或成员判准；observed是具体材料或明确标记的模拟例；retained是保留的共同规定；omitted是被抽去的细节；counter_example是近似但不符合的实例。kind为concept、experience或formal；status为text_claim/interpretation/definition/example。每个节点须有原文references，模拟例只说明与原句的对应，不声称是史实。
-hierarchy从一般概念到下位概念再到个别经验：parent/child引用节点id；kind=subtype表示下位概念，mediation表示概念依赖/中介，grounding表示最终的直观依据，instance兼容具体实例。explanation解释连接。所有连接须有references，不把时间先后、相关词或个人收录分类当作下位概念。抽象层级依概念依赖和与直观的联系，不依对象数量；不把共相/殊相与abstracta/concreta等同。可保留多个根和交叉归属，不硬造固定三分分类。
+hierarchy的parent/child引用节点id：subtype须能成立“每一个child按新增判准也是parent”；mediation表示理解parent依赖child的概念规定；grounding从概念指向原文提供的个别直观或形式构造，instance是具体实例。explanation逐条说明为何成立，不把句中先后、隐喻指向、同义改写或收录分类当作上下位。抽象层级依含义依赖及与直观的联系，不依对象数量。经验叶须是原文具体材料或已标教学模拟，不以心理抽象词冒充直观。
+meaning_links表达其他含义关系：from/to引用同一概念身份；kind选metaphor（意象→解释指向）、contrast（对照）、predication（主词→谓词规定）、condition（条件→有条件结论）、cause（原因→变化，仍标原句主张）、sequence（先→后）、preference（优先项→较不愿项）、analogy（类比）、association（仅有明确语境关联）。每条给explanation、status=text_claim/interpretation/definition/unknown和references，解释推断标interpretation。一个节点可连接多个旧/新节点；同一材料内真实存在的联系不能省成标签清单。局部同义词不建假层级；没有依据的两个节点保持未连接。
 
 有node_ids时不重复set_a/set_b和criterion_a/criterion_b，由客户端直接引用概念label/definition；若填写则须复用同一定义，不得用同一个id偷换判准。每条scope给relation_scope=extension、universe、set_a/set_b、criterion_a/criterion_b、逐字摘录basis及justification。node_ids依次引用A/B概念id；partition另给part_ids对应parts顺序；partition和siblings给universe_id。先定义论域再选图；仅凭相似、作者、标签、收录数量不能推导外延包含。不能反转必然条件或用交集证明因果。
-不适合外延圈图时scope:null、outcome=non_extensional，具体说明适合何种认识论分析；确实缺条件时outcome=needs_context、status=unknown，说明需要什么观察。疑问句按含义分析，不按标点机械分类。不要强行绘图，也不要只给一串“待确定”。
+不适合外延圈图时scope:null、outcome=non_extensional，并用meaning_links明确画出有依据的非外延关系，而不是退成一批孤立圆。确实缺条件才给needs_context与具体需要的观察；不因概念不是集合就声称整句不可理解。疑问句按含义分析，不按标点机械分类。
 relations按必要关系返回，避免复述同一依据；引用节点id不靠标题合并。placement为对应来源id或cross；跨句必须引用至少两份参与材料；句内只能引用本句。多份材料的句内、跨句分析可分布在概念、判断力、根据图中，不必都产生集合关系。
 
 judgments用于判断力：placement、question（本次理解的问题）、common、difference、decisive（为什么差异会改变判断）、conditions、basis（原文支持到哪一步）、unknown与references。哲学疑问或价值主张可用这个视图，不假装已回答真实未知。必须指向当前原句，不能只写“都追求成长”。
@@ -391,6 +561,6 @@ grounds按四重根组织，接口kind仍为evidence/cause/time/space/motive：�
 recommended_view从circles/grounds/abstraction/hierarchy/judgment中推荐最适合且有内容的一种；先确定定义、判断、类比、因果、时间、空间或外延结构，再推荐视图；不以能画圈作为优先理由。无法画圈则推荐最贴合原句的其他视图。
 所有references的source必须是所给id、excerpt必须逐字存在于该来源text。relations.status为text_claim/interpretation/definition/unknown；grounds.status为text_claim/interpretation/unknown。模拟例明确标记example，不当作证明。材料不足说明具体缺口，不虚称外部核实。
 只返回紧凑JSON，避免重复序列化原文与图谱说明。优先返回evidence:[{id,source,excerpt}]引用表；同一摘录只写一次，节点/边/判断的references使用引用id数组，scope用basis_ref、propositions用evidence_ref。引用表不是语义证明；兼容直接source/excerpt引用。propositions逐项记录实际断言，纯概念词可为空，不要省略论证中的必要命题。字段结构如下（按需填写，空内容返回空数组）：
-{"schema_version":3,"material_kind":"unknown","recommended_view":"hierarchy","evidence":[{"id":"e1","source":"来源id","excerpt":"逐字原文"}],"propositions":[],"concepts":[{"id":"c1","label":"概念名","definition":"含义或判准","kind":"concept","status":"interpretation","universe":"语境论域","observed":"具体材料或模拟例","retained":"共同规定","omitted":"省略的细节","counter_example":"反例","references":["e1"]}],"hierarchy":[{"parent":"c1","child":"c2","kind":"subtype","explanation":"层级依据","references":[]}],"relations":[{"placement":"来源id或cross","statement":"关系理由或具体缺口","status":"text_claim","outcome":"drawable","references":[],"node_ids":["c1","c2"],"part_ids":[],"universe_id":"","scope":{"relation_type":"subset","relation_scope":"extension","universe":"论域","basis_ref":"e1","justification":"理由与限制","intersection":"内部成员","only_a":"","only_b":"外层成员","other_member":"","parts":[],"illustration":false}}],"grounds":[{"kind":"evidence","from":"依据","to":"判断","link":"支持到哪一步","status":"text_claim","references":[]}],"judgments":[{"placement":"来源id或cross","question":"当前问题","common":"共同点","difference":"区分","decisive":"差异为何重要","conditions":"适用条件","basis":"依据","unknown":"未知","references":[]}]}
+{"schema_version":4,"material_kind":"unknown","recommended_view":"hierarchy","evidence":[{"id":"e1","source":"来源id","excerpt":"逐字原文"}],"propositions":[],"concepts":[{"id":"c1","label":"概念名","definition":"含义或判准","kind":"concept","status":"interpretation","universe":"语境论域","observed":"具体材料或模拟例","retained":"共同规定","omitted":"省略的细节","counter_example":"反例","references":["e1"]}],"hierarchy":[{"parent":"c1","child":"c2","kind":"subtype","explanation":"层级依据","references":[]}],"meaning_links":[{"from":"c1","to":"c2","kind":"metaphor","explanation":"意象如何对应及边界","status":"interpretation","references":["e1"]}],"relations":[{"placement":"来源id或cross","statement":"关系理由或具体缺口","status":"text_claim","outcome":"drawable","references":[],"node_ids":["c1","c2"],"part_ids":[],"universe_id":"","scope":{"relation_type":"subset","relation_scope":"extension","universe":"论域","basis_ref":"e1","justification":"理由与限制","intersection":"内部成员","only_a":"","only_b":"外层成员","other_member":"","parts":[],"illustration":false}}],"grounds":[{"kind":"evidence","from":"依据","to":"判断","link":"支持到哪一步","status":"text_claim","references":[]}],"judgments":[{"placement":"来源id或cross","question":"当前问题","common":"共同点","difference":"区分","decisive":"差异为何重要","conditions":"适用条件","basis":"依据","unknown":"未知","references":[]}]}
 ''';
 }

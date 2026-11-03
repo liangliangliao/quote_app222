@@ -113,12 +113,9 @@ class PropositionConsistency {
       return const SemanticVerification(
           VerificationStatus.unknown, '疑问与断言的模态不同，不能仅因字词相同就支持结论');
     }
-    if (condition != null &&
-        condition.isNotEmpty &&
-        !c.contains(normalize(condition))) {
-      return const SemanticVerification(
-          VerificationStatus.unknown, '结论遗漏了所声明的适用条件');
-    }
+    // `condition` is itself an AI paraphrase. Its absence as a literal
+    // substring cannot establish that the conclusion dropped a qualification.
+    // In particular an exact quotation must not fail on an explanatory field.
     if (c == e)
       return const SemanticVerification(
           VerificationStatus.supported, '与所引原句逐字一致；只核对转述忠实度，不证明原句为真');
@@ -130,6 +127,14 @@ class PropositionConsistency {
     if (weakEvidence && strongConclusion)
       return const SemanticVerification(
           VerificationStatus.unknown, '结论强化了原文的量词或模态；原文未给出普遍必然性的根据');
+    if (strongConclusion &&
+        condition != null &&
+        RegExp(r'^(如果|若|只有|只要|除非|if\b|unless\b)', caseSensitive: false)
+            .hasMatch(condition.trim()) &&
+        e.contains(normalize(condition)) &&
+        !c.contains(normalize(condition)))
+      return const SemanticVerification(
+          VerificationStatus.unknown, '结论强化了明确附带条件的原句；需核对条件是否仍成立');
     // Contradiction is only decidable for the exact same proposition and its
     // explicit negation, not for different predicates that happen to share words.
     String positive(String text) => text.contains('不是')

@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/data/db.dart';
 import 'package:quote_app/epistemic/cognitive_preferences.dart';
-import 'package:quote_app/epistemic/grounding_path_view.dart';
+import 'package:quote_app/epistemic/concept_hierarchy_view.dart';
 import 'package:quote_app/epistemic/history_timeline.dart';
 import 'package:quote_app/epistemic/quote_cognitive_reader.dart';
 import 'package:quote_app/epistemic/reading_illustration.dart';
@@ -219,7 +219,8 @@ void main() {
     await tester.pump();
     expect(find.text('② 此刻'), findsOneWidget);
     final quote = find.byKey(const ValueKey('timeline-quote-early'));
-    await tester.tap(find.descendant(of: quote, matching: find.byTooltip('加入比较')));
+    await tester
+        .tap(find.descendant(of: quote, matching: find.byTooltip('加入比较')));
     expect(selected, 'early');
     await tester.tap(find.text(recipeQuote));
     expect(opened, 'early');
@@ -299,17 +300,17 @@ void main() {
                     analysisContext: readingMapContext,
                     preferredView: EpistemicViewKind.hierarchy))));
     expect(service.calls, 0);
-    await tester.ensureVisible(find.text('完善概念链与含义圈'));
-    await tester.tap(find.text('完善概念链与含义圈'));
+    await tester.ensureVisible(find.text('按新版重新分析概念与连线'));
+    await tester.tap(find.text('按新版重新分析概念与连线'));
     await settle(tester);
     expect(service.calls, 1);
     expect(find.textContaining('连接在完整结果返回前中断'), findsOneWidget);
-    expect(find.byType(GroundingPathView), findsOneWidget);
+    expect(find.byType(ConceptHierarchyView), findsOneWidget);
     await capture(tester, 'reading-stream-retry');
-    await tester.tap(find.text('完善概念链与含义圈'));
+    await tester.tap(find.text('按新版重新分析概念与连线'));
     await settle(tester);
     expect(service.calls, 2);
     expect(find.textContaining('连接在完整结果返回前中断'), findsNothing);
-    expect(find.byType(GroundingPathView), findsOneWidget);
+    expect(find.byType(ConceptHierarchyView), findsOneWidget);
   });
 }

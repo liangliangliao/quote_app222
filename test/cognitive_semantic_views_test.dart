@@ -187,9 +187,12 @@ void main() {
       'criterion_b': '属于苹果的果实'
     });
     (raw['relations'] as List).add(inverse);
-    final value = SemanticScope.parse(raw, const [ScopeSource('A', networkText)]);
-    expect(value.issues.any((issue) => issue.message.contains('不能同时成立')), isTrue);
-    expect(value.relations.where((r) => r.scope != null).length, lessThan((raw['relations'] as List).length));
+    final value =
+        SemanticScope.parse(raw, const [ScopeSource('A', networkText)]);
+    expect(
+        value.issues.any((issue) => issue.message.contains('不能同时成立')), isTrue);
+    expect(value.relations.where((r) => r.scope != null).length,
+        lessThan((raw['relations'] as List).length));
   });
   test('non-set philosophical questions recommend grounded alternate views',
       () {
@@ -235,7 +238,8 @@ void main() {
     expect(ai.calls, 1);
     expect(result.hierarchy.length, 2);
     expect(result.needsRepair, isTrue);
-    expect(await service.cached(const [ScopeSource('A', happiness)], '概念树'), isNull);
+    expect(await service.cached(const [ScopeSource('A', happiness)], '概念树'),
+        isNull);
     await db.close();
   });
   test(
@@ -323,7 +327,8 @@ void main() {
     await db.close();
   });
 
-  test('a comparison preserves useful prose without silently repairing its diagram',
+  test(
+      'a comparison preserves useful prose without silently repairing its diagram',
       () async {
     final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     final raw = {
@@ -468,7 +473,7 @@ void main() {
     await settle(tester);
     expect(find.byType(BottomSheet), findsOneWidget);
     final parent = find.descendant(
-        of: find.byType(BottomSheet), matching: find.text('返回上位概念：过程中的幸福'));
+        of: find.byType(BottomSheet), matching: find.text('具体实例：过程中的幸福'));
     await tester.ensureVisible(parent);
     await tester.tap(parent);
     await settle(tester);
@@ -498,6 +503,9 @@ void main() {
     expect(indexed!.values.single, contains('过程中的幸福'));
     expect(find.widgetWithText(ChoiceChip, '概念树'), findsOneWidget);
     await capture(tester, 'reading-tree');
+    await tester.ensureVisible(find.text('追踪概念的直观链路'));
+    await tester.tap(find.text('追踪概念的直观链路'));
+    await settle(tester);
     await tester
         .ensureVisible(find.byKey(const ValueKey('grounding-node-walk')));
     await tester.tap(find.byKey(const ValueKey('grounding-node-walk')));

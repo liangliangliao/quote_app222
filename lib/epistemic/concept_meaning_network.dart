@@ -17,6 +17,7 @@ class MeaningCluster {
   final List<SemanticRelation> relations;
   final List<MeaningCircle> circles;
   final Size size;
+
   /// Geometry consistency only; never source or philosophical verification.
   final bool verified;
   bool get geometryConsistent => verified;
@@ -288,13 +289,21 @@ class _ConceptMeaningNetworkState extends State<ConceptMeaningNetwork> {
     final clusters = ConceptCircleLayout.build(widget.value);
     final nodes = {for (final n in widget.value.concepts) n.id: n};
     final picked = nodes[selected];
+    final covered = {
+      for (final g in clusters)
+        for (final c in g.circles) ...c.ids
+    };
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (clusters.isEmpty)
+      if (clusters.isEmpty ||
+          widget.value.meaningLinks.isNotEmpty ||
+          nodes.keys.any((id) => !covered.contains(id)))
         ConceptCirclePreview(
             value: widget.value,
             onOpen: widget.onOpen,
             onExpand: widget.onExpand),
-      if (clusters.isNotEmpty) const Text('圆的布局仅核对几何关系；成员判准、原文支持与推理仍须分别核验。', style: TextStyle(fontSize: 11)),
+      if (clusters.isNotEmpty)
+        const Text('外延圈图 · 按所列论域与成员判准绘制',
+            style: TextStyle(fontWeight: FontWeight.w600)),
       for (final cluster in clusters) ...[
         if (cluster.geometryConsistent)
           ConceptCanvas(

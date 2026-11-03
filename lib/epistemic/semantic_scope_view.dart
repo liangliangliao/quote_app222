@@ -129,9 +129,13 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
             conditions: widget.analysisContext.conditions,
             conceptId: node.id,
             conceptLabel: node.label,
-            conceptDefinition: node.definition);
+            conceptDefinition: node.definition,
+            existingConcepts: result!.concepts,
+            existingHierarchy: result!.hierarchy,
+            existingLinks: result!.meaningLinks,
+            existingRelations: result!.relations);
     try {
-      operation = AiOperation('cognition.semantic.v4');
+      operation = AiOperation(SemanticScopeService.requestPurpose);
       final value = await AiRequestAudit.runOperation(
           operation!,
           () => service.analyze(widget.sources, widget.focus,
@@ -252,7 +256,7 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
                 }).toSet().join('、')}',
             style: const TextStyle(fontSize: 11)),
         const AiBudgetPanel(
-            purpose: 'cognition.semantic.v4', defaultBudget: 10000),
+            purpose: SemanticScopeService.requestPurpose, defaultBudget: 10000),
         if (result case final value?)
           SemanticScopeView(
               value: value,
@@ -321,7 +325,9 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
                     ? (result == null ||
                             ReadingMapQuality.issues(result!).isNotEmpty
                         ? '生成概念树与适用的含义圈'
-                        : '完善概念链与含义圈')
+                        : result!.legacy
+                            ? '按新版重新分析概念与连线'
+                            : '完善概念链与含义圈')
                     : result == null
                         ? '分析概念关系并绘图'
                         : '重新判断关系并绘图')),
@@ -392,13 +398,17 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
     final drawable = value.relations.where((r) => r.scope != null).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (value.legacy)
-        const Text('旧版缓存 · 可继续阅读，尚未按新版规则核验', style: TextStyle(fontSize: 11)),
+        const Text('旧版缓存 · 保留原分析，可主动按新版重分析以补充关系连线',
+            style: TextStyle(fontSize: 11)),
       const Text('本地检查只核对结构与可确定的逻辑；AI 解释和模拟不能作为事实证明。',
           style: TextStyle(fontSize: 11)),
       for (final proposition in value.propositions)
         ExpansionTile(
             title: Text(proposition.conclusion),
-            subtitle: Text(proposition.verification.reason),
+            subtitle: Text(proposition.verification.status.name == 'unknown' &&
+                    !proposition.verification.reason.contains('强化')
+                ? '转述分析 · 展开核对原文与命题结构'
+                : proposition.verification.reason),
             children: [
               SelectableText(
                   '主词：${proposition.subject}；谓词：${proposition.predicate}；量词：${proposition.quantifier}；否定：${proposition.polarity}；条件：${proposition.condition}；模态：${proposition.modality}\n原文依据：${proposition.evidence}')
@@ -436,6 +446,8 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
             [n.observed, n.retained, n.omitted].any((s) => s.isNotEmpty)))
           ConceptDetails(
               node: node,
+              hierarchy: value.hierarchy,
+              concepts: value.concepts,
               onExpand: widget.onExpand,
               imagePath: widget.imagePaths[node.id]),
       ],

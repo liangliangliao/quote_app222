@@ -1,4 +1,5 @@
 import 'grounding_path_view.dart';
+import 'concept_connections.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -156,6 +157,7 @@ class ConceptDetails extends StatelessWidget {
   final SemanticConcept node;
   final List<ConceptHierarchyEdge> hierarchy;
   final List<SemanticConcept> concepts;
+  final List<ConceptConnection> connections;
   final ValueChanged<String>? onSelect, onExpand;
   final VoidCallback? onOpen;
   final String? imagePath;
@@ -164,6 +166,7 @@ class ConceptDetails extends StatelessWidget {
       required this.node,
       this.hierarchy = const [],
       this.concepts = const [],
+      this.connections = const [],
       this.onSelect,
       this.onExpand,
       this.onOpen,
@@ -181,9 +184,11 @@ class ConceptDetails extends StatelessWidget {
                     const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
             Text(
                 ['experience', 'formal'].contains(node.kind)
-                    ? node.kind == 'formal' ? '形式构造 · 定义下的直观' : node.status == 'example'
-                        ? '具体经验 · 模拟示例'
-                        : '具体经验 · 原文材料'
+                    ? node.kind == 'formal'
+                        ? '形式构造 · 定义下的直观'
+                        : node.status == 'example'
+                            ? '具体经验 · 模拟示例'
+                            : '具体经验 · 原文材料'
                     : node.status == 'text_claim'
                         ? '按原句主张'
                         : node.status == 'definition'
@@ -217,8 +222,23 @@ class ConceptDetails extends StatelessWidget {
                     onPressed: () => onSelect!(edge.parent),
                     icon: const Icon(Icons.arrow_upward),
                     label: Text(
-                        '返回上位概念：${concepts.where((n) => n.id == edge.parent).firstOrNull?.label ?? ''}')),
+                        '${edge.kind == 'subtype' ? '返回上位概念' : conceptConnectionLabel(edge.kind)}：${concepts.where((n) => n.id == edge.parent).firstOrNull?.label ?? ''}')),
             ],
+            for (final edge in connections.where((e) =>
+                (e.from == node.id || e.to == node.id) &&
+                !const {'subtype', 'mediation', 'grounding', 'instance'}
+                    .contains(e.kind)))
+              ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                      '${edge.label}${edge.symmetric ? ' ↔ ' : edge.from == node.id ? ' → ' : ' ← '}'
+                      '${concepts.where((c) => c.id == (edge.from == node.id ? edge.to : edge.from)).firstOrNull?.label ?? ''}'),
+                  subtitle: Text('${edge.explanation}\n'
+                      '${edge.references.map((r) => '${r.source}「${r.excerpt}」').join('\n')}'),
+                  onTap: onSelect == null
+                      ? null
+                      : () => onSelect!(
+                          edge.from == node.id ? edge.to : edge.from)),
             ExpansionTile(
                 expansionAnimationStyle: cognitiveExpansionStyle(context),
                 tilePadding: EdgeInsets.zero,
@@ -268,6 +288,7 @@ Future<void> inspectConcept(
                         node: node,
                         hierarchy: value.hierarchy,
                         concepts: value.concepts,
+                        connections: conceptConnections(value),
                         imagePath: imagePaths[current],
                         onSelect: (id) => update(() => current = id),
                         onExpand: onExpand == null
@@ -303,7 +324,7 @@ class ConceptHierarchyView extends StatefulWidget {
 
 class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
   String? selected;
-  bool _fullTree = false;
+  bool _fullTree = true;
   @override
   Widget build(BuildContext context) {
     if (widget.traceGrounding && !_fullTree)
@@ -320,6 +341,7 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
             label: const Text('查看完整概念树与分支')),
       ]);
     final nodes = widget.value.concepts, edges = widget.value.hierarchy;
+    final connections = conceptConnections(widget.value);
     if (nodes.isEmpty) return const Text('尚无概念层级。可主动分析当前原文，已有解读仍可阅读。');
     final depths = {for (final n in nodes) n.id: 0};
     for (var i = 0; i < nodes.length; i++) {
@@ -337,33 +359,53 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
     for (final n in nodes) {
       levels.putIfAbsent(depths[n.id]!, () => []).add(n);
     }
-    final maxCount = levels.values.map((l) => l.length).reduce(math.max);
-    final width = math.max(340.0, maxCount * 200.0 + 32);
     final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.5);
     final cardHeight = 112 * scale;
     final levelHeight = cardHeight + 70;
     final positions = <String, Offset>{};
+    final maxCount = levels.values.map((l) => l.length).reduce(math.max);
+    final columns = math.min(maxCount, nodes.length > 8 ? 3 : 2);
+    var width = math.max(340.0, columns * 272.0 + 32), top = 20.0;
     for (final level in levels.entries) {
+      final count = math.min(columns, level.value.length);
       for (final entry in level.value.indexed) {
         positions[entry.$2.id] = Offset(
-            (width - level.value.length * 200) / 2 + entry.$1 * 200 + 10,
-            level.key * levelHeight + 20);
+            (width - count * 272) / 2 + (entry.$1 % columns) * 272 + 46,
+            top + (entry.$1 ~/ columns) * levelHeight);
+      }
+      top += ((level.value.length + columns - 1) ~/ columns) * levelHeight;
+    }
+    if (edges.isEmpty) {
+      final layout =
+          ConceptConnectionLayout.build(nodes, connections, scale: scale);
+      width = layout.size.width;
+      top = layout.size.height;
+      for (final entry in layout.boxes.entries) {
+        positions[entry.key] = entry.value.topLeft;
       }
     }
+    final boxes = {
+      for (final n in nodes)
+        n.id: Rect.fromLTWH(
+            positions[n.id]!.dx, positions[n.id]!.dy, 180, cardHeight)
+    };
     final picked =
         nodes.where((n) => n.id == selected).firstOrNull ?? nodes.first;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Text('共相与殊相 · 从一般规定回到个别经验',
+      const Text('概念树与关系 · 区分类属、含义依赖和直观',
           style: TextStyle(fontWeight: FontWeight.bold)),
       ConceptCanvas(
           title: '概念树',
-          size: Size(width,
-              levels.keys.reduce(math.max) * levelHeight + cardHeight + 40),
+          size: Size(width + 32, top + 40),
           child:
               Stack(key: ValueKey(widget.value.toJson().toString()), children: [
             Positioned.fill(
                 child: CustomPaint(
-                    painter: _HierarchyLinks(edges, positions, cardHeight))),
+                    painter: ConceptConnectionPainter(connections, boxes,
+                        font: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.fontFamily))),
             for (final n in nodes)
               Positioned(
                 left: positions[n.id]!.dx,
@@ -410,13 +452,31 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
                                               fontWeight: FontWeight.w700)),
                                       const SizedBox(height: 5),
                                       Text(
-                                          n.kind == 'formal' ? '形式构造 · 定义下的直观' : n.kind == 'experience'
-                                              ? n.status == 'example'
-                                                  ? '具体经验 · 模拟'
-                                                  : '具体经验'
-                                              : depths[n.id] == 0
-                                                  ? '一般概念 · 共同规定'
-                                                  : '下位概念',
+                                          n.kind == 'formal'
+                                              ? '形式构造 · 定义下的直观'
+                                              : n.kind == 'experience'
+                                                  ? n.status == 'example'
+                                                      ? '具体经验 · 模拟'
+                                                      : '具体经验'
+                                                  : edges.any((e) =>
+                                                          e.child == n.id &&
+                                                          e.kind == 'subtype')
+                                                      ? '下位概念 · 新增限定'
+                                                      : edges.any((e) =>
+                                                              e.child == n.id &&
+                                                              e.kind ==
+                                                                  'mediation')
+                                                          ? '中介概念'
+                                                          : edges.any((e) =>
+                                                                  e.parent ==
+                                                                      n.id &&
+                                                                  e.kind ==
+                                                                      'subtype')
+                                                              ? '上位概念 · 共同规定'
+                                                              : n.status ==
+                                                                      'interpretation'
+                                                                  ? '解释概念'
+                                                                  : '原文概念',
                                           style: const TextStyle(fontSize: 12),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
@@ -427,8 +487,8 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
       if (widget.traceGrounding)
         TextButton(
             onPressed: () => setState(() => _fullTree = false),
-            child: const Text('返回概念的直观链路')),
-      const Text('实线：下位限定；虚线：概念依赖或直观依据。点选节点核对关系，链路最终回到具体经验。',
+            child: const Text('追踪概念的直观链路')),
+      const Text('按连线标注区分类属、依赖、隐喻和对照；排在上方不自动表示上位概念。点选节点查看相连概念与依据。',
           style: TextStyle(fontSize: 12)),
       Wrap(spacing: 6, children: [
         for (final n in nodes)
@@ -440,6 +500,7 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
           node: picked,
           hierarchy: edges,
           concepts: nodes,
+          connections: connections,
           imagePath: widget.imagePaths[picked.id],
           onSelect: (id) => setState(() => selected = id),
           onExpand: widget.onExpand,
@@ -447,45 +508,4 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
               widget.onOpen == null ? null : () => widget.onOpen!(picked.id)),
     ]);
   }
-}
-
-class _HierarchyLinks extends CustomPainter {
-  final List<ConceptHierarchyEdge> edges;
-  final Map<String, Offset> positions;
-  final double height;
-  _HierarchyLinks(this.edges, this.positions, this.height);
-  @override
-  void paint(Canvas canvas, Size size) {
-    final pen = Paint()
-      ..color = const Color(0xffb6a484)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    for (final e in edges) {
-      final from = positions[e.parent]! + Offset(90, height),
-          to = positions[e.child]! + const Offset(90, 0);
-      final path = Path()
-        ..moveTo(from.dx, from.dy)
-        ..lineTo(from.dx, (from.dy + to.dy) / 2)
-        ..lineTo(to.dx, (from.dy + to.dy) / 2)
-        ..lineTo(to.dx, to.dy);
-      if (e.kind != 'subtype') {
-        for (final metric in path.computeMetrics()) {
-          for (double d = 0; d < metric.length; d += 10) {
-            canvas.drawPath(
-                metric.extractPath(d, math.min(d + 6, metric.length)), pen);
-          }
-        }
-      } else {
-        canvas.drawPath(path, pen);
-      }
-      canvas.drawLine(to, to + const Offset(-5, -8), pen);
-      canvas.drawLine(to, to + const Offset(5, -8), pen);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_HierarchyLinks old) =>
-      old.edges != edges ||
-      old.positions.toString() != positions.toString() ||
-      old.height != height;
 }

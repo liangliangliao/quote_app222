@@ -365,6 +365,9 @@ void main() {
     await tester.tap(generate);
     await settle(tester);
     expect(ai.calls, 1);
+    await tester.ensureVisible(find.text('追踪概念的直观链路'));
+    await tester.tap(find.text('追踪概念的直观链路'));
+    await settle(tester);
     expect(find.byType(GroundingPathView), findsOneWidget);
     await capture(tester, 'reading-grounded-chain');
     await tester.ensureVisible(
@@ -379,8 +382,8 @@ void main() {
     expect(ai.calls, 1);
     await tester.ensureVisible(find.byType(ConceptMeaningNetwork));
     await capture(tester, 'reading-multiple-circles');
-    await tester.ensureVisible(find.text('完善概念链与含义圈'));
-    await tester.tap(find.text('完善概念链与含义圈'));
+    await tester.ensureVisible(find.text('按新版重新分析概念与连线'));
+    await tester.tap(find.text('按新版重新分析概念与连线'));
     await settle(tester);
     expect(ai.calls, 2);
     await tester.ensureVisible(find.widgetWithText(ChoiceChip, '概念树'));

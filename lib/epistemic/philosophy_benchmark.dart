@@ -69,6 +69,16 @@ const philosophyCases = [
       ],
       '区分报告事件、感受、因果解释、一般判断与预测，给能区分替代解释的观察。',
       '不能从一次报告推出普遍因果、诊断潜意识或声称已直接观察用户。'),
+  PhilosophyCase(
+      'G',
+      '隆冬与内在的夏天 · 欲求与虚无',
+      [
+        ScopeSource('A', '在隆冬，我终于知道，我身上有一个不可战胜的夏天。',
+            title: '用户反馈用例：加缪名言，译文与出处待核对'),
+        ScopeSource('B', '人宁愿意欲虚无，也不愿不欲。', title: '用户反馈用例：尼采名言，译文与出处待核对'),
+      ],
+      '解释季节意象及内在力量的可能对应，用标注连线区分隐喻与类属；比较韧性与欲求、经验发现与偏好结构，保留各自根据。',
+      '不能只写都涉及内在或A没说B；不能把夏天的同义改写当下位类，不能把欲求虚无等同没有欲求或伪造外延相交。'),
 ];
 
 const philosophyReviewDimensions = [
@@ -144,7 +154,7 @@ class PhilosophyBenchmarkService {
       try {
         final raw = await ai.generateText(
             prompt: SemanticScopeService.buildPrompt(item.sources, item.title),
-            purpose: 'cognition.semantic.v4',
+            purpose: SemanticScopeService.requestPurpose,
             expectJson: true,
             maxTokens: 10000,
             temperature: .2,
