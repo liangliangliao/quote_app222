@@ -154,7 +154,7 @@ void main() {
   }
 
   test(
-      'text and messages send the visible budget and meter one real attempt each',
+      'text and messages omit application quotas and meter one real attempt each',
       () async {
     final sent = <Map<String, dynamic>>[];
     final operation = AiOperation('audit-loopback');
@@ -179,7 +179,7 @@ void main() {
       });
     });
     expect(sent, hasLength(2));
-    expect(sent.map((b) => b['max_completion_tokens']), [10000, 10000]);
+    expect(sent.every((b) => !b.containsKey('max_completion_tokens') && !b.containsKey('max_tokens') && !b.containsKey('max_output_tokens')), isTrue);
     expect(sent.every((b) => b['stream_options']['include_usage'] == true),
         isTrue);
     expect(operation.attempts, hasLength(2));
@@ -189,7 +189,7 @@ void main() {
             r['usage']['output'] == 17 &&
             r['usage']['reasoning_in_output'] == 5),
         isTrue);
-    expect(operation.attempts.first['budget']['global_ceiling'], 90000);
+    expect(operation.attempts.first['budget']['global_ceiling'], isNull);
   });
   test('Foundry inference preview does not receive OpenAI-only stream options',
       () async {
@@ -208,7 +208,7 @@ void main() {
     expect(sent!['stream'], isTrue);
     expect(sent!.containsKey('stream_options'), isFalse);
   });
-  test('task override can exceed the old hidden 10000 cap', () async {
+  test('old task overrides cannot reactivate an application output cap', () async {
     await AiRequestAudit.setBudget('cognition.semantic.v4', 24000);
     Map? body;
     try {
@@ -224,7 +224,7 @@ void main() {
             maxTokens: 10000,
             expectJson: true);
       });
-      expect(body!['max_completion_tokens'], 24000);
+      expect(body!.containsKey('max_completion_tokens'), isFalse);
     } finally {
       await AiRequestAudit.setBudget('cognition.semantic.v4', 10000);
     }
@@ -251,7 +251,7 @@ void main() {
                   maxTokens: 10000,
                   expectJson: true)),
           throwsA(isA<SemanticRequestException>()
-              .having((e) => e.message, 'actual quota', contains('10000'))));
+              .having((e) => e.message, 'service truncation', contains('应用没有设置输出 Token 上限'))));
     });
     expect(calls, 1);
     expect(operation.attempts, hasLength(1));
@@ -401,7 +401,7 @@ void main() {
     expect(ai.calls, 1);
     expect(run['review_status'], 'pending');
     expect(run['raw_json'], isNotEmpty);
-    expect(run['request_config']['global_output_ceiling'], 90000);
+    expect(run['request_config']['global_output_ceiling'], isNull);
     expect(PhilosophyBenchmarkService.reviewStatus(run), 'pending');
     await tester.pumpAndSettle();
     await tester.runAsync(() async {

@@ -301,7 +301,7 @@ void main() {
     expect((await repo.usage()).used, 1);
   });
   test(
-      'global output override is capped and global HTTP retries cannot multiply a batch',
+      'legacy global quotas are omitted and global HTTP retries cannot multiply a batch',
       () async {
     await GlobalAiRequestSettings().saveRaw(
         timeoutSeconds: '',
@@ -332,7 +332,9 @@ void main() {
                 expectJson: true),
             throwsA(anything));
         expect(calls, 1);
-        expect(payload!['max_tokens'], 476);
+        expect(payload!.keys, isNot(contains('max_tokens')));
+        expect(payload!.keys, isNot(contains('max_completion_tokens')));
+        expect(payload!.keys, isNot(contains('max_output_tokens')));
       }, NativeTestHttpOverrides());
     } finally {
       await server.close(force: true);
@@ -345,15 +347,16 @@ void main() {
           retryDelayMs: '');
     }
   });
-  test('estimated budget prevents a request even when call allowance remains',
+  test('legacy token estimate ceilings no longer block an allowed classification request',
       () async {
     await insert(1);
     await db.update('qk_ai_budget', {'estimated_used': 47999});
     final ai = BatchAi((d, _) => valid(d));
     await worker(ai, local: false).drain();
-    expect(ai.calls, 0);
-    expect((await repo.usage()).used, 0);
-    expect((await db.query('qk_jobs')).single['status'], 'budget');
+    expect(ai.calls, 1);
+    expect((await repo.usage()).used, 1);
+    expect((await repo.usage()).estimatedLimit, 0);
+    expect((await db.query('qk_jobs')).single['status'], isNot('budget'));
   });
   test(
       'competing workers share a lock, and duplicate followers reuse the finished cache',

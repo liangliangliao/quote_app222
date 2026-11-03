@@ -258,17 +258,11 @@ class SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver 
   final _ceParseRetryCountCtrl = TextEditingController();
   final _ceBehaviorChainMinNodesCtrl = TextEditingController();
   final _ceBehaviorChainMaxNodesCtrl = TextEditingController();
-  final _ceParseMaxTokensCtrl = TextEditingController();
-  final _ceSceneMaxTokensCtrl = TextEditingController();
-  final _ceTurnMaxTokensCtrl = TextEditingController();
-  final _ceReplayMaxTokensCtrl = TextEditingController();
-  final _ceBehaviorChainMaxTokensCtrl = TextEditingController();
   final _globalAiModelCtrl = TextEditingController();
   final _goalSettingPromptCtrl = TextEditingController();
   final _goalSettingActionPromptCtrl = TextEditingController();
   final _goalSettingLoopPromptCtrl = TextEditingController();
   final _globalTimeoutCtrl = TextEditingController();
-  final _globalMaxTokensCtrl = TextEditingController();
   final _globalTemperatureCtrl = TextEditingController();
   final _globalTopPCtrl = TextEditingController();
   final _globalRetryCountCtrl = TextEditingController();
@@ -621,17 +615,11 @@ class SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver 
     _ceParseRetryCountCtrl.dispose();
     _ceBehaviorChainMinNodesCtrl.dispose();
     _ceBehaviorChainMaxNodesCtrl.dispose();
-    _ceParseMaxTokensCtrl.dispose();
-    _ceSceneMaxTokensCtrl.dispose();
-    _ceTurnMaxTokensCtrl.dispose();
-    _ceReplayMaxTokensCtrl.dispose();
-    _ceBehaviorChainMaxTokensCtrl.dispose();
     _globalAiModelCtrl.dispose();
     _goalSettingPromptCtrl.dispose();
     _goalSettingActionPromptCtrl.dispose();
     _goalSettingLoopPromptCtrl.dispose();
     _globalTimeoutCtrl.dispose();
-    _globalMaxTokensCtrl.dispose();
     _globalTemperatureCtrl.dispose();
     _globalTopPCtrl.dispose();
     _globalRetryCountCtrl.dispose();
@@ -1870,14 +1858,12 @@ Future<void> _clearSportMusicPlaylist() async {
     try {
       final requestCfg = await _globalAiRequestSettings.getConfig();
       _globalTimeoutCtrl.text = requestCfg.timeoutSeconds?.toString() ?? '';
-      _globalMaxTokensCtrl.text = requestCfg.maxOutputTokens?.toString() ?? '';
       _globalTemperatureCtrl.text = requestCfg.temperature?.toString() ?? '';
       _globalTopPCtrl.text = requestCfg.topP?.toString() ?? '';
       _globalRetryCountCtrl.text = requestCfg.retryCount?.toString() ?? '';
       _globalRetryDelayMsCtrl.text = requestCfg.retryDelayMs?.toString() ?? '';
     } catch (_) {
       _globalTimeoutCtrl.text = '';
-      _globalMaxTokensCtrl.text = '';
       _globalTemperatureCtrl.text = '';
       _globalTopPCtrl.text = '';
       _globalRetryCountCtrl.text = '';
@@ -1916,21 +1902,6 @@ Future<void> _clearSportMusicPlaylist() async {
       _ceBehaviorChainMaxNodesCtrl.text = (await _kvDao.getString('ce_behavior_chain_max_nodes'))?.trim().isNotEmpty == true
           ? (await _kvDao.getString('ce_behavior_chain_max_nodes'))!.trim()
           : '8';
-      _ceParseMaxTokensCtrl.text = (await _kvDao.getString('ce_parse_max_tokens'))?.trim().isNotEmpty == true
-          ? (await _kvDao.getString('ce_parse_max_tokens'))!.trim()
-          : '3200';
-      _ceSceneMaxTokensCtrl.text = (await _kvDao.getString('ce_scene_max_tokens'))?.trim().isNotEmpty == true
-          ? (await _kvDao.getString('ce_scene_max_tokens'))!.trim()
-          : '4000';
-      _ceTurnMaxTokensCtrl.text = (await _kvDao.getString('ce_turn_max_tokens'))?.trim().isNotEmpty == true
-          ? (await _kvDao.getString('ce_turn_max_tokens'))!.trim()
-          : '2500';
-      _ceReplayMaxTokensCtrl.text = (await _kvDao.getString('ce_replay_max_tokens'))?.trim().isNotEmpty == true
-          ? (await _kvDao.getString('ce_replay_max_tokens'))!.trim()
-          : '3500';
-      _ceBehaviorChainMaxTokensCtrl.text = (await _kvDao.getString('ce_behavior_chain_max_tokens'))?.trim().isNotEmpty == true
-          ? (await _kvDao.getString('ce_behavior_chain_max_tokens'))!.trim()
-          : '2200';
       _ceTransportMode = (((await _kvDao.getString('ce_transport_mode')) ?? ConceptEngineService.transportDirect).trim().toLowerCase() == ConceptEngineService.transportProxy)
           ? ConceptEngineService.transportProxy
           : ConceptEngineService.transportDirect;
@@ -1949,11 +1920,6 @@ Future<void> _clearSportMusicPlaylist() async {
       _ceParseRetryCountCtrl.text = '2';
       _ceBehaviorChainMinNodesCtrl.text = '4';
       _ceBehaviorChainMaxNodesCtrl.text = '8';
-      _ceParseMaxTokensCtrl.text = '3200';
-      _ceSceneMaxTokensCtrl.text = '4000';
-      _ceTurnMaxTokensCtrl.text = '2500';
-      _ceReplayMaxTokensCtrl.text = '3500';
-      _ceBehaviorChainMaxTokensCtrl.text = '2200';
       _ceTransportMode = ConceptEngineService.transportDirect;
       _ceProxyEndpointCtrl.text = '';
       _ceProxyTokenCtrl.text = '';
@@ -2113,7 +2079,7 @@ Future<void> _clearSportMusicPlaylist() async {
       case SettingsSection.parameters:
         await _globalAiRequestSettings.saveRaw(
           timeoutSeconds: _globalTimeoutCtrl.text,
-          maxOutputTokens: _globalMaxTokensCtrl.text,
+          maxOutputTokens: '',
           temperature: _globalTemperatureCtrl.text,
           topP: _globalTopPCtrl.text,
           retryCount: _globalRetryCountCtrl.text,
@@ -2226,36 +2192,13 @@ Future<void> _clearSportMusicPlaylist() async {
               ? '8'
               : _ceBehaviorChainMaxNodesCtrl.text.trim()),
         );
-        await _kvDao.setString(
-          'ce_parse_max_tokens',
-          (_ceParseMaxTokensCtrl.text.trim().isEmpty
-              ? '3200'
-              : _ceParseMaxTokensCtrl.text.trim()),
-        );
-        await _kvDao.setString(
-          'ce_scene_max_tokens',
-          (_ceSceneMaxTokensCtrl.text.trim().isEmpty
-              ? '4000'
-              : _ceSceneMaxTokensCtrl.text.trim()),
-        );
-        await _kvDao.setString(
-          'ce_turn_max_tokens',
-          (_ceTurnMaxTokensCtrl.text.trim().isEmpty
-              ? '2500'
-              : _ceTurnMaxTokensCtrl.text.trim()),
-        );
-        await _kvDao.setString(
-          'ce_replay_max_tokens',
-          (_ceReplayMaxTokensCtrl.text.trim().isEmpty
-              ? '3500'
-              : _ceReplayMaxTokensCtrl.text.trim()),
-        );
-        await _kvDao.setString(
-          'ce_behavior_chain_max_tokens',
-          (_ceBehaviorChainMaxTokensCtrl.text.trim().isEmpty
-              ? '2200'
-              : _ceBehaviorChainMaxTokensCtrl.text.trim()),
-        );
+        // Old module output quotas no longer apply, including imported values.
+        for (final key in const [
+          'ce_parse_max_tokens', 'ce_scene_max_tokens', 'ce_turn_max_tokens',
+          'ce_replay_max_tokens', 'ce_behavior_chain_max_tokens',
+        ]) {
+          await _kvDao.setString(key, '');
+        }
         await _kvDao.setString('ce_transport_mode', _ceTransportMode);
         await _kvDao.setString(
           'ce_proxy_endpoint',
@@ -4377,27 +4320,9 @@ Future<String?> _saveAvatarTemp(File file) async {
         ),
       ),
       const SizedBox(height: 8),
-      const Text(
-        '统一最大输出 Tokens（全局上限）',
-        style: TextStyle(fontWeight: FontWeight.bold),
-      ),
-      const SizedBox(height: 4),
-      const Text(
-        '这是额度上限，不是实际消费。最终取任务预算、此上限与已知模型限制的最小值；90000 不会让每个任务都输出 90000。推理模型的额度可能同时包含推理与正文，实际用量以服务返回为准。',
-        style: TextStyle(fontSize: 12, color: Colors.grey),
-      ),
-      TextField(
-        controller: _globalMaxTokensCtrl,
-        enabled: _editingConfig,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          hintText: '例如 2400；留空则使用模块默认',
-        ),
-      ),
-      const SizedBox(height: 8),
-      TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiUsagePage())),
-          icon: const Icon(Icons.receipt_long_outlined), label: const Text('查看任务额度与实际用量')),
+      const Text('输出 Token：应用不设置上限', style: TextStyle(fontWeight: FontWeight.bold)),
+      const Text('旧全局、任务与模块输出额度均不再应用。模型服务自身的容量仍由服务端决定。', style: TextStyle(fontSize: 12, color: Colors.grey)),
+      TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiUsagePage())), icon: const Icon(Icons.receipt_long_outlined), label: const Text('查看实际 Token 用量')),
       const Text(
         '统一 Temperature',
         style: TextStyle(fontWeight: FontWeight.bold),
@@ -4810,80 +4735,7 @@ Future<String?> _saveAvatarTemp(File file) async {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              '模型输出长度（max tokens）',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              '概念解析 max tokens',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            TextField(
-              controller: _ceParseMaxTokensCtrl,
-              enabled: _editingConfig,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                hintText: '默认 3200',
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              '场景生成 max tokens',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            TextField(
-              controller: _ceSceneMaxTokensCtrl,
-              enabled: _editingConfig,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                hintText: '默认 4000',
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              '互动推进 max tokens',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            TextField(
-              controller: _ceTurnMaxTokensCtrl,
-              enabled: _editingConfig,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                hintText: '默认 2500',
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              '复盘 max tokens',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            TextField(
-              controller: _ceReplayMaxTokensCtrl,
-              enabled: _editingConfig,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                hintText: '默认 3500',
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              '行为行动链 max tokens',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            TextField(
-              controller: _ceBehaviorChainMaxTokensCtrl,
-              enabled: _editingConfig,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                hintText: '默认 2200',
-              ),
-            ),
+            const Text('模型输出由服务端决定，应用不设置 Token 上限。'),
           ],
         ),
       ),

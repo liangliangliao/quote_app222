@@ -35,6 +35,7 @@ on:
       - 'lib/services/unified_ai_service.dart'
       - 'lib/services/semantic_json_transport.dart'
       - 'lib/services/ai_request_*.dart'
+      - 'lib/services/ai_output_policy.dart'
       - 'lib/services/global_ai_request_settings.dart'
       - 'lib/widgets/ai_budget_panel.dart'
       - 'test/semantic_*test.dart'
@@ -76,6 +77,7 @@ on:
       - 'lib/services/unified_ai_service.dart'
       - 'lib/services/semantic_json_transport.dart'
       - 'lib/services/ai_request_*.dart'
+      - 'lib/services/ai_output_policy.dart'
       - 'lib/services/global_ai_request_settings.dart'
       - 'lib/widgets/ai_budget_panel.dart'
       - 'test/semantic_*test.dart'
@@ -116,14 +118,14 @@ jobs:
           lib/epistemic lib/quote_knowledge
           lib/services/semantic_json_transport.dart
           lib/services/ai_request_accounting.dart lib/services/ai_request_audit.dart
-          lib/services/global_ai_request_settings.dart lib/widgets/ai_budget_panel.dart
+          lib/services/global_ai_request_settings.dart lib/services/ai_output_policy.dart lib/widgets/ai_budget_panel.dart
           lib/widgets/quote_comparison_prototype.dart lib/widgets/quote_portrait.dart
           lib/pages/history_page.dart
           test/quote_knowledge_test.dart test/quote_knowledge_widgets_test.dart
           test/quote_knowledge_economy_test.dart
           test/cognitive_core_test.dart test/cognitive_extended_test.dart
           test/cognitive_audit_test.dart test/cognitive_audit_integration_test.dart
-          test/cognitive_relation_regression_test.dart test/cognitive_schopenhauer_forms_test.dart
+          test/cognitive_relation_regression_test.dart test/cognitive_schopenhauer_forms_test.dart test/cognitive_purposeful_case_test.dart test/quote_output_policy_test.dart
           test/cognitive_catalog_test.dart test/cognitive_prototype_test.dart
           test/cognitive_plan_contract_test.dart test/semantic_scope_test.dart
           test/cognitive_semantic_views_test.dart
@@ -144,7 +146,7 @@ jobs:
           test/quote_knowledge_economy_test.dart
           test/cognitive_core_test.dart test/cognitive_extended_test.dart
           test/cognitive_audit_test.dart test/cognitive_audit_integration_test.dart
-          test/cognitive_relation_regression_test.dart test/cognitive_schopenhauer_forms_test.dart
+          test/cognitive_relation_regression_test.dart test/cognitive_schopenhauer_forms_test.dart test/cognitive_purposeful_case_test.dart test/quote_output_policy_test.dart
           test/cognitive_catalog_test.dart test/cognitive_prototype_test.dart
           test/cognitive_plan_contract_test.dart test/semantic_scope_test.dart
           test/cognitive_semantic_views_test.dart

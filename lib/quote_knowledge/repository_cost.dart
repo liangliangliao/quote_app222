@@ -27,7 +27,7 @@ extension QuoteKnowledgeEconomy on QuoteKnowledgeRepository {
         limit: b['request_limit'] as int,
         used: b['used'] as int,
         estimatedUsed: b['estimated_used'] as int,
-        estimatedLimit: b['estimated_limit'] as int,
+        estimatedLimit: 0,
         stopped: b['stopped'] == 1,
         running: (b['lease_ms'] as int) > now().millisecondsSinceEpoch,
         local: n('local'),
@@ -49,8 +49,7 @@ extension QuoteKnowledgeEconomy on QuoteKnowledgeRepository {
       }
       // Repeated clicks/restarts do not replenish an unfinished allowance.
       if (b['stopped'] == 1 ||
-          (b['used'] as int) >= (b['request_limit'] as int) ||
-          (b['estimated_used'] as int) >= (b['estimated_limit'] as int)) {
+          (b['used'] as int) >= (b['request_limit'] as int)) {
         await txn.update(
             'qk_ai_budget',
             {
@@ -76,9 +75,7 @@ extension QuoteKnowledgeEconomy on QuoteKnowledgeRepository {
       final b = (await txn.query('qk_ai_budget', where: 'id=1')).single;
       if ((b['lease_ms'] as int) > ms) return const AiReservation('busy');
       if (b['stopped'] == 1 ||
-          (b['used'] as int) >= (b['request_limit'] as int) ||
-          (b['estimated_used'] as int) + estimate >
-              (b['estimated_limit'] as int)) {
+          (b['used'] as int) >= (b['request_limit'] as int)) {
         await txn.update('qk_ai_budget', {'stopped': 1}, where: 'id=1');
         return const AiReservation('budget');
       }

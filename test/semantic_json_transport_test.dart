@@ -101,7 +101,7 @@ void main() {
   }
 
   test(
-      'complete reading maps stream through Azure, cap global output and cache once',
+      'complete reading maps stream through Azure without application output caps and cache once',
       () async {
     var calls = 0;
     Map<String, dynamic>? sent;
@@ -148,11 +148,11 @@ void main() {
           readingSources, '完整阅读流式验收',
           context: readingMapContext, force: true);
       expect(result.needsRepair, isFalse);
-      expect(result.issues.any((i) => !i.retryable), isTrue); // A content-source notice must not cause another paid call.
+      expect(result.issues, isEmpty); // All conceptual content is traceable; no paid repair.
       expect(result.concepts.first.definition, contains('可辨认的 活动'));
       expect(calls, 1);
       expect(sent!['response_format'], {'type': 'json_object'});
-      expect(sent!['max_completion_tokens'], 10000);
+      expect(sent!.containsKey('max_completion_tokens'), isFalse);
       expect(sent!.containsKey('temperature'), isFalse);
       await service.analyze(readingSources, '完整阅读流式验收',
           context: readingMapContext);

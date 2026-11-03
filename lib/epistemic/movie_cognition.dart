@@ -110,6 +110,8 @@ class MovieCognition {
   static const instructions = '''${MeaningCircleContract.prompt}
 请同时保留完整电影解读，并按情节→概念→现实类比组织。
 分析不能只是长篇复述简介。narrative依次解释：影片呈现的问题、具体行为和情境、抽出的概念、在相似中辨认的决定性差异、人物判断的根据、可能反例、现实迁移的条件。缺少材料就保留未知，仍深入分析能支持的部分。
+按当前理解目的选择能说明问题的自然概念，不要把简介中的每个词或短语都当概念，也不要拼接“某某表达情形”的分类树。不能仅因简介出现时间、地点或情绪词就套用四重根据；只解释具体材料支持的关系。
+影片简介不足以演示抽象、概念关系或判断时，可用与核心意义高度一致的现实教学案例：在examples中明确标为模拟，说明共同意义、决定性差异与边界。案例不得补写为影片情节、人物动机或已发生的现实事实。
 每个scenes条目补充observed（从摘录可描述的行为）、retained（抽象时保留的规定）、omitted（省略的个别处境）、judgment（有条件结论）、alternative（竞争解释）、test（何种材料能区分解释）。不得把“反抗”“希望”之类标签当分析。
 同时返回abstractions:[{term,definition,observed,retained,omitted,counter_example}]。
 concept_scopes仅在可定义同一论域的外延关系时提供[{relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,illustration}]；类型仅equal/partition/siblings/overlap/subset/superset，示意必须illustration:true，不适合则[]。

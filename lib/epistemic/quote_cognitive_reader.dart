@@ -94,10 +94,7 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
     try {
       await QuoteInsightStore().saveSemanticConcepts(
           widget.quote,
-          value.concepts
-              .where((n) =>
-                  n.kind == 'concept' &&
-                  n.references.any((r) => r.source == 'A'))
+          value.conceptsForSource('A')
               .map((n) => n.label));
     } catch (_) {/* Related quotes can still fall back to literal matches. */}
   }

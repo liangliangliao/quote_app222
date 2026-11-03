@@ -25,13 +25,7 @@ class AiRequestAudit {
   static Future<void> initialize() => _initializing ??= (() async {
         try {
           await GlobalAiRequestSettings().getConfig();
-          for (final row
-              in await KeyValueDao().keyValuesWithPrefix('ai.task_budget.')) {
-            final value = int.tryParse(row['value'] ?? '');
-            if (value != null && value > 0)
-              taskOverrides[(row['key'] ?? '')
-                  .substring('ai.task_budget.'.length)] = value;
-          }
+          taskOverrides.clear(); // Legacy task quotas no longer apply.
           recent = await history();
           budgetChanges.add(null);
         } catch (_) {
@@ -50,26 +44,16 @@ class AiRequestAudit {
       purpose.replaceFirst(RegExp(r'\.v\d+$'), '');
   static Future<AiOutputBudget> resolve(
       String purpose, int requested, GlobalAiRequestConfig config) async {
-    final raw =
-        await KeyValueDao().getString('ai.task_budget.${budgetKey(purpose)}');
-    final override = int.tryParse(raw ?? '');
-    if (override != null && override > 0)
-      taskOverrides[budgetKey(purpose)] = override;
-    else
-      taskOverrides.remove(budgetKey(purpose));
-    final budget = AiOutputBudget.resolve(
-        override != null && override > 0 ? override : requested,
-        global: config.maxOutputTokens);
+    const budget = AiOutputBudget.unlimited();
     current?.budget = budget;
     budgetChanges.add(null);
     return budget;
   }
 
   static Future<void> setBudget(String purpose, int value) async {
-    if (value <= 0) throw ArgumentError('输出额度须为正整数');
-    await KeyValueDao()
-        .setString('ai.task_budget.${budgetKey(purpose)}', '$value');
-    taskOverrides[budgetKey(purpose)] = value;
+    // Compatibility for old callers; never reactivate an output quota.
+    await KeyValueDao().setString('ai.task_budget.${budgetKey(purpose)}', '');
+    taskOverrides.remove(budgetKey(purpose));
     budgetChanges.add(null);
   }
 
@@ -83,6 +67,11 @@ class AiRequestAudit {
       String? failure}) async {
     final operation = current;
     final budget = operation?.budget?.toJson() ?? <String, dynamic>{};
+    budget['policy'] = 'service_capacity';
+    budget['application_limit'] = null;
+    // Messages requires this field. It reflects deployment capacity, not an
+    // application quota; retain it separately from historical applied budgets.
+    budget['provider_required_capacity'] = body['max_tokens'];
     budget['effective'] = body['max_output_tokens'] ??
         body['max_completion_tokens'] ??
         body['max_tokens'];

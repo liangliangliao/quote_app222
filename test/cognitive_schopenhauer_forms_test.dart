@@ -150,7 +150,9 @@ void main() {
     await mount(tester,ConceptHierarchyView(value:model(),traceGrounding:true));
     final edges=painters(tester).single.connections;
     expect(edges.where((e)=>e.to=='J').map((e)=>e.from),containsAll(['F','B']));
-    expect(edges.any((e)=>e.kind=='analogy'||e.kind=='mediation'),isFalse);
+    expect(edges.any((e)=>e.kind=='analogy'),isFalse);
+    expect(edges.singleWhere((e)=>e.kind=='mediation').to,'M');
+    expect(edges.singleWhere((e)=>e.kind=='mediation').dashed,isTrue);
     expect(edges.any((e)=>e.to=='E'&&e.kind=='instance'),isTrue);
     expect(find.byType(ConceptCirclePreview),findsNothing);expect(edges.first.label,'以持志为目标');
     await capture(tester,'wang-class-tree');
@@ -177,7 +179,7 @@ void main() {
     for(final view in [EpistemicViewKind.hierarchy,EpistemicViewKind.circles]) {
       await mount(tester,SemanticScopeView(value:value,sources:const[ScopeSource('A',winterQuote)],preferredView:view));
       expect(find.byType(ConceptCirclePreview),findsNothing);expect(painters(tester),isEmpty);
-      expect(find.textContaining(view==EpistemicViewKind.circles?'尚未建立含义范围图':'尚未建立类属层级'),findsOneWidget);
+      expect(find.textContaining(view==EpistemicViewKind.circles?'本次回复漏掉了含义圈':'尚未建立类属层级'),findsOneWidget);
     }
     await mount(tester,SemanticScopeView(value:value,sources:const[ScopeSource('A',winterQuote)],preferredView:EpistemicViewKind.connections));
     expect(find.byType(ConceptCirclePreview),findsOneWidget);

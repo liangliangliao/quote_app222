@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'ai_request_accounting.dart';
 import '../data/kv_dao.dart';
 
 class GlobalAiRequestConfig {
@@ -12,15 +11,16 @@ class GlobalAiRequestConfig {
 
   const GlobalAiRequestConfig({
     required this.timeoutSeconds,
-    required this.maxOutputTokens,
+    int? maxOutputTokens,
     required this.temperature,
     required this.topP,
     required this.retryCount,
     required this.retryDelayMs,
-  });
+  }) : maxOutputTokens = null;
 
   int resolveMaxTokens(int fallback) {
-    return AiOutputBudget.resolve(fallback, global: maxOutputTokens).effective;
+    // Compatibility with existing adapters: 0 means no application quota.
+    return 0;
   }
 
   Duration resolveTimeout(Duration fallback) {
@@ -74,7 +74,7 @@ class GlobalAiRequestSettings {
     };
     final config = GlobalAiRequestConfig(
         timeoutSeconds: _parseInt(values[timeoutSecondsKey]),
-        maxOutputTokens: _parseInt(values[maxOutputTokensKey]),
+        maxOutputTokens: null,
         temperature: _parseDouble(values[temperatureKey]),
         topP: _parseDouble(values[topPKey]),
         retryCount: _parseInt(values[retryCountKey]),
@@ -92,13 +92,8 @@ class GlobalAiRequestSettings {
     required String retryCount,
     required String retryDelayMs,
   }) async {
-    if (maxOutputTokens.trim().isNotEmpty &&
-        (int.tryParse(maxOutputTokens.trim()) == null ||
-            int.parse(maxOutputTokens.trim()) <= 0)) {
-      throw const FormatException('全局输出上限须为正整数，或留空沿用任务预算');
-    }
     await _kvDao.setString(timeoutSecondsKey, timeoutSeconds.trim());
-    await _kvDao.setString(maxOutputTokensKey, maxOutputTokens.trim());
+    await _kvDao.setString(maxOutputTokensKey, '');
     await _kvDao.setString(temperatureKey, temperature.trim());
     await _kvDao.setString(topPKey, topP.trim());
     await _kvDao.setString(retryCountKey, retryCount.trim());

@@ -4,6 +4,19 @@ import '../services/ai_request_accounting.dart';
 import '../services/ai_request_audit.dart';
 import '../services/global_ai_request_settings.dart';
 
+String aiHistoricalOutputPolicy(Map<String, dynamic> row) {
+  final raw = row['budget'];
+  final budget = raw is Map ? raw : const {};
+  if (budget['policy'] == 'service_capacity') {
+    final capacity = budget['provider_required_capacity'];
+    return capacity == null ? '应用输出上限：未设置' : '应用输出上限：未设置 · 协议必填的模型容量 $capacity';
+  }
+  final historical = budget['effective'];
+  return historical is num && historical > 0
+      ? '历史请求的输出上限：$historical'
+      : '历史请求的输出上限：未记录';
+}
+
 class AiBudgetPanel extends StatefulWidget {
   final String purpose;
   final int defaultBudget;
@@ -37,13 +50,7 @@ class _AiBudgetPanelState extends State<AiBudgetPanel> {
 
   void _load() {
     final config = GlobalAiRequestSettings.cached;
-    final value = config == null
-        ? null
-        : AiOutputBudget.resolve(
-            AiRequestAudit
-                    .taskOverrides[AiRequestAudit.budgetKey(widget.purpose)] ??
-                widget.defaultBudget,
-            global: config.maxOutputTokens);
+    final value = config == null ? null : const AiOutputBudget.unlimited();
     final last = AiRequestAudit.recent
         .where((r) =>
             AiRequestAudit.budgetKey('${r['purpose']}') ==
@@ -64,64 +71,18 @@ class _AiBudgetPanelState extends State<AiBudgetPanel> {
     super.dispose();
   }
 
-  Future<void> _edit() async {
-    var draft = '${budget?.task ?? widget.defaultBudget}';
-    final value = await showDialog<int>(
-        context: context,
-        builder: (context) => AlertDialog(
-              title: const Text('本任务输出额度'),
-              content: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Text(
-                    '这是单次输出上限，可能包含推理与正文；不会预先扣除这些 Token。最终仍受全局上限和服务端模型限制。'),
-                TextFormField(
-                    initialValue: draft,
-                    onChanged: (value) => draft = value,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: '正整数')),
-              ]),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('取消')),
-                TextButton(
-                    onPressed: () {
-                      final parsed = int.tryParse(draft.trim());
-                      if (parsed != null && parsed > 0)
-                        Navigator.pop(context, parsed);
-                    },
-                    child: const Text('保存'))
-              ],
-            ));
-    // Dialog routes can keep the field alive during their exit animation.
-    if (value == null) return;
-    try {
-      await AiRequestAudit.setBudget(widget.purpose, value);
-      _load();
-    } catch (_) {
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('任务额度暂未保存')));
-    }
-  }
-
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(budget?.label ?? '任务默认 ${widget.defaultBudget} Token；全局上限待初始化',
+          Text(budget?.label ?? '应用不设置输出 Token 上限',
               style: const TextStyle(fontSize: 11)),
           if (latest != null)
             Text(
                 '最近请求：${AiTokenUsage.fromJson(latest!['usage'] as Map? ?? {}).label}'
                 '${(latest!['finish_reason'] ?? '').toString().isEmpty ? '' : ' · 结束 ${latest!['finish_reason']}'}',
                 style: const TextStyle(fontSize: 11)),
-          Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                  onPressed: _edit,
-                  icon: const Icon(Icons.tune, size: 16),
-                  label: const Text('调整任务额度'))),
         ]),
       );
 }
@@ -136,7 +97,7 @@ class _AiUsagePageState extends State<AiUsagePage> {
   late Future<List<Map<String, dynamic>>> rows = AiRequestAudit.history();
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('任务额度与实际用量'), actions: [
+        appBar: AppBar(title: const Text('AI 实际用量'), actions: [
           IconButton(
               tooltip: '刷新用量',
               onPressed: () => setState(() => rows = AiRequestAudit.history()),
@@ -144,24 +105,7 @@ class _AiUsagePageState extends State<AiUsagePage> {
         ]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           const Text(
-              '全局上限与实际消费不同。以下只记录本机最近100次统一文字生成请求；供应商未返回的用量显示未知，不能据此视为免费。缓存与推理数量已包含在输入、输出中。'),
-          for (final task in const [
-            ('cognition.semantic.v4', 10000, '概念图'),
-            ('quote_ai.comparison.v7', 10000, '名言比较'),
-            ('cognition.semantic.expand.v4', 4000, '分支展开'),
-            ('cognition.semantic.repair.v4', 2000, '局部修复'),
-            ('cognition.semantic.verify.v4', 2000, '辅助核验'),
-          ])
-            Card(
-                child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(task.$3),
-                          AiBudgetPanel(
-                              purpose: task.$1, defaultBudget: task.$2)
-                        ]))),
+              '应用不设置输出 Token 上限。以下只记录本机最近100次统一文字生成请求；供应商未返回的用量显示未知，不能据此视为免费。缓存与推理数量已包含在输入、输出中。'),
           FutureBuilder<List<Map<String, dynamic>>>(
               future: rows,
               builder: (context, snapshot) {
@@ -184,7 +128,7 @@ class _AiUsagePageState extends State<AiUsagePage> {
                           children: [
                             if ('${group.first['purpose']}'
                                 .startsWith('quote_knowledge.'))
-                              const Text('分类批次由分类管理的成本策略控制额度。')
+                              const Text('分类批次保留请求次数控制；输出不设置应用额度。')
                             else
                               AiBudgetPanel(
                                   purpose: '${group.first['purpose']}',
@@ -200,7 +144,7 @@ class _AiUsagePageState extends State<AiUsagePage> {
                                     '${row['provider']} / ${row['model']}'),
                                 subtitle: Text(
                                     '${row['at']}\n${AiTokenUsage.fromJson(row['usage'] as Map? ?? {}).label}\n'
-                                    '实际额度 ${(row['budget'] as Map?)?['effective'] ?? '未知'} · HTTP ${row['status'] ?? '未知'} · ${row['finish_reason'] ?? ''}'
+                                    '${aiHistoricalOutputPolicy(row)} · HTTP ${row['status'] ?? '未知'} · ${row['finish_reason'] ?? ''}'
                                     '${row['failure'] == null ? '' : ' · ${row['failure']}'}'),
                               )
                           ],

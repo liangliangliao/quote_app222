@@ -5,7 +5,7 @@ const practiceUniverse = '本次分析的修习片段';
 Map<String, dynamic> practiceNode(String id, String label, String definition,
         {String kind = 'concept', String status = 'definition', String universe = practiceUniverse}) => {
   'id': id, 'label': label, 'definition': definition, 'kind': kind, 'status': status,
-  'universe': universe, 'references': ['e1'],
+  'universe': universe, 'references': ['e1'], 'selection_reason': '本次为区分修习目标、专注方法、初学阶段及其可辨认情境而选取$label，结合原句核对其规定。',
 };
 Map<String, dynamic> classEdge(String parent, String child, String differentia) => {
   'parent': parent, 'child': child, 'kind': 'subtype',
@@ -35,7 +35,7 @@ Map<String, dynamic> scopeEdge(String a, String b, String type,
   }
 };
 Map<String, dynamic> wangForms() => {
-  'schema_version': 5, 'material_kind': 'argument', 'recommended_view': 'hierarchy',
+  'schema_version': 6, 'analysis_purpose':'理解持志的目标、初学阶段与专注方法，辨认专注和固着的区别', 'selection_strategy':'围绕目标、方法、阶段选择修习及注意概念，并用教学情境检查其内容；心痛作为类比而不作持志的子类。', 'material_kind': 'argument', 'recommended_view': 'hierarchy',
   'evidence': [{'id': 'e1', 'source': 'A', 'excerpt': wangQuote}],
   'concepts': [
     practiceNode('P','修习片段','为某一修习目标进行练习的可辨认活动片段。'),
@@ -48,6 +48,7 @@ Map<String, dynamic> wangForms() => {
     practiceNode('E','听见闲谈后把注意收回练习','教学情境：一位初学者正练习持志，听到旁边闲谈后停下接话，把注意重新放回当前练习；用于理解所列规定，非原文史实。',kind:'experience',status:'example',universe:'教学情境'),
     practiceNode('ER','需要变通时仍机械守着原方法','教学情境：练习条件已经改变，一位练习者仍反复机械执行同一动作，无法回应眼前任务；用于说明本次固着判准，不证明原句医学因果。',kind:'experience',status:'example',universe:'教学情境'),
     practiceNode('pain','心痛的注意情境','原句以心痛时注意集中在痛上作类比；只取注意集中这一共同点，不转成持志的下位类。',status:'interpretation',universe:'类比意象'),
+    practiceNode('EP','一阵痛感使练习者停下接话','教学情境：练习者忽然感到胸口一阵疼痛，停止加入身旁闲谈，注意几乎都被眼前痛感占据；仅说明类比中的注意集中，不是作者或用户的事实，也不构成医学判断。',kind:'experience',status:'example',universe:'教学情境'),
   ],
   'hierarchy': [
     classEdge('P','Z','以持志为目标'),classEdge('P','B','处于初学阶段'),
@@ -57,6 +58,7 @@ Map<String, dynamic> wangForms() => {
     {'parent':'M','child':'E','kind':'instance','explanation':'教学情境让抽象的注意变化返回可辨别动作，不作事实证明。','references':['e1']},
     {'parent':'J','child':'E','kind':'instance','explanation':'初学且采用专注方式的可能片段。','references':['e1']},
     {'parent':'R','child':'ER','kind':'instance','explanation':'依本次限定呈现固着的可能情境。','references':['e1']},
+    {'parent':'pain','child':'EP','kind':'instance','explanation':'以明确标为教学的痛感与注意情境说明类比内容，不把疼痛与持志的目标等同。','references':['e1']},
   ],
   'relations': [
     scopeEdge('Z','P','subset'),scopeEdge('F','Z','subset'),scopeEdge('R','F','subset'),
@@ -73,7 +75,7 @@ Map<String, dynamic> wangForms() => {
   }],
 };
 Map<String,dynamic> wangExpansion() => {
-  'schema_version':5,'evidence':[{'id':'e1','source':'A','excerpt':wangQuote}],
+  'schema_version':6,'evidence':[{'id':'e1','source':'A','excerpt':wangQuote}],
   'concepts':[practiceNode('new-common','初学中的固着专注持志','固着式专注持志片段中，同时处于相应工夫初学阶段者。')],
   'hierarchy':[classEdge('R','new-common','同时处于初学阶段'),classEdge('B','new-common','同时固着式专注持志')],
   'relations':[scopeEdge('B','R','overlap',intersectionId:'new-common')],

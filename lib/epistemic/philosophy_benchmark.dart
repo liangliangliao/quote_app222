@@ -85,6 +85,11 @@ const philosophyCases = [
       '分别建立同一论域的逐层限定与交叉分类、概念经中介返回直观的内容链、由定义支持的包含和交叠区域；分析性定义与教学情境均须明示。初学是阶段、专注是方式，可交叉而非直接上下位；命名交集位于共同区域。保留若、只、恐。',
       '不能将心痛与持志视为外延同一，不能把条件或隐喻箭头冒充树/圈；不能把专注等同持志的道德目标或把发病断言为确定医学因果；不要求固定层数/圈数，不以原文没列实例放弃合理的定义分析。',
       requiredViews: ['hierarchy', 'circles']),
+  PhilosophyCase('I', '隆冬与夏天 · 目的、核心概念与相关案例',
+      [ScopeSource('A', '在隆冬之中，我终于在自己内心发现了一个不可战胜的夏天。', title: '用户实际反馈原句；译文与出处待核对')],
+      '围绕外在逆境、内在力量与自我认识选取核心概念并解释理由；原句不宜直接演示时，给核心意义高度对应且明确标为教学的案例，先展示情境、逐项对应和边界，再分析类属、直观内容链及共同考量下的含义范围。',
+      '不能以隐喻性表达情形的措辞组合代替概念；不能把季节或内心直接画成时间空间根据；不能以原文没给集合成员为由断言概念没有联系；教学案例不归给作者或用户，不以案例证明普遍规律。',
+      requiredViews: ['hierarchy', 'circles']),
 ];
 
 const philosophyReviewDimensions = [
@@ -177,7 +182,7 @@ class PhilosophyBenchmarkService {
         result['generation_status'] = operation.cancellation.cancelled
             ? 'cancelled'
             : error is SemanticRequestException
-                ? (error.message.contains('额度') ? 'output_limit' : 'transport')
+                ? (error.code == 'output_limit' ? 'output_limit' : 'transport')
                 : error is FormatException
                     ? 'format'
                     : 'request_error';

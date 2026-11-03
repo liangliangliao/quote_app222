@@ -6,7 +6,7 @@ import 'cognitive_models.dart';
 import 'cognitive_store.dart';
 
 class CognitiveService {
-  static const promptVersion = 5;
+  static const promptVersion = 6;
   static const maxReviewCharacters = 12000;
   final UnifiedAiService ai;
   final CognitiveStore store;
@@ -178,7 +178,7 @@ class CognitiveService {
       CognitiveTask.diary =>
         '逐段区分用户报告的事件、主观感受、解释、暂定判断、所引根据和预测。所引根据只表示用户引用了材料，不表示已外部核实。每个 spans.text 必须逐字来自选文，依原顺序、不遗漏、不改写。原因和动机未知就明确未知。',
       CognitiveTask.concept =>
-        '按所选材料解释概念的共同规定与必要中介，最终连接到相应直观内容或形式构造。已有定义足够时不虚构生活实例；模拟只作可选教学，不充当原文证据。',
+        '按所选材料解释概念的共同规定与必要中介，最终连接到相应直观内容或形式构造。已有定义足够时不凑生活实例；格言若不宜直接分析，可在examples中给出核心意义高度一致、明确标为教学的相关案例，说明保留的规定与差异，再分析它，不替换原输入事实。',
       CognitiveTask.calibration =>
         '温和核查总是、永远、一定等范围词。区分这次观察与一般断言，给出可能反例和可检验问题，不否定用户感受。',
       CognitiveTask.reflection =>
@@ -191,11 +191,11 @@ class CognitiveService {
 ${jsonEncode({'selected_text': selection.text, 'kind': task.name})}
 按材料提供具体边界、明确未知或可检验问题；简单事实、定义不凑例子或问题数量。不得编造外部引文或声明已核实。
 evidence_refs 只引用 selected_text 中逐字存在的短摘录，说明它支持判断的哪一部分。不要生成其他记录 ID、URL、审核身份或已核实标签；无法对应就留空。
-时间、空间、原因、认识根据、动机五个视角中，没有信息的部分写“尚不能确定”；先后与空间相邻不证明因果。模拟例子明确作为示例，不是史实。
+时间、空间、原因、认识根据、动机视角按当前材料选择，未涉及的部分可省略；不能将季节意象或内心隐喻硬套为时间、空间事实；先后与空间相邻不证明因果。模拟例子明确作为示例，不是史实。
 ${MeaningCircleContract.prompt}
 额外结构（与以下原字段一起返回；不要只给术语标签）：
 abstractions:[{term,definition,observed,retained,omitted,counter_example}]：仅提取本次材料实际需要的关键概念，给出含义、可观察材料、保留的共同规定、省略的个别细节、非成员/反例。不同层级不混作同义词；原文没有的观察明确是模拟。
-concept_scopes:[{relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,illustration}]：仅在同一论域可定义成员资格时返回。relation_type只允许equal/partition/siblings/overlap/subset/superset/disjoint；equal为外延重合，partition为A/B互斥且穷尽论域，siblings为互斥但未穷尽共同上位范围；subset表示A包含于B；superset表示A包含B。basis须逐字引用选文。若为帮助理解而构造的分类示意必须illustration:true，解释该关系是定义下的模拟模型，不声称原文已经证明。交集/独有区域各写具体成员例子，排斥/包含时不虚构不存在区域。无法恰当定义时返回空数组，并在boundary解释应使用何种对照。
+concept_scopes:[{relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,illustration}]：仅在同一论域可定义成员资格时返回。relation_type只允许equal/partition/siblings/overlap/subset/superset/disjoint；equal为外延重合，partition为A/B互斥且穷尽论域，siblings为互斥但未穷尽共同上位范围；subset表示A包含于B；superset表示A包含B。basis须逐字引用选文。若为帮助理解而构造的分类示意必须illustration:true，解释该关系是定义下的模拟模型，不声称原文已经证明。交集/独有区域各写具体成员例子，排斥/包含时不虚构不存在区域。若原句不宜直接界定，先按本次考量寻求共同尺度，或用examples中的高度对应教学案例明确论域和判准，以illustration:true展示；不要只因原文没列集合成员就放弃。不把案例当成现实证明。
 summary直接回应用户本次问题；common与difference要明确比较对象；difference说清差异为什么影响这个目的下的判断；basis把具体引用、推理环节与尚缺前提区分；questions给出能区分替代解释的实际观察。diary的lenses逐项区分已有信息/假设/需要补充的材料。
 返回：{"abstractions":[{"term":"当前关键概念","definition":"含义与成员判准","member_example":"满足判准的具体实例及理由","non_member":"不满足判准的近似实例及理由","observed":"输入中的具体材料或明确标记的模拟","retained":"保留的共同规定","omitted":"省略的个别条件","counter_example":"不属于该概念的具体反例"}],"concept_scopes":[],"summary":"一种暂定理解","concepts":["抽象概念"],"common":"共同规定","difference":"关键差异","boundary":"条件与局限","counter_example":"可能反例或未知","basis":"与选文具体词语的对应，不替代外部核对","unknown":"尚不能确定什么","questions":["可检验的问题"],"evidence_refs":[{"excerpt":"逐字摘自选文的依据","explanation":"只支持到哪一步"}],"examples":[{"situation":"模拟情境","connection":"对应的概念","boundary":"遗漏或失效条件"}],"spans":[{"text":"逐字摘自选文","kind":"reported_event/feeling/interpretation/judgment/evidence/prediction/unresolved","reason":"分类是暂定理解"}],"lenses":{"time":"时间信息或未知","space":"处境或未知","cause":"可能条件与其他解释","evidence":"所依据的选文","motive":"明确表达的意愿或未知"}}
 ''';

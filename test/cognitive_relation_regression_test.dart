@@ -511,7 +511,7 @@ void main() {
     await mount(tester, ConceptMeaningNetwork(value: winter()));
     expect(find.byType(ConceptCirclePreview), findsNothing);
     expect(painters(tester), isEmpty);
-    expect(find.text('尚未建立含义范围图'), findsOneWidget);
+    expect(find.text('本次回复漏掉了含义圈'), findsOneWidget);
     await mount(tester, ConceptCirclePreview(value: winter()));
     expect(painters(tester).single.connections.map((e) => e.kind),
         containsAll(['metaphor', 'contrast', 'predication']));

@@ -267,6 +267,7 @@ jobs:
           cp docs/schopenhauer_audit_v9.md build/apk-delivery/AUDIT-AND-TOKEN-V9.md
           cp docs/meaning_relationships_v10.md build/apk-delivery/MEANING-RELATIONSHIPS-V10.md
           cp docs/schopenhauer_forms_v11.md build/apk-delivery/SCHOPENHAUER-FORMS-V11.md
+          cp docs/purposeful_analysis_unbounded_v12.md build/apk-delivery/PURPOSE-CASE-AND-OUTPUT-V12.md
           cp docs/quote_knowledge_prototypes_v5.md build/apk-delivery/QUOTE-KNOWLEDGE-V5.md
           cp docs/quote_epistemic_p0_implementation.md build/apk-delivery/READING-AND-COMPARISON.md
           cp docs/cognitive_prototypes_2_10.md build/apk-delivery/COGNITIVE-MODES.md

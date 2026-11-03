@@ -18,7 +18,7 @@ enum ComparisonPurpose {
 }
 
 class QuoteComparisonService {
-  static const promptVersion = 8;
+  static const promptVersion = 9;
   static final Map<String, Future<QuoteComparison>> _pending = {};
   final UnifiedAiService _ai;
   final QuoteInsightStore _store;
@@ -88,7 +88,7 @@ class QuoteComparisonService {
       conditions: conditions,
     );
     try {
-      for (final version in [promptVersion, 7, 6]) {
+      for (final version in [promptVersion, 8, 7, 6]) {
         final cached = await _store.readComparison(version == promptVersion
             ? key
             : cacheKey(a, b,
@@ -160,7 +160,7 @@ class QuoteComparisonService {
           : await SemanticScopeService(ai: _ai).validateResponse(
               map['semantic_map'], sources, '分别分析 A、B 句内概念及跨句关系', config,
               context: SemanticContext(
-                  purpose: purpose.question, conditions: conditions));
+                  purpose: purpose.question, conditions: conditions, inquiry: purpose.question));
     } on FormatException catch (e) {
       // The circle contract is not allowed to discard an otherwise useful
       // comparison. No additional paid repair is started automatically.
@@ -178,10 +178,7 @@ class QuoteComparisonService {
       for (final entry in [('A', a), ('B', b)]) {
         await _store.saveSemanticConcepts(
             entry.$2,
-            semantic.concepts
-                .where((n) =>
-                    n.kind == 'concept' &&
-                    n.references.any((r) => r.source == entry.$1))
+            semantic.conceptsForSource(entry.$1)
                 .map((n) => n.label));
       }
     } catch (_) {}
@@ -190,7 +187,7 @@ class QuoteComparisonService {
 
   Future<void> clearCache(QuoteReference a, QuoteReference b) async {
     final config = await _ai.resolveGlobalConfig();
-    for (final version in [promptVersion, 7, 6]) {
+    for (final version in [promptVersion, 8, 7, 6]) {
       await _store.deleteComparison(cacheKey(a, b,
           modelIdentity: _modelIdentity(config), promptVersion: version));
     }
@@ -206,7 +203,7 @@ class QuoteComparisonService {
       return clearCache(a, b);
     }
     final config = await _ai.resolveGlobalConfig();
-    for (final version in [promptVersion, 7, 6]) {
+    for (final version in [promptVersion, 8, 7, 6]) {
       await _store.deleteComparison(
         cacheKey(
           a,
@@ -231,9 +228,9 @@ common和critical_difference指向当前词语与推理；critical_difference说
 ${SemanticScopeService.buildPrompt([
             ScopeSource('A', a.content),
             ScopeSource('B', b.content)
-          ], '分别分析A/B句内概念及跨句关系', context: SemanticContext(purpose: purpose.question, conditions: conditions))}
-将上述语义图放入semantic_map。不另行重复生成reading_a/reading_b的概念与圈图；客户端从同一语义图派生各句阅读视图。简单定义不凑实例或反例数量。不能画圈时用判断或合适视图。
-最终只返回紧凑JSON：{"semantic_map":{"schema_version":4,"recommended_view":"judgment","propositions":[],"concepts":[],"hierarchy":[],"meaning_links":[],"relations":[],"grounds":[],"judgments":[]},"common":"相关共同点及对应理由","critical_difference":"目的下的决定性差异与理由","not_equivalent":"概念或论证结构不能等同之处","limitation":"适用条件、反例或未知及改判触发条件","relation_type":"contrast","relation_scope":"features","relation_direction":"unknown","relation_justification":"判断的根据与缺口","universe":"","set_a":"","set_b":"","basis_a":"A原句短摘","basis_b":"B原句短摘"}
+          ], '分别分析A/B句内概念及跨句关系', context: SemanticContext(purpose: purpose.question, conditions: conditions, inquiry: purpose.question))}
+将上述语义图放入semantic_map。不另行重复生成reading_a/reading_b的概念与圈图；客户端从同一语义图派生各句阅读视图。简单定义不凑实例或反例数量。原句不宜直接套用时可使用核心意义高度一致的相关案例，明示对应与边界；再考察共同尺度，不以“不能画圈”直接结束。
+最终只返回紧凑JSON：{"semantic_map":{"schema_version":6,"analysis_purpose":"当前比较目的","selection_strategy":"核心概念选取理由","aligned_cases":[],"recommended_view":"judgment","propositions":[],"concepts":[],"hierarchy":[],"meaning_links":[],"relations":[],"grounds":[],"judgments":[]},"common":"相关共同点及对应理由","critical_difference":"目的下的决定性差异与理由","not_equivalent":"概念或论证结构不能等同之处","limitation":"适用条件、反例或未知及改判触发条件","relation_type":"contrast","relation_scope":"features","relation_direction":"unknown","relation_justification":"判断的根据与缺口","universe":"","set_a":"","set_b":"","basis_a":"A原句短摘","basis_b":"B原句短摘"}
 ''';
 
   static SemanticScope comparisonJudgment(
@@ -302,10 +299,7 @@ ${SemanticScopeService.buildPrompt([
       var data = insightObject(map[key]);
       if (data.isEmpty) {
         final source = key == 'reading_a' ? 'A' : 'B';
-        final nodes = validatedGraph?.concepts
-                .where((n) =>
-                    n.kind == 'concept' &&
-                    n.references.any((r) => r.source == source))
+        final nodes = validatedGraph?.conceptsForSource(source)
                 .map((n) => n.toJson())
                 .toList() ??
             <Map<String, dynamic>>[];
@@ -357,6 +351,7 @@ ${SemanticScopeService.buildPrompt([
           model: base.model,
           sourceVersion: base.sourceVersion,
           materialKind: base.materialKind,
+          analysisPurpose: base.analysisPurpose, selectionStrategy: base.selectionStrategy, alignedCases: base.alignedCases,
           propositions: base.propositions,
           concepts: base.concepts,
           hierarchy: base.hierarchy,

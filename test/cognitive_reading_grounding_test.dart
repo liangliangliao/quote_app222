@@ -406,7 +406,7 @@ void main() {
         width: 320,
         scale: 2);
     expect(find.byType(ConceptCirclePreview), findsNothing);
-    expect(find.text('尚未建立含义范围图'), findsOneWidget);
+    expect(find.text('本次回复漏掉了含义圈'), findsOneWidget);
     expect(find.byType(GroundingPathView), findsNothing);
     expect(tester.takeException(), isNull);
     await mount(

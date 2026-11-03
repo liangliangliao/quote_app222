@@ -74,9 +74,6 @@ class SemanticJsonTransport {
           .transform(const LineSplitter())
           .timeout(idleTimeout)) {
         wire.writeln(line);
-        if (wire.length >
-            4 * 1024 * 1024 + (text.outputLimit ?? 0).clamp(0, 100000) * 160)
-          throw const SemanticRequestException('本次响应过长，已停止接收，请减少展开范围后重试。');
         if (isEvents && status >= 200 && status < 300) text.addLine(line);
       }
       if (deadline) throw TimeoutException('semantic request deadline');
@@ -246,7 +243,7 @@ class SemanticJsonStream {
   String finish() {
     if (truncated)
       throw SemanticRequestException(
-          '本次输出达到实际额度 ${outputLimit ?? '未知'}，结果未完整生成。全局设置只是上限；可在任务额度中调整，或缩小展开范围。',
+          '服务端停止输出，结果未完整生成。应用没有设置输出 Token 上限，请核对模型服务的输出能力。',
           code: 'output_limit');
     if (rejected)
       throw const SemanticRequestException('服务未提供本次请求的完整正文，请调整内容后重试。',

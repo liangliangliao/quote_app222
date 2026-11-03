@@ -30,14 +30,14 @@ class ClassificationUsage {
       {this.limit = 3,
       this.used = 0,
       this.estimatedUsed = 0,
-      this.estimatedLimit = 48000,
+      this.estimatedLimit = 0,
       this.local = 0,
       this.cached = 0,
       this.ai = 0,
       this.blocked = 0,
       this.stopped = false,
       this.running = false});
-  bool get exhausted => used >= limit || estimatedUsed >= estimatedLimit;
+  bool get exhausted => used >= limit;
 }
 
 class AiReservation {

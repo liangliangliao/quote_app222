@@ -109,6 +109,7 @@ class AiOutputBudget {
   final int? global, modelLimit;
   const AiOutputBudget._(
       this.task, this.global, this.modelLimit, this.effective);
+  const AiOutputBudget.unlimited() : this._(0, null, null, 0);
   factory AiOutputBudget.resolve(int task, {int? global, int? modelLimit}) {
     if (task <= 0) throw ArgumentError.value(task, 'task', '输出额度须为正整数');
     if (global != null && global <= 0) global = null;
@@ -125,7 +126,7 @@ class AiOutputBudget {
         'model_limit': modelLimit,
         'effective': effective
       };
-  String get label => '全局上限 ${global ?? '未设置'} · 任务 $task · 生效 $effective'
+  String get label => effective == 0 ? '应用不设置输出 Token 上限' : '全局上限 ${global ?? '未设置'} · 任务 $task · 生效 $effective'
       ' · 模型上限 ${modelLimit ?? '未知'}';
 }
 

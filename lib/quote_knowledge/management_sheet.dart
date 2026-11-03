@@ -233,7 +233,7 @@ class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
                               '本轮 AI ${u.used}/${u.limit} 次 · 本地初分 ${u.local} 条 · 复用 ${u.cached} 条'),
                           const SizedBox(height: 6),
                           Text(
-                              '本轮预留用量估算 ${u.estimatedUsed}/${u.estimatedLimit}；不是供应商实际计费Token。',
+                              '本轮用量估算 ${u.estimatedUsed}；应用不设置输出 Token 上限，以供应商返回的实际用量为准。',
                               style: const TextStyle(
                                   fontSize: 11, color: Colors.black54)),
                           if (u.stopped || u.exhausted)

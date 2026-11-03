@@ -2,6 +2,7 @@ import 'semantic_contract.dart';
 import 'dart:convert';
 import '../models/quote_insight.dart';
 import 'concept_analysis.dart';
+import 'aligned_analysis_case.dart';
 
 class ScopeSource {
   final String id, text, title, origin;
@@ -39,6 +40,8 @@ class SemanticContext {
   final List<ConceptMeaningLink> existingLinks;
   final List<SemanticRelation> existingRelations;
   final List<String> requestedViews;
+  final String inquiry;
+  final List<AlignedAnalysisCase> existingCases;
   const SemanticContext(
       {this.purpose = '',
       this.conditions = '',
@@ -49,7 +52,16 @@ class SemanticContext {
       this.existingHierarchy = const [],
       this.existingLinks = const [],
       this.existingRelations = const [],
-      this.requestedViews = const []});
+      this.requestedViews = const [], this.inquiry = '', this.existingCases = const []});
+  SemanticContext withViews(List<String> views) => SemanticContext(purpose:purpose, conditions:conditions,
+      conceptId:conceptId, conceptLabel:conceptLabel, conceptDefinition:conceptDefinition,
+      existingConcepts:existingConcepts, existingHierarchy:existingHierarchy, existingLinks:existingLinks,
+      existingRelations:existingRelations, requestedViews:views, inquiry:inquiry, existingCases:existingCases);
+  SemanticContext withInquiry(String value) => SemanticContext(purpose: purpose,
+      conditions: conditions, conceptId: conceptId, conceptLabel: conceptLabel,
+      conceptDefinition: conceptDefinition, existingConcepts: existingConcepts,
+      existingHierarchy: existingHierarchy, existingLinks: existingLinks,
+      existingRelations: existingRelations, requestedViews: requestedViews, inquiry: value, existingCases: existingCases);
   Map<String, dynamic> toJson() => {
         'purpose': purpose,
         'conditions': conditions,
@@ -57,6 +69,8 @@ class SemanticContext {
         'concept_label': conceptLabel,
         'concept_definition': conceptDefinition,
         if (requestedViews.isNotEmpty) 'requested_views': requestedViews,
+        if (inquiry.isNotEmpty) 'inquiry': inquiry,
+        if (existingCases.isNotEmpty) 'existing_cases': existingCases.map((c) => c.toJson()).toList(),
         if (existingConcepts.isNotEmpty)
           'existing_concepts': existingConcepts
               .map((c) => {
@@ -66,6 +80,8 @@ class SemanticContext {
                     'kind': c.kind,
                     'status': c.status,
                     'universe': c.universe,
+                    'role': c.role, 'core_id': c.coreId,
+                    'selection_reason': c.selectionReason,
                     'sources':
                         c.references.map((r) => r.source).toSet().toList(),
                   })
@@ -117,6 +133,8 @@ class AnalysisIssue {
 class SemanticConcept {
   final String id, label, definition, kind, status, universe;
   final String observed, retained, omitted, counterExample;
+  final String role, coreId, selectionReason;
+  bool get textTaxonomy => RegExp(r'隐喻性?表达|表达情形|表述情形|被描述为|被称为|被表述为').hasMatch(label);
   final List<ScopeReference> references;
   const SemanticConcept(
       {required this.id,
@@ -129,6 +147,7 @@ class SemanticConcept {
       this.retained = '',
       this.omitted = '',
       this.counterExample = '',
+      this.role = 'core', this.coreId = '', this.selectionReason = '',
       this.references = const []});
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -137,6 +156,7 @@ class SemanticConcept {
         'kind': kind,
         'status': status,
         'universe': universe,
+        'role': role, 'core_id': coreId, 'selection_reason': selectionReason,
         'observed': observed,
         'retained': retained,
         'omitted': omitted,
@@ -254,11 +274,13 @@ class SemanticRelation {
 }
 
 class GroundDiagram {
-  final String kind, from, to, link, status, position;
+  final String kind, from, to, link, status, position, temporalRelation;
   final List<ScopeReference> references;
   const GroundDiagram(
       this.kind, this.from, this.to, this.link, this.status, this.references,
-      {this.position = ''});
+      {this.position = '', this.temporalRelation = 'unspecified'});
+  bool get textualProjection => (kind == 'evidence' && RegExp(r'原句措辞|原文措辞').hasMatch(from)) ||
+      (['time','space'].contains(kind) && RegExp(r'原句|句中|所给出.*背景|时间背景|向内.*发现').hasMatch('$from $to'));
   String get limitation => switch (kind) {
         'time' || 'space' => '这里记录继起或位置线索；时间戳与地点不构成时间、空间先验形式的证明。',
         'cause' => '区分原句提出的因果条件与已经证实的原因；先后不证明因果。',
@@ -276,6 +298,7 @@ class GroundDiagram {
   Map<String, dynamic> toJson() => {
         'kind': kind,
         if (position.isNotEmpty) 'spatial_relation': position,
+        if (kind == 'time') 'temporal_relation': temporalRelation,
         'from': from,
         'to': to,
         'link': link,
@@ -310,7 +333,7 @@ String readableModelName(String raw) {
 }
 
 class SemanticScope {
-  static const version = 5;
+  static const version = 6;
   final List<SemanticRelation> relations;
   final List<GroundDiagram> grounds;
   final List<SemanticConcept> concepts;
@@ -322,12 +345,15 @@ class SemanticScope {
   final String model;
   final int sourceVersion;
   final String materialKind;
+  final String analysisPurpose, selectionStrategy;
+  final List<AlignedAnalysisCase> alignedCases;
   final List<SemanticProposition> propositions;
   bool get legacy => sourceVersion < version;
   const SemanticScope(this.relations, this.grounds,
       {this.model = '',
       this.sourceVersion = version,
       this.materialKind = 'unknown',
+      this.analysisPurpose = '', this.selectionStrategy = '', this.alignedCases = const [],
       this.propositions = const [],
       this.concepts = const [],
       this.hierarchy = const [],
@@ -337,18 +363,28 @@ class SemanticScope {
       this.recommendedView});
 
   bool get hasContent =>
-      propositions.isNotEmpty ||
+      alignedCases.isNotEmpty || propositions.isNotEmpty ||
       relations.isNotEmpty ||
       grounds.isNotEmpty ||
       concepts.isNotEmpty ||
       meaningLinks.isNotEmpty ||
       judgments.isNotEmpty;
   bool get needsRepair => issues.any((e) => e.retryable);
-  List<ConceptHierarchyEdge> get classEdges => hierarchy.where((e) => e.kind == 'subtype').toList();
+  List<GroundDiagram> get meaningfulGrounds => grounds.where((g) => !g.textualProjection).toList();
+  List<SemanticConcept> conceptsForSource(String source) {
+    final ids = {source, for (final c in alignedCases)
+      if (c.alignment.any((a) => a['source'] == source)) c.id};
+    return concepts.where((n) => n.kind == 'concept' && n.role != 'perspective' && !n.textTaxonomy &&
+        n.references.any((r) => ids.contains(r.source))).toList();
+  }
+  List<ConceptHierarchyEdge> get classEdges {
+    final ids = concepts.where((c) => c.role != 'perspective' && !c.textTaxonomy).map((c) => c.id).toSet();
+    return hierarchy.where((e) => e.kind == 'subtype' && ids.contains(e.parent) && ids.contains(e.child)).toList();
+  }
   List<SemanticRelation> get scopeRelations => relations.where((r) => r.scope != null).toList();
   List<EpistemicViewKind> get availableViews => [
         if (scopeRelations.isNotEmpty) EpistemicViewKind.circles,
-        if (grounds.isNotEmpty) EpistemicViewKind.grounds,
+        if (meaningfulGrounds.isNotEmpty) EpistemicViewKind.grounds,
         if (concepts.any((c) =>
             [c.observed, c.retained, c.omitted].any((s) => s.isNotEmpty)))
           EpistemicViewKind.abstraction,
@@ -374,12 +410,26 @@ class SemanticScope {
   static SemanticScope parse(dynamic raw, List<ScopeSource> sources,
       {String model = '', List<SemanticConcept> knownConcepts = const [], List<ConceptHierarchyEdge> knownHierarchy = const []}) {
     final map = insightObject(raw);
+    final originalTexts = {for (final s in sources) s.id: s.text};
+    final alignedCases = <AlignedAnalysisCase>[];
+    final caseIssues = <AnalysisIssue>[];
+    for (final rawCase in map['aligned_cases'] is List ? map['aligned_cases'] as List : const []) {
+      try {
+        final value = AlignedAnalysisCase.parse(rawCase, originalTexts);
+        if (alignedCases.any((c) => c.id == value.id)) throw const FormatException('相关案例身份重复');
+        alignedCases.add(value);
+      } on FormatException catch (error) {
+        caseIssues.add(AnalysisIssue('aligned_cases', '${error.message}'));
+      }
+    }
+    sources = [...sources, for (final c in alignedCases) ScopeSource(c.id, c.text, title:c.title, origin:'teaching_case')];
+
     final inputVersion =
         (map['source_schema_version'] ?? map['schema_version']) is int
             ? (map['source_schema_version'] ?? map['schema_version']) as int
             : 1;
     final ids = sources.map((s) => s.id).toSet();
-    final issues = <AnalysisIssue>[];
+    final issues = <AnalysisIssue>[...caseIssues];
     final known = {for (final c in knownConcepts) c.id: c};
     final nodes = <String, SemanticConcept>{...known};
     final parsedNodeIds = <String>{};
@@ -547,6 +597,11 @@ class SemanticScope {
                 .contains(status)) {
           throw const FormatException('概念需要独立身份、含义及材料或示例标记');
         }
+        final references = refs(m['references']);
+        if (kind == 'experience' && status != 'example' &&
+            references.any((r) => alignedCases.any((c) => c.id == r.source))) {
+          throw const FormatException('相关教学案例中的事件须标为模拟示例，不能作为原句或用户的经历');
+        }
         nodes[id] = SemanticConcept(
             id: id,
             label: insightText(m, 'label'),
@@ -554,12 +609,20 @@ class SemanticScope {
             kind: kind,
             status: status,
             universe: insightText(m, 'universe'),
+            role: insightText(m, 'role').isEmpty ? 'core' : insightText(m, 'role'),
+            coreId: insightText(m, 'core_id'), selectionReason: insightText(m, 'selection_reason'),
             observed: insightText(m, 'observed'),
             retained: insightText(m, 'retained'),
             omitted: insightText(m, 'omitted'),
             counterExample: insightText(m, 'counter_example'),
-            references: refs(m['references']));
+            references: references);
       });
+    }
+    for (final node in nodes.values.toList()) {
+      if (node.role == 'perspective' && (node.coreId.isEmpty || !nodes.containsKey(node.coreId) || nodes[node.coreId]!.role == 'perspective')) {
+        issues.add(AnalysisIssue('concepts.${node.id}.projection', '共同尺度中的范围概念须回指本次选取的核心概念。', originalItem: node.toJson()));
+        nodes.remove(node.id);
+      }
     }
     for (final entry in items('hierarchy', 256).indexed) {
       attempt('hierarchy[${entry.$1}]', () {
@@ -842,7 +905,7 @@ class SemanticScope {
         final status = insightText(m, 'status'),
             position = insightText(m, 'spatial_relation');
         if (!['evidence', 'cause', 'time', 'space', 'motive'].contains(kind) ||
-            !['text_claim', 'interpretation', 'unknown'].contains(status) ||
+            !['text_claim', 'interpretation', 'unknown', 'example'].contains(status) ||
             ['from', 'to', 'link'].any((k) => insightText(m, k).isEmpty)) {
           throw const FormatException('根据图须区分认识根据、因果、时间、空间与动机');
         }
@@ -858,6 +921,17 @@ class SemanticScope {
             ].contains(position)) {
           throw const FormatException('空间图缺少原文中对象的相对位置');
         }
+        final temporal = insightText(m, 'temporal_relation');
+        if (inputVersion >= 6 && kind == 'time' && !['before','after','during','simultaneous'].contains(temporal)) {
+          throw const FormatException('时间根据须区分具体事件的先后、同时或处于同一时段；季节意象和句中背景不能直接画成先后箭头');
+        }
+        if (inputVersion >= 6 && ['time','space'].contains(kind) && map['material_kind'] == 'metaphor' &&
+            RegExp(r'原句|句中|所给出|时间背景|向内.*发现').hasMatch('${m['from']} ${m['to']}')) {
+          throw const FormatException('诗性措辞不能硬套成时间或空间根据；请使用意义高度对应的相关案例及其具体事件');
+        }
+        if (status == 'example' && !refs(m['references']).any((r) => alignedCases.any((c) => c.id == r.source))) {
+          throw const FormatException('教学案例根据须引用已明确标注的相关案例');
+        }
         grounds.add(GroundDiagram(
             kind,
             insightText(m, 'from'),
@@ -865,7 +939,7 @@ class SemanticScope {
             insightText(m, 'link'),
             status,
             refs(m['references']),
-            position: position));
+            position: position, temporalRelation: temporal.isEmpty ? 'unspecified' : temporal));
       });
     }
     for (final entry in items('judgments', 64).indexed) {
@@ -980,6 +1054,9 @@ class SemanticScope {
     }
     final recommendation = insightText(map, 'recommended_view');
     final result = SemanticScope(relations, grounds,
+        alignedCases: alignedCases,
+        analysisPurpose: insightText(map, 'analysis_purpose'),
+        selectionStrategy: insightText(map, 'selection_strategy'),
         sourceVersion:
             (map['source_schema_version'] ?? map['schema_version']) is int
                 ? (map['source_schema_version'] ?? map['schema_version']) as int
@@ -1031,6 +1108,9 @@ class SemanticScope {
             : other.sourceVersion,
         materialKind:
             other.materialKind == 'unknown' ? materialKind : other.materialKind,
+        alignedCases: combine(alignedCases, other.alignedCases, (c) => c.id),
+        analysisPurpose: other.analysisPurpose.isEmpty ? analysisPurpose : other.analysisPurpose,
+        selectionStrategy: other.selectionStrategy.isEmpty ? selectionStrategy : other.selectionStrategy,
         propositions: combine(propositions, other.propositions, (p) => p.id),
         concepts: combine(concepts, other.concepts, (c) => c.id),
         hierarchy: combine(hierarchy, other.hierarchy,
@@ -1047,6 +1127,8 @@ class SemanticScope {
         'schema_version': version,
         'source_schema_version': sourceVersion,
         'material_kind': materialKind,
+        'analysis_purpose': analysisPurpose, 'selection_strategy': selectionStrategy,
+        'aligned_cases': alignedCases.map((c) => c.toJson()).toList(),
         'propositions': propositions.map((p) => p.toJson()).toList(),
         'recommended_view': recommendedView?.name,
         'concepts': concepts.map((c) => c.toJson()).toList(),

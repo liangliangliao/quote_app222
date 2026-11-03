@@ -197,6 +197,11 @@ class ConceptDetails extends StatelessWidget {
                 style: const TextStyle(fontSize: 12, color: Color(0xff8c6b38))),
             const SizedBox(height: 8),
             Text(node.definition, style: const TextStyle(height: 1.6)),
+            if (node.selectionReason.isNotEmpty)
+              Padding(padding: const EdgeInsets.only(top: 8), child: Text('选取理由：${node.selectionReason}', style: const TextStyle(height: 1.6))),
+            if (node.coreId.isNotEmpty)
+              TextButton(onPressed: onSelect == null ? null : () => onSelect!(node.coreId),
+                  child: Text('本次共同尺度中的范围 · 对应核心概念：${concepts.where((n) => n.id == node.coreId).firstOrNull?.label ?? node.coreId}')),
             if (imagePath != null)
               Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
@@ -342,8 +347,21 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
       ]);
     final classEdges = widget.value.classEdges;
     final classIds = {for (final e in classEdges) e.parent, for (final e in classEdges) e.child};
-    final edges = widget.value.hierarchy.where((e) => e.kind == 'subtype' ||
-        (const ['instance', 'grounding'].contains(e.kind) && classIds.contains(e.parent))).toList();
+    final tracedIds = {...classIds};
+    final tracedEdges = <ConceptHierarchyEdge>[];
+    var traceChanged = true;
+    while (traceChanged) {
+      traceChanged = false;
+      for (final edge in widget.value.hierarchy) {
+        if (const ['mediation', 'instance', 'grounding'].contains(edge.kind) &&
+            tracedIds.contains(edge.parent) && !tracedEdges.contains(edge)) {
+          tracedEdges.add(edge);
+          tracedIds.add(edge.child);
+          traceChanged = true;
+        }
+      }
+    }
+    final edges = [...classEdges, ...tracedEdges];
     final visibleIds = {for (final e in edges) e.parent, for (final e in edges) e.child};
     final nodes = widget.value.concepts.where((n) => visibleIds.contains(n.id)).toList();
     final connections = [for (final e in edges) ConceptConnection(e.parent, e.child, e.kind,
@@ -376,7 +394,7 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
     final levelHeight = cardHeight + 70;
     final positions = <String, Offset>{};
     final maxCount = levels.values.map((l) => l.length).reduce(math.max);
-    final columns = math.min(maxCount, nodes.length > 8 ? 3 : 2);
+    final columns = math.min(maxCount, 3);
     var width = math.max(340.0, columns * 272.0 + 32), top = 20.0;
     for (final level in levels.entries) {
       final count = math.min(columns, level.value.length);
@@ -491,7 +509,7 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
         TextButton(
             onPressed: () => setState(() => _fullTree = false),
             child: const Text('追踪概念的直观链路')),
-      const Text('实线表示下位类新增的规定；虚线指向具体示例或直观线索。分支不自动表示互斥或穷尽，同一概念可以有交叉归属。',
+      const Text('实线表示下位类新增的规定；虚线区分概念中介与直观追溯，不表示上下位。分支不自动表示互斥或穷尽，同一概念可以有交叉归属。',
           style: TextStyle(fontSize: 12)),
       Wrap(spacing: 6, children: [
         for (final n in nodes)

@@ -70,7 +70,7 @@ Map<String, dynamic> circle(String type) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  test('90000 is a ceiling with no hidden 64000 floor or replacement', () {
+  test('legacy global limits are ignored and new requests are unbounded', () {
     const config = GlobalAiRequestConfig(
         timeoutSeconds: null,
         maxOutputTokens: 90000,
@@ -78,10 +78,10 @@ void main() {
         topP: null,
         retryCount: null,
         retryDelayMs: null);
-    expect(config.resolveMaxTokens(1800), 1800);
-    expect(config.resolveMaxTokens(10000), 10000);
-    expect(config.resolveMaxTokens(90000), 90000);
-    expect(config.resolveMaxTokens(120000), 90000);
+    expect(config.resolveMaxTokens(1800), 0);
+    expect(config.resolveMaxTokens(10000), 0);
+    expect(config.resolveMaxTokens(90000), 0);
+    expect(config.resolveMaxTokens(120000), 0);
     expect(
         AiOutputBudget.resolve(10000, global: 90000, modelLimit: 6000)
             .effective,
@@ -422,8 +422,8 @@ void main() {
     expect(PhilosophyBenchmarkService.reviewStatus(run), 'passed');
     (run['review'] as Map)[philosophyReviewDimensions.first] = 'issue';
     expect(PhilosophyBenchmarkService.reviewStatus(run), 'issues');
-    expect(philosophyCases.length, 8);
-    expect(philosophyCases.last.id, 'H');
+    expect(philosophyCases.length, 9);
+    expect(philosophyCases.last.id, 'I');
     expect(philosophyCases.last.requiredViews, ['hierarchy','circles']);
   });
   test('concurrent operations retain independent audit scopes', () async {
