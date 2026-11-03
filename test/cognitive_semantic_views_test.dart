@@ -447,7 +447,7 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
   testWidgets(
-      'disabled circle preference preserves the concept tree without circle controls',
+      'disabled circles do not fabricate a class tree from a scope-only response',
       (tester) async {
     await mount(
         tester,
@@ -457,7 +457,8 @@ void main() {
                 sources: const [ScopeSource('A', networkText)],
                 allowCircles: false)));
     expect(find.byType(ConceptMeaningNetwork), findsNothing);
-    expect(find.byType(ConceptHierarchyView), findsOneWidget);
+    expect(find.byType(ConceptHierarchyView), findsNothing);
+    expect(find.text('当前分析未形成可展示的视图，可保留原文后重新分析。'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, '含义圈'), findsNothing);
     expect(tester.takeException(), isNull);
   });

@@ -5,6 +5,7 @@ import '../services/semantic_json_transport.dart';
 import 'package:flutter/material.dart';
 import 'concept_meaning_diagram.dart';
 import 'concept_meaning_network.dart';
+import 'concept_circle_preview.dart';
 import 'concept_hierarchy_view.dart';
 import 'semantic_scope.dart';
 import 'cognitive_mode.dart';
@@ -126,6 +127,7 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
         ? widget.analysisContext
         : SemanticContext(
             purpose: widget.analysisContext.purpose,
+            requestedViews: widget.analysisContext.requestedViews,
             conditions: widget.analysisContext.conditions,
             conceptId: node.id,
             conceptLabel: node.label,
@@ -385,11 +387,9 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
             (view) => widget.allowCircles || view != EpistemicViewKind.circles)
         .toList();
     final preferred = chosen ?? widget.preferredView;
-    if (preferred == EpistemicViewKind.circles &&
-        widget.allowCircles &&
-        value.concepts.isNotEmpty &&
-        !views.contains(EpistemicViewKind.circles))
-      views.insert(0, EpistemicViewKind.circles);
+    if ((preferred == EpistemicViewKind.hierarchy ||
+            (preferred == EpistemicViewKind.circles && widget.allowCircles)) &&
+        !views.contains(preferred)) views.insert(0, preferred!);
     final active = views.contains(preferred)
         ? preferred
         : views.contains(value.primaryView)
@@ -472,6 +472,8 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
               ? drawable.first
               : value.relations[selected]),
       ],
+      if (active == EpistemicViewKind.connections)
+        ConceptCirclePreview(value: value, onExpand: widget.onExpand, onOpen: widget.onOpenConcept),
       if (active == EpistemicViewKind.grounds) ...[
         const Text('四重根据 · 按原文材料展开',
             style: TextStyle(fontWeight: FontWeight.bold)),
@@ -551,8 +553,12 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
   Widget _relation(SemanticRelation relation) {
     final scope = relation.scope!;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(scopeStatus(relation.status), style: const TextStyle(fontSize: 12)),
-      ConceptMeaningDiagram(
+      Text(scope.basisKind == 'analytic_definition'
+          ? '依本次明示的分析性定义 · 区域情形不冒充原文事实'
+          : scope.basisKind == 'teaching_example' ? '教学模型 · 不作为原句证明'
+          : scopeStatus(relation.status), style: const TextStyle(fontSize: 12)),
+      if (!ConceptCircleLayout.build(widget.value).any((g) => !g.geometryConsistent && g.relations.contains(relation)))
+        ConceptMeaningDiagram(
           key: ValueKey(scope.toJson().toString()),
           relation: scope.relation,
           setA: scope.setA,

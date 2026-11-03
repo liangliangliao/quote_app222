@@ -107,11 +107,12 @@ void main() {
         ['contrast', 'metaphor', 'predication']);
     expect(result.hierarchy.map((e) => e.kind), ['grounding']);
     expect(result.relations, isEmpty);
-    expect(result.availableViews, contains(EpistemicViewKind.circles));
+    expect(result.availableViews, contains(EpistemicViewKind.connections));
+    expect(result.availableViews, isNot(contains(EpistemicViewKind.circles)));
     final restored = SemanticScope.parse(result.toJson(), sources);
     expect(restored.meaningLinks.length, 3);
     expect(restored.meaningLinks[1].references.single.excerpt, winterQuote);
-    expect(restored.legacy, isFalse);
+    expect(restored.legacy, isTrue); // The old schema is never relabeled as v5.
   });
   test('non-hierarchical links misplaced by a gateway retain their actual type',
       () {
@@ -505,12 +506,15 @@ void main() {
       .whereType<ConceptConnectionPainter>()
       .toList();
 
-  testWidgets('metaphor and contrast are drawn even without any set membership',
+  testWidgets('metaphor and contrast remain separate from extensional circles',
       (tester) async {
     await mount(tester, ConceptMeaningNetwork(value: winter()));
-    expect(find.byType(ConceptCirclePreview), findsOneWidget);
+    expect(find.byType(ConceptCirclePreview), findsNothing);
+    expect(painters(tester), isEmpty);
+    expect(find.text('尚未建立含义范围图'), findsOneWidget);
+    await mount(tester, ConceptCirclePreview(value: winter()));
     expect(painters(tester).single.connections.map((e) => e.kind),
-        containsAll(['metaphor', 'contrast', 'predication', 'grounding']));
+        containsAll(['metaphor', 'contrast', 'predication']));
     expect(find.textContaining('独立概念预览'), findsNothing);
     await capture(tester, 'winter-meaning-links');
   });
@@ -524,7 +528,7 @@ void main() {
         SemanticScopePanel(
             sources: sources,
             initial: winter(),
-            preferredView: EpistemicViewKind.circles,
+            preferredView: EpistemicViewKind.connections,
             service: service(ai),
             onResult: (value) => displayed = value));
     expect(ai.prompts, isEmpty);
@@ -546,18 +550,19 @@ void main() {
     expect(drawn.any((e) => e.from == 'winter' && e.to == 'winter/adversity'),
         isTrue);
     expect(ai.prompts.single, contains('existing_links'));
-    await mount(tester, ConceptMeaningNetwork(value: displayed!));
+    await mount(tester, ConceptCirclePreview(value: displayed!));
     await capture(tester, 'expanded-new-and-old');
     await mount(tester, ConceptHierarchyView(value: displayed!));
-    expect(painters(tester).single.connections.length, 6);
+    expect(painters(tester), isEmpty);
+    expect(find.text('尚未建立类属层级'), findsOneWidget);
     expect(find.text('一般概念 · 共同规定'), findsNothing);
     await capture(tester, 'tree-typed-relations');
   });
-  testWidgets('connected circles retain all nodes and labels with large text',
+  testWidgets('semantic view retains labels with large text',
       (tester) async {
-    await mount(tester, ConceptMeaningNetwork(value: winter()),
+    await mount(tester, ConceptCirclePreview(value: winter()),
         width: 320, scale: 2);
-    expect(painters(tester).single.connections.length, 4);
+    expect(painters(tester).single.connections.length, 3);
     expect(find.byKey(const ValueKey('meaning-node-strength')), findsOneWidget);
     await capture(tester, 'meaning-large-text');
   });

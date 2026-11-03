@@ -327,7 +327,7 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
   bool _fullTree = true;
   @override
   Widget build(BuildContext context) {
-    if (widget.traceGrounding && !_fullTree)
+    if (!_fullTree)
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         GroundingPathView(
             value: widget.value,
@@ -340,9 +340,21 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
             icon: const Icon(Icons.account_tree_outlined),
             label: const Text('查看完整概念树与分支')),
       ]);
-    final nodes = widget.value.concepts, edges = widget.value.hierarchy;
-    final connections = conceptConnections(widget.value);
-    if (nodes.isEmpty) return const Text('尚无概念层级。可主动分析当前原文，已有解读仍可阅读。');
+    final classEdges = widget.value.classEdges;
+    final classIds = {for (final e in classEdges) e.parent, for (final e in classEdges) e.child};
+    final edges = widget.value.hierarchy.where((e) => e.kind == 'subtype' ||
+        (const ['instance', 'grounding'].contains(e.kind) && classIds.contains(e.parent))).toList();
+    final visibleIds = {for (final e in edges) e.parent, for (final e in edges) e.child};
+    final nodes = widget.value.concepts.where((n) => visibleIds.contains(n.id)).toList();
+    final connections = [for (final e in edges) ConceptConnection(e.parent, e.child, e.kind,
+        e.differentia.isEmpty ? e.explanation : e.differentia,
+        e.basisKind == 'analytic_definition' ? 'definition' : 'text_claim', e.references,
+        criterionLabel: e.kind == 'subtype' && e.differentia.isNotEmpty ? e.differentia : null)];
+    if (classEdges.isEmpty) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Text('尚未建立类属层级', style: TextStyle(fontWeight: FontWeight.w700)),
+      const Text('当前结果未给出带新增规定的上下位关系，不能用条件或隐喻连线替代概念树。请重新生成概念层级与含义范围。'),
+      if (widget.value.hierarchy.isNotEmpty) TextButton(onPressed: () => setState(() => _fullTree = false), child: const Text('查看内容如何追溯到直观')),
+    ]);
     final depths = {for (final n in nodes) n.id: 0};
     for (var i = 0; i < nodes.length; i++) {
       var changed = false;
@@ -375,15 +387,6 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
       }
       top += ((level.value.length + columns - 1) ~/ columns) * levelHeight;
     }
-    if (edges.isEmpty) {
-      final layout =
-          ConceptConnectionLayout.build(nodes, connections, scale: scale);
-      width = layout.size.width;
-      top = layout.size.height;
-      for (final entry in layout.boxes.entries) {
-        positions[entry.key] = entry.value.topLeft;
-      }
-    }
     final boxes = {
       for (final n in nodes)
         n.id: Rect.fromLTWH(
@@ -392,7 +395,7 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
     final picked =
         nodes.where((n) => n.id == selected).firstOrNull ?? nodes.first;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Text('概念树与关系 · 区分类属、含义依赖和直观',
+      const Text('概念树 · 共同规定与逐层限定',
           style: TextStyle(fontWeight: FontWeight.bold)),
       ConceptCanvas(
           title: '概念树',
@@ -484,11 +487,11 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
                                     ]))))),
               ),
           ])),
-      if (widget.traceGrounding)
+      if (widget.value.hierarchy.any((e) => e.kind != 'subtype'))
         TextButton(
             onPressed: () => setState(() => _fullTree = false),
             child: const Text('追踪概念的直观链路')),
-      const Text('按连线标注区分类属、依赖、隐喻和对照；排在上方不自动表示上位概念。点选节点查看相连概念与依据。',
+      const Text('实线表示下位类新增的规定；虚线指向具体示例或直观线索。分支不自动表示互斥或穷尽，同一概念可以有交叉归属。',
           style: TextStyle(fontSize: 12)),
       Wrap(spacing: 6, children: [
         for (final n in nodes)

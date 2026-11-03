@@ -3,8 +3,8 @@ import 'concept_hierarchy_view.dart';
 import 'concept_connections.dart';
 import 'semantic_scope.dart';
 
-/// Meaning links remain visible when a passage uses metaphor or predication
-/// rather than an extensional class relation. Euler geometry is shown separately.
+/// General semantic relations have their own view. This is never a substitute
+/// for a class hierarchy or an extensional meaning-circle diagram.
 class ConceptCirclePreview extends StatelessWidget {
   final SemanticScope value;
   final ValueChanged<String>? onOpen, onExpand;
@@ -12,9 +12,12 @@ class ConceptCirclePreview extends StatelessWidget {
       {super.key, required this.value, this.onOpen, this.onExpand});
   @override
   Widget build(BuildContext context) {
-    final nodes = value.concepts;
-    if (nodes.isEmpty) return const Text('请先补充原句中可界定的概念，再展开含义圈。');
-    final connections = conceptConnections(value);
+    final connections = conceptConnections(value).where((e) =>
+        !const ['subtype', 'mediation', 'grounding', 'instance'].contains(e.kind) &&
+        !e.kind.startsWith('extension_')).toList();
+    final ids = {for (final e in connections) e.from, for (final e in connections) e.to};
+    final nodes = value.concepts.where((n) => ids.contains(n.id)).toList();
+    if (nodes.isEmpty) return const Text('当前结果尚未建立语义关系。');
     final byId = {for (final n in nodes) n.id: n};
     final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.5);
     final layout =
@@ -25,11 +28,11 @@ class ConceptCirclePreview extends StatelessWidget {
         children: [
           Text(
               connections.isEmpty
-                  ? '概念含义 · 当前结果尚未返回连线'
-                  : '概念含义与关系 · ${connections.length} 条连线',
+                  ? '语义关系 · 当前结果尚未返回连线'
+                  : '语义关系 · ${connections.length} 条连线',
               style: const TextStyle(fontWeight: FontWeight.w600)),
           ConceptCanvas(
-              title: '多概念关系图',
+              title: '隐喻、条件与其他语义关系',
               size: layout.size,
               child: Stack(key: ValueKey(value.toJson().toString()), children: [
                 Positioned.fill(
@@ -54,16 +57,12 @@ class ConceptCirclePreview extends StatelessWidget {
                               color: n.kind == 'concept'
                                   ? const Color(0xfff3e6c8)
                                   : const Color(0xffe6eef0),
-                              shape: n.kind == 'concept'
-                                  ? const CircleBorder(
-                                      side:
-                                          BorderSide(color: Color(0xffb49a63)))
-                                  : RoundedRectangleBorder(
+                              shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(24),
                                       side: const BorderSide(
                                           color: Color(0xff8fa7aa))),
                               child: InkWell(
-                                  customBorder: const CircleBorder(),
+                                  borderRadius: BorderRadius.circular(24),
                                   onTap: () => inspectConcept(context, n.id, value,
                                       onOpen: onOpen, onExpand: onExpand),
                                   child: Center(
@@ -81,7 +80,7 @@ class ConceptCirclePreview extends StatelessWidget {
           Text(
               connections.isEmpty
                   ? '该结果没有给出可连接的概念身份与关系。可点击重新分析；已有原文与节点继续保留。'
-                  : '沿标注连线阅读关系；虚线为解释或依赖，箭头表示方向。圆的大小、位置不表示外延包含；有成员判准的五种圈图另行展示。',
+                  : '沿标注连线阅读隐喻、条件与主张。此图表达语义联系，含义范围另见“含义圈”。',
               style: TextStyle(fontSize: 12, height: 1.6)),
           if (connections.isNotEmpty)
             ExpansionTile(

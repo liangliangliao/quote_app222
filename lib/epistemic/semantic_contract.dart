@@ -2,15 +2,15 @@
 /// This checks that a proposed model has its required regions; it does not
 /// establish the truth of its membership or its premises.
 class MeaningCircleContract {
-  static const version = 3;
-  static const prompt =
-      '''含义圈统一协议v3：先确定同一论域与成员判准，再选图。只允许equal、subset/superset、partition、overlap、siblings。
+  static const version = 4;
+  static const prompt = '''含义圈统一协议v4：先定义同一论域与成员判准，再选equal、subset/superset、partition、overlap、siblings。
 equal给共同成员；subset给内部成员和B独有成员，superset给内部成员和A独有成员；overlap给交集与两侧独有成员；partition给命名上位范围及parts中各子类的term/criterion/example，并解释互斥及穷尽；siblings给命名上位范围、两侧成员和上位范围的其他成员，不能声称穷尽。
-统一字段relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,other_member,parts,illustration。basis逐字对应输入。教学模型标illustration:true，不能当作原句证据。没有依据就不画圈，说明缺口及适合的定义/判断/类比/因果/时间/空间表达。共同词、共现、感受和作者标签不证明交集或因果。''';
+统一字段relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,other_member,parts,illustration,basis_kind。basis逐字定位材料，但引文存在不证明范围判断。basis_kind区分source_assertion原句主张、analytic_definition本次明示的分析性定义、teaching_example教学模拟。允许为理解原文构造有明确判准的分析性类别；此时status=definition，区域填写定义允许的可辨认情形，不能声称原文记述过这些实例。不因原文没列实例而一律放弃范围分析；也不把重构冒称作者原意。每个同义概念复用身份，同一论域中组合包含与交叉；条件、因果、隐喻只保留在判断/语义关系，不能用箭头代替这些圈图。''';
   static List<String> gaps(Map<String, dynamic> map) {
     String text(String key) => (map[key] ?? '').toString().trim();
     final type = text('relation_type');
     final result = <String>[];
+    if (map.containsKey('basis_kind') && !const ['source_assertion', 'analytic_definition', 'teaching_example'].contains(text('basis_kind'))) result.add('范围依据须区分原句主张、分析性定义与教学模拟');
     bool missing(String value) =>
         value.isEmpty ||
         const ['无', '不适用', '未知', '待确定', '暂无', '不知道', 'none', 'n/a', 'unknown']

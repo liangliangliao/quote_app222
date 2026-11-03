@@ -22,6 +22,7 @@ enum EpistemicViewKind {
   grounds('四重根据'),
   abstraction('直观与抽象'),
   hierarchy('概念树'),
+  connections('语义关系'),
   judgment('判断力');
 
   const EpistemicViewKind(this.label);
@@ -37,6 +38,7 @@ class SemanticContext {
   final List<ConceptHierarchyEdge> existingHierarchy;
   final List<ConceptMeaningLink> existingLinks;
   final List<SemanticRelation> existingRelations;
+  final List<String> requestedViews;
   const SemanticContext(
       {this.purpose = '',
       this.conditions = '',
@@ -46,13 +48,15 @@ class SemanticContext {
       this.existingConcepts = const [],
       this.existingHierarchy = const [],
       this.existingLinks = const [],
-      this.existingRelations = const []});
+      this.existingRelations = const [],
+      this.requestedViews = const []});
   Map<String, dynamic> toJson() => {
         'purpose': purpose,
         'conditions': conditions,
         'concept_id': conceptId,
         'concept_label': conceptLabel,
         'concept_definition': conceptDefinition,
+        if (requestedViews.isNotEmpty) 'requested_views': requestedViews,
         if (existingConcepts.isNotEmpty)
           'existing_concepts': existingConcepts
               .map((c) => {
@@ -80,6 +84,7 @@ class SemanticContext {
                     'node_ids': r.nodeIds,
                     'part_ids': r.partIds,
                     'universe_id': r.universeId,
+                    if (r.intersectionId.isNotEmpty) 'intersection_id': r.intersectionId,
                     'relation_type': r.scope?.relation.name,
                   })
               .toList(),
@@ -142,14 +147,18 @@ class SemanticConcept {
 
 class ConceptHierarchyEdge {
   final String parent, child, kind, explanation;
+  final String differentia, basisKind;
   final List<ScopeReference> references;
   const ConceptHierarchyEdge(
-      this.parent, this.child, this.kind, this.explanation, this.references);
+      this.parent, this.child, this.kind, this.explanation, this.references,
+      {this.differentia = '', this.basisKind = 'source_assertion'});
   Map<String, dynamic> toJson() => {
         'parent': parent,
         'child': child,
         'kind': kind,
         'explanation': explanation,
+        if (differentia.isNotEmpty) 'differentia': differentia,
+        'basis_kind': basisKind,
         'references': references.map((r) => r.toJson()).toList(),
       };
 }
@@ -220,13 +229,13 @@ class SemanticRelation {
   final ConceptScope? scope;
   final List<ScopeReference> references;
   final List<String> nodeIds, partIds;
-  final String universeId;
+  final String universeId, intersectionId;
   const SemanticRelation(
       this.placement, this.statement, this.status, this.scope, this.references,
       {this.outcome = '',
       this.nodeIds = const [],
       this.partIds = const [],
-      this.universeId = ''});
+      this.universeId = '', this.intersectionId = ''});
   SemanticVerification get verification => PropositionConsistency.check(
       statement, references.map((r) => r.excerpt).join('\n'));
   Map<String, dynamic> toJson() => {
@@ -239,6 +248,7 @@ class SemanticRelation {
         'node_ids': nodeIds,
         'part_ids': partIds,
         'universe_id': universeId,
+        if (intersectionId.isNotEmpty) 'intersection_id': intersectionId,
         'references': references.map((r) => r.toJson()).toList(),
       };
 }
@@ -300,7 +310,7 @@ String readableModelName(String raw) {
 }
 
 class SemanticScope {
-  static const version = 4;
+  static const version = 5;
   final List<SemanticRelation> relations;
   final List<GroundDiagram> grounds;
   final List<SemanticConcept> concepts;
@@ -334,16 +344,16 @@ class SemanticScope {
       meaningLinks.isNotEmpty ||
       judgments.isNotEmpty;
   bool get needsRepair => issues.any((e) => e.retryable);
+  List<ConceptHierarchyEdge> get classEdges => hierarchy.where((e) => e.kind == 'subtype').toList();
+  List<SemanticRelation> get scopeRelations => relations.where((r) => r.scope != null).toList();
   List<EpistemicViewKind> get availableViews => [
-        if (relations.any((r) => r.scope != null) ||
-            meaningLinks.isNotEmpty ||
-            hierarchy.isNotEmpty)
-          EpistemicViewKind.circles,
+        if (scopeRelations.isNotEmpty) EpistemicViewKind.circles,
         if (grounds.isNotEmpty) EpistemicViewKind.grounds,
         if (concepts.any((c) =>
             [c.observed, c.retained, c.omitted].any((s) => s.isNotEmpty)))
           EpistemicViewKind.abstraction,
-        if (concepts.isNotEmpty) EpistemicViewKind.hierarchy,
+        if (classEdges.isNotEmpty || hierarchy.any((e) => ['mediation', 'grounding', 'instance'].contains(e.kind))) EpistemicViewKind.hierarchy,
+        if (meaningLinks.isNotEmpty || relations.any((r) => r.scope == null && r.nodeIds.length == 2)) EpistemicViewKind.connections,
         if (propositions.isNotEmpty ||
             judgments.isNotEmpty ||
             relations.any((r) => r.scope == null))
@@ -362,7 +372,7 @@ class SemanticScope {
 
   /// Malformed items are isolated; a wholly unusable reply is still an error.
   static SemanticScope parse(dynamic raw, List<ScopeSource> sources,
-      {String model = '', List<SemanticConcept> knownConcepts = const []}) {
+      {String model = '', List<SemanticConcept> knownConcepts = const [], List<ConceptHierarchyEdge> knownHierarchy = const []}) {
     final map = insightObject(raw);
     final inputVersion =
         (map['source_schema_version'] ?? map['schema_version']) is int
@@ -569,7 +579,8 @@ class SemanticScope {
               kind,
               insightText(m, 'explanation'),
               'interpretation',
-              linkRefs(parent, child, m['references'])));
+              linkRefs(parent, child, m['references']),
+            differentia: insightText(m, 'differentia'), basisKind: insightText(m, 'basis_kind').isEmpty ? 'source_assertion' : insightText(m, 'basis_kind')));
           return;
         }
         if (!nodes.containsKey(parent) ||
@@ -590,6 +601,8 @@ class SemanticScope {
                     .any((e) => reaches(e.child, seen)));
         if (reaches(child, {})) throw const FormatException('概念层级出现循环');
         if (kind == 'subtype') {
+          if (inputVersion >= 5 && !const ['source_assertion', 'analytic_definition', 'teaching_example'].contains(insightText(m, 'basis_kind'))) throw const FormatException('类属关系须标明原句主张、分析性定义或教学模拟');
+          if (inputVersion >= 5 && (insightText(m, 'differentia').isEmpty || nodes[parent]!.universe.isEmpty || nodes[parent]!.universe != nodes[child]!.universe)) throw const FormatException('类属层级须在同一论域逐步增加明确规定；阶段、方式、类比不能直接串成上下位');
           String term(String label) => PropositionConsistency.normalize(label)
               .replaceFirst(RegExp(r'^(?:一个|某个|这个|一种|某种|一类|这类)'), '');
           if (term(nodes[parent]!.label) == term(nodes[child]!.label) ||
@@ -719,6 +732,7 @@ class SemanticScope {
         }
         var statement = insightText(m, 'statement');
         var status = insightText(m, 'status');
+        if (scope?.basisKind == 'analytic_definition' && status != 'definition') throw const FormatException('分析性范围须标为依所列定义，不能冒称原文已经证明');
         if (statement.isEmpty ||
             !['text_claim', 'interpretation', 'definition', 'unknown']
                 .contains(status) ||
@@ -727,7 +741,7 @@ class SemanticScope {
         }
         final consistency = PropositionConsistency.check(
             statement, references.map((r) => r.excerpt).join('\n'));
-        if (scope?.illustration != true &&
+        if (scope?.illustration != true && scope?.basisKind != 'analytic_definition' &&
             (consistency.status == VerificationStatus.contradicted ||
                 consistency.reason.contains('强化了'))) {
           scope = null;
@@ -740,7 +754,10 @@ class SemanticScope {
         var nodeIds = strings(m['node_ids']);
         var partIds = strings(m['part_ids']);
         var universeId = insightText(m, 'universe_id');
+        final intersectionId = insightText(m, 'intersection_id');
         if (scope != null) {
+          if (inputVersion >= 5 && nodeIds.isEmpty) throw const FormatException('新版含义圈须引用明确的概念身份，不能从标题暗中补造节点');
+          if (inputVersion >= 5 && nodeIds.length == 2 && nodeIds.every(nodes.containsKey) && nodeIds.any((id) => nodes[id]!.universe != scope!.universe)) throw const FormatException('范围关系须采用节点所定义的同一论域');
           if (nodeIds.isEmpty) {
             nodeIds = [
               legacyNode(
@@ -776,6 +793,19 @@ class SemanticScope {
                   !nodes.containsKey(universeId))) {
             throw const FormatException('关系节点身份与概念、子类或上位范围不一致');
           }
+          if (inputVersion >= 5) {
+            bool subclass(String parent, String child, Set<String> seen) =>
+                parent == child || (seen.add(parent) &&
+                [...knownHierarchy, ...hierarchy].where((e) => e.kind == 'subtype' && e.parent == parent)
+                    .any((e) => subclass(e.child, child, seen)));
+            final aAboveB = subclass(nodeIds[0], nodeIds[1], {});
+            final bAboveA = subclass(nodeIds[1], nodeIds[0], {});
+            if (([QuoteRelation.overlap, QuoteRelation.siblings].contains(scope.relation) && (aAboveB || bAboveA)) ||
+                (scope.relation == QuoteRelation.subset && aAboveB) ||
+                (scope.relation == QuoteRelation.superset && bAboveA)) {
+              throw const FormatException('含义范围判断与已列类属限定冲突，不能同时画成包含和部分相交或互斥');
+            }
+          }
         }
         if (scope == null &&
             nodeIds.isNotEmpty &&
@@ -785,6 +815,12 @@ class SemanticScope {
           throw const FormatException('非外延关系的连线须引用两个不同的已知概念身份');
         }
         if (nodeIds.length == 2) coverSources(nodeIds, references);
+        if (intersectionId.isNotEmpty && (scope?.relation != QuoteRelation.overlap || !nodes.containsKey(intersectionId) || nodeIds.contains(intersectionId) || nodes[intersectionId]!.kind != 'concept')) throw const FormatException('命名交集须引用独立概念身份，且对应部分相交的共同范围');
+        if (intersectionId.isNotEmpty) {
+          bool below(String parent, Set<String> seen) => parent == intersectionId || (seen.add(parent) &&
+              [...knownHierarchy, ...hierarchy].where((e) => e.kind == 'subtype' && e.parent == parent).any((e) => below(e.child, seen)));
+          if (nodes[intersectionId]!.universe != scope!.universe || !nodeIds.every((id) => below(id, {}))) throw const FormatException('命名交集须属于同一论域，并同时保留两个上位概念的规定');
+        }
         final outcome = scope != null
             ? 'drawable'
             : insightText(m, 'outcome') == 'needs_context' ||
@@ -795,6 +831,7 @@ class SemanticScope {
             nodeIds: nodeIds,
             partIds: partIds,
             universeId: universeId,
+            intersectionId: intersectionId,
             outcome: outcome));
       });
     }
@@ -925,6 +962,7 @@ class SemanticScope {
           nodeIds: r.nodeIds,
           partIds: r.partIds,
           universeId: r.universeId,
+          intersectionId: r.intersectionId,
           outcome: 'needs_context');
     }
     // Persist diagnostics so a partial cached response can still be repaired.

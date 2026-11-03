@@ -123,7 +123,7 @@ jobs:
           test/quote_knowledge_economy_test.dart
           test/cognitive_core_test.dart test/cognitive_extended_test.dart
           test/cognitive_audit_test.dart test/cognitive_audit_integration_test.dart
-          test/cognitive_relation_regression_test.dart
+          test/cognitive_relation_regression_test.dart test/cognitive_schopenhauer_forms_test.dart
           test/cognitive_catalog_test.dart test/cognitive_prototype_test.dart
           test/cognitive_plan_contract_test.dart test/semantic_scope_test.dart
           test/cognitive_semantic_views_test.dart
@@ -144,7 +144,7 @@ jobs:
           test/quote_knowledge_economy_test.dart
           test/cognitive_core_test.dart test/cognitive_extended_test.dart
           test/cognitive_audit_test.dart test/cognitive_audit_integration_test.dart
-          test/cognitive_relation_regression_test.dart
+          test/cognitive_relation_regression_test.dart test/cognitive_schopenhauer_forms_test.dart
           test/cognitive_catalog_test.dart test/cognitive_prototype_test.dart
           test/cognitive_plan_contract_test.dart test/semantic_scope_test.dart
           test/cognitive_semantic_views_test.dart

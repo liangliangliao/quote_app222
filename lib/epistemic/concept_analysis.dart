@@ -75,6 +75,7 @@ class ConceptScope {
       onlyB,
       otherMember;
   final bool illustration;
+  final String basisKind;
   final List<ScopePart> parts;
   const ConceptScope({
     required this.relation,
@@ -90,6 +91,7 @@ class ConceptScope {
     this.onlyB = '',
     this.otherMember = '',
     this.illustration = false,
+    this.basisKind = 'source_assertion',
     this.parts = const [],
   });
 
@@ -143,6 +145,7 @@ class ConceptScope {
       onlyB: insightText(m, 'only_b'),
       otherMember: insightText(m, 'other_member'),
       illustration: simulated,
+      basisKind: insightText(m, 'basis_kind').isNotEmpty ? insightText(m, 'basis_kind') : simulated ? 'teaching_example' : 'source_assertion',
     );
   }
 
@@ -162,5 +165,6 @@ class ConceptScope {
         'only_b': onlyB,
         if (otherMember.isNotEmpty) 'other_member': otherMember,
         'illustration': illustration,
+        'basis_kind': basisKind,
       };
 }

@@ -12,8 +12,9 @@ import 'schopenhauer_guidance.dart';
 class PhilosophyCase {
   final String id, title, boundary, forbidden;
   final List<ScopeSource> sources;
+  final List<String> requiredViews;
   const PhilosophyCase(
-      this.id, this.title, this.sources, this.boundary, this.forbidden);
+      this.id, this.title, this.sources, this.boundary, this.forbidden, {this.requiredViews = const []});
 }
 
 const philosophyCases = [
@@ -79,6 +80,11 @@ const philosophyCases = [
       ],
       '解释季节意象及内在力量的可能对应，用标注连线区分隐喻与类属；比较韧性与欲求、经验发现与偏好结构，保留各自根据。',
       '不能只写都涉及内在或A没说B；不能把夏天的同义改写当下位类，不能把欲求虚无等同没有欲求或伪造外延相交。'),
+  PhilosophyCase('H', '持志如心痛 · 类属、内容与含义范围',
+      [ScopeSource('A', '“持志如心痛。一心在痛上，岂有工夫说闲话、管闲事？”\n“初学工夫如此用亦好。……若只死死守着，恐于工夫上又发病。”', title: '用户提供的王阳明原文；省略处与版本待核对')],
+      '分别建立同一论域的逐层限定与交叉分类、概念经中介返回直观的内容链、由定义支持的包含和交叠区域；分析性定义与教学情境均须明示。初学是阶段、专注是方式，可交叉而非直接上下位；命名交集位于共同区域。保留若、只、恐。',
+      '不能将心痛与持志视为外延同一，不能把条件或隐喻箭头冒充树/圈；不能把专注等同持志的道德目标或把发病断言为确定医学因果；不要求固定层数/圈数，不以原文没列实例放弃合理的定义分析。',
+      requiredViews: ['hierarchy', 'circles']),
 ];
 
 const philosophyReviewDimensions = [
@@ -116,6 +122,8 @@ class PhilosophyBenchmarkService {
     final config = await ai.resolveGlobalConfig();
     if (!config.available) throw StateError('请先配置可用的文字 AI');
     final requestSettings = await GlobalAiRequestSettings().getConfig();
+    final context = SemanticContext(requestedViews: item.requiredViews);
+    final prompt = SemanticScopeService.buildPrompt(item.sources, item.title, context: context);
     final result = <String, dynamic>{
       'id': operation.id,
       'case': item.id,
@@ -138,7 +146,7 @@ class PhilosophyBenchmarkService {
         'endpoint_hash': insightHash(config.endpoint)
       },
       'prompt_snapshot':
-          SemanticScopeService.buildPrompt(item.sources, item.title),
+          prompt,
       'system_prompt_snapshot':
           '${SchopenhauerGuidance.basic}\n${SchopenhauerGuidance.core}',
       'provider_model_version': '以本次请求返回信息为准；未返回时未知',
@@ -153,7 +161,7 @@ class PhilosophyBenchmarkService {
     await AiRequestAudit.runOperation(operation, () async {
       try {
         final raw = await ai.generateText(
-            prompt: SemanticScopeService.buildPrompt(item.sources, item.title),
+            prompt: prompt,
             purpose: SemanticScopeService.requestPurpose,
             expectJson: true,
             maxTokens: 10000,
@@ -161,8 +169,7 @@ class PhilosophyBenchmarkService {
             forcedProvider: config.provider,
             forcedModel: config.model);
         result['raw_json'] = raw;
-        final parsed =
-            SemanticScope.parse(raw, item.sources, model: config.displayModel);
+        final parsed = await SemanticScopeService(ai: ai).validateResponse(raw, item.sources, item.title, config, context: context);
         result['local_issues'] = parsed.issues.map((i) => i.toJson()).toList();
         result['generation_status'] =
             parsed.needsRepair ? 'contract_issue' : 'received';

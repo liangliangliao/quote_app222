@@ -405,7 +405,8 @@ void main() {
                 preferredView: EpistemicViewKind.circles)),
         width: 320,
         scale: 2);
-    expect(find.byType(ConceptCirclePreview), findsOneWidget);
+    expect(find.byType(ConceptCirclePreview), findsNothing);
+    expect(find.text('尚未建立含义范围图'), findsOneWidget);
     expect(find.byType(GroundingPathView), findsNothing);
     expect(tester.takeException(), isNull);
     await mount(

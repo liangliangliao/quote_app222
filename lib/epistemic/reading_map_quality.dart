@@ -1,7 +1,7 @@
 import 'semantic_scope.dart';
 
 const readingMapPurpose = '从一般规定经必要概念中介返回直观内容，按材料选择概念树与含义圈';
-const readingMapContext = SemanticContext(purpose: readingMapPurpose);
+const readingMapContext = SemanticContext(purpose: readingMapPurpose, requestedViews: ['hierarchy', 'circles']);
 
 class ReadingMapQuality {
   static bool placeholder(String text) =>
@@ -71,7 +71,7 @@ class ReadingMapQuality {
     return largest;
   }
 
-  static List<AnalysisIssue> issues(SemanticScope value) {
+  static List<AnalysisIssue> issues(SemanticScope value, {List<String> requestedViews = const []}) {
     final issues = <AnalysisIssue>[];
     final examples =
         value.concepts.where((c) => ['experience', 'formal'].contains(c.kind));
@@ -112,6 +112,16 @@ class ReadingMapQuality {
       issues.add(AnalysisIssue('reading.grounding',
           '以下概念的直观根据或形式构造尚未展示：${ungrounded.map((n) => n.label).join('、')}。这表示内容来源尚需说明，不以虚构生活场景补齐。',
           retryable: false));
+    }
+    // Explicit projections cannot be satisfied by adding general semantic edges.
+    if (requestedViews.isNotEmpty && value.legacy) {
+      issues.add(const AnalysisIssue('reading.schema', '本次生成仍使用旧版图谱协议，缺少新版的限定与范围约定；已保留内容，请按新版重新生成。旧缓存不会自动付费重跑。'));
+    }
+    if (requestedViews.contains('hierarchy') && value.classEdges.isEmpty) {
+      issues.add(const AnalysisIssue('reading.class_structure', '概念树尚未建立：需在同一论域中给出上位规定、下位新增规定，并另外展示返回直观的内容链路；条件和隐喻连线不能替代。'));
+    }
+    if (requestedViews.contains('circles') && value.scopeRelations.isEmpty) {
+      issues.add(const AnalysisIssue('reading.meaning_spheres', '含义圈尚未建立：需明确分析采用的论域与成员判准，并返回可画的范围判断。可明示分析性定义，不能只把词语画成独立圆。'));
     }
     // Depth, length and number of circles are descriptive statistics only.
     // A short definition may be sufficient; a long argument must retain the

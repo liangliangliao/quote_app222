@@ -28,10 +28,11 @@ String conceptConnectionLabel(String kind) => switch (kind) {
 
 class ConceptConnection {
   final String from, to, kind, explanation, status;
+  final String? criterionLabel;
   final List<ScopeReference> references;
   const ConceptConnection(this.from, this.to, this.kind, this.explanation,
-      this.status, this.references);
-  String get label => conceptConnectionLabel(kind);
+      this.status, this.references, {this.criterionLabel});
+  String get label => criterionLabel ?? conceptConnectionLabel(kind);
   String get identity => '$from:$kind:$to';
   bool get symmetric => const {
         'contrast',
@@ -53,7 +54,7 @@ class ConceptConnection {
       };
 }
 
-/// Both canvases use the same validated identities. No relationship is inferred
+/// The projections use the same validated identities. No relationship is inferred
 /// from a name, screen position, category label or a shared keyword.
 List<ConceptConnection> conceptConnections(SemanticScope value) {
   final nodes = {for (final n in value.concepts) n.id: n};
