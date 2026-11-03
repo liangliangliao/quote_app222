@@ -28,6 +28,9 @@ SemanticContext expansionContext(SemanticScope value)=>SemanticContext(conceptId
     existingConcepts:value.concepts,existingHierarchy:value.hierarchy,existingRelations:value.relations);
 class ExpansionService extends SemanticScopeService {
   int calls=0;
+  SemanticScope? saved;
+  @override
+  Future<void> remember(List<ScopeSource> sources,String focus,SemanticScope value,{SemanticContext context=const SemanticContext()}) async {saved=value;}
   @override
   Future<SemanticScope?> cached(List<ScopeSource> sources,String focus,{SemanticContext context=const SemanticContext()}) async=>null;
   @override
@@ -189,6 +192,7 @@ void main() {
     final expand=find.text('展开相关概念');
     await tester.ensureVisible(expand);await tester.tap(expand);await tester.pumpAndSettle();
     expect(service.calls,1);expect(shown!.classEdges,hasLength(8));
+    expect(service.saved!.scopeRelations.map((r)=>r.intersectionId),containsAll(['J','J/new-common']));
     expect(painters(tester).single.connections.where((e)=>e.to=='J/new-common').map((e)=>e.from),containsAll(['R','B']));
     final circles=find.widgetWithText(ChoiceChip,'含义圈');
     await tester.ensureVisible(circles);await tester.tap(circles);await tester.pumpAndSettle();

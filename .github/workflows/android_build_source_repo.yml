@@ -279,6 +279,52 @@ jobs:
           echo "name=$package_name" >> "$GITHUB_OUTPUT"
           echo "APK source: $SOURCE_REF / $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Verify release APK and source tree
+        if: steps.detect.outputs.project_type == 'flutter'
+        working-directory: ${{ steps.detect.outputs.project_dir }}
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, subprocess
+          source = os.environ["SOURCE_SHA"]
+          assert re.fullmatch(r"[0-9a-f]{40}", source)
+          def output(*args):
+              return subprocess.check_output(args, text=True).strip()
+          subprocess.run(["git", "fetch", "--no-tags", "--depth=1", "origin", source], check=True)
+          source_tree = output("git", "rev-parse", source + "^{tree}")
+          build_tree = output("git", "rev-parse", "HEAD^{tree}")
+          assert source_tree == build_tree, "PR merge tree differs from the delivered source"
+          folder = pathlib.Path("build/apk-delivery")
+          apks = list(folder.glob("*.apk"))
+          assert len(apks) == 1
+          apk = apks[0]
+          info = json.loads((folder / "build-info.json").read_text())
+          assert info["source_sha"] == source
+          assert info["build_sha"] == output("git", "rev-parse", "HEAD")
+          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+          assert (folder / "SHA256SUMS").read_text().split() == [digest, apk.name]
+          sdk = pathlib.Path(os.environ.get("ANDROID_HOME") or os.environ["ANDROID_SDK_ROOT"])
+          versions = [p for p in (sdk / "build-tools").iterdir() if (p / "apksigner").is_file()]
+          build_tools = max(versions, key=lambda p: tuple(map(int, re.findall(r"\d+", p.name))))
+          signature = output(str(build_tools / "apksigner"), "verify", "--verbose", "--print-certs", str(apk))
+          certificates = [s.replace(":", "").lower() for s in re.findall(r"certificate SHA-256 digest: ([0-9a-fA-F:]+)", signature)]
+          expected_cert = "73982b58bb0aae7e48c20592c1e251c3a0fdbf831d5b7694d3f2f7477a04afab"
+          assert certificates == [expected_cert], "Unexpected release signing certificate"
+          badging = output(str(build_tools / "aapt"), "dump", "badging", str(apk))
+          assert "package: name='com.example.quote_app'" in badging
+          assert "sdkVersion:'26'" in badging
+          assert "application-debuggable" not in badging
+          native = re.search(r"^native-code:(.*)$", badging, re.M)
+          abis = sorted(re.findall(r"'([^']+)'", native.group(1)))
+          assert abis == sorted(["arm64-v8a", "armeabi-v7a", "x86_64"])
+          report = dict(source_sha=source, build_sha=info["build_sha"], source_tree=source_tree,
+                        build_tree=build_tree, apk=apk.name, sha256=digest, certificate_sha256=expected_cert,
+                        package="com.example.quote_app", min_sdk=26, abis=abis, release=True)
+          (folder / "release-verification.json").write_text(json.dumps(report, indent=2) + "\n")
+          print(json.dumps(report, indent=2))
+          PY
+
       - name: Upload APK - Flutter
         if: steps.detect.outputs.project_type == 'flutter'
         uses: actions/upload-artifact@v4

@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/data/db.dart';
 import 'package:quote_app/epistemic/cognitive_store.dart';
-import 'package:quote_app/epistemic/reading_illustration.dart';
+import 'fixtures/schopenhauer_forms.dart';
 import 'package:quote_app/epistemic/reading_map_quality.dart';
 import 'package:quote_app/epistemic/semantic_scope.dart';
 import 'package:quote_app/epistemic/semantic_scope_service.dart';
@@ -105,8 +105,9 @@ void main() {
       () async {
     var calls = 0;
     Map<String, dynamic>? sent;
-    final expected = readingIllustration(passage)!.toJson();
-    expected['concepts'][0]['definition'] = '把一般建议 带回一个具体处境，判断它是否适用的活动。';
+    const readingSources = [ScopeSource('A', wangQuote)];
+    final expected = wangForms();
+    expected['concepts'][0]['definition'] = '为某一修习目标进行练习的可辨认的 活动片段。';
     final answer = jsonEncode(expected);
     final events = StringBuffer(': keep-alive\n\n')
       ..write(event({
@@ -144,15 +145,15 @@ void main() {
           ai: LoopbackSemanticAi(endpoint),
           store: CognitiveStore(database: () async => db));
       final result = await service.analyze(
-          const [ScopeSource('A', passage)], '完整阅读流式验收',
+          readingSources, '完整阅读流式验收',
           context: readingMapContext, force: true);
-      expect(ReadingMapQuality.issues(result), isEmpty);
-      expect(result.concepts.first.definition, contains('一般建议 带回'));
+      expect(result.needsRepair, isFalse);
+      expect(result.concepts.first.definition, contains('可辨认的 活动'));
       expect(calls, 1);
       expect(sent!['response_format'], {'type': 'json_object'});
       expect(sent!['max_completion_tokens'], 10000);
       expect(sent!.containsKey('temperature'), isFalse);
-      await service.analyze(const [ScopeSource('A', passage)], '完整阅读流式验收',
+      await service.analyze(readingSources, '完整阅读流式验收',
           context: readingMapContext);
       expect(calls, 1);
     });
