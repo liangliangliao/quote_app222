@@ -338,32 +338,95 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     );
   }
 
+  Widget _viewTab(int index, String label, {required bool night, required bool timeline}) {
+    final selected = _cognitiveView == index;
+    final check = timeline && selected && MediaQuery.sizeOf(context).width >= 360 &&
+        MediaQuery.textScalerOf(context).scale(14) <= 20;
+    return Semantics(button: true, selected: selected, child: InkWell(
+      onTap: () => _changeView(index), borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: timeline ? const EdgeInsets.symmetric(horizontal: 4, vertical: 3) : EdgeInsets.zero,
+        padding: EdgeInsets.symmetric(vertical: timeline ? 8 : 13, horizontal: timeline ? 4 : 0),
+        decoration: timeline
+          ? BoxDecoration(color: selected ? const Color(0xffe9def7) : const Color(0xfffcfaff),
+              borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xffcfc3df)))
+          : BoxDecoration(border: Border(bottom: BorderSide(width: 2,
+              color: selected ? (night ? const Color(0xffe1d3a8) : const Color(0xff8a7650)) : Colors.transparent))),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          if (check) ...[const Icon(Icons.check, size: 16, color: Color(0xff635378)), const SizedBox(width: 4)],
+          Flexible(child: Text(label, maxLines: 2, textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              color: night ? Colors.white70 : Colors.black87))),
+        ]))));
+  }
+
+  Widget _comparisonControls() => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Wrap(spacing: 12, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  TextButton.icon(
+                    key: const ValueKey('quote-select-comparison'),
+                    icon: Icon(_selecting ? Icons.close : Icons.compare_arrows),
+                    label: Text(_selecting ? '退出选择（${_selected.length}/2）' : '选择比较'),
+                    onPressed: () => setState(() {
+                      _selecting = !_selecting;
+                      _selected.clear();
+                    }),
+                  ),
+                  if (_selecting)
+                    FilledButton(
+                      key: const ValueKey('quote-start-comparison'),
+                      onPressed: _selected.length == 2 ? _compareSelected : null,
+                      child: const Text('开始比较'),
+                    ),
+                ]),
+                if (_selecting && _selected.isEmpty)
+                  const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('选择两条名言；可以搜索后继续选择。')),
+                if (_selected.isNotEmpty)
+                  LayoutBuilder(builder: (context, bounds) {
+                    final compactPair = _selected.length == 2 &&
+                        bounds.maxWidth >= 300 && MediaQuery.textScalerOf(context).scale(14) <= 22;
+                    final labelWidth = compactPair ? (bounds.maxWidth - 8) / 2 - 80 : 220.0;
+                    return Wrap(spacing: 8, children: _selected.values.indexed.map((entry) => InputChip(
+                      label: ConstrainedBox(constraints: BoxConstraints(maxWidth: labelWidth),
+                        child: Text('${entry.$1 == 0 ? 'A' : 'B'} · ${entry.$2.content}', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      onDeleted: () => _toggleQuote(entry.$2),
+                    )).toList());
+                  }),
+              ]),
+            );
+
   @override
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
     final night = _cognitiveView == 1 && CognitivePreferenceStore.active;
+    final timeline = _cognitiveView == 2 && CognitivePreferenceStore.active;
+    final searchBorder = timeline
+        ? OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none)
+        : InputBorder.none;
     // Wrap entire page in SafeArea with top/bottom disabled so that list content touches edges
     return AnnotatedRegion<SystemUiOverlayStyle>(value: night ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
-      child: Scaffold(backgroundColor: night ? knowledgeNight : Colors.white, body: SafeArea(
+      child: Scaffold(backgroundColor: night ? knowledgeNight : timeline ? const Color(0xfffcfaff) : Colors.white, body: SafeArea(
       top: false,
       bottom: false,
       child: Column(
         children: [
           // Header row containing search bar and upload button. Place within safe area padding manually
           if (!night) Container(
-            color: Colors.white,
+            color: timeline ? const Color(0xfffcfaff) : Colors.white,
             padding: EdgeInsets.only(top: topPad, left: 8, right: 8),
             height: topPad + kToolbarHeight,
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
                       hintText: '搜索',
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
+                      filled: timeline, fillColor: const Color(0xfff1ebf7),
+                      border: searchBorder,
+                      enabledBorder: searchBorder,
+                      focusedBorder: searchBorder,
                       isDense: true,
                     ),
                     onChanged: (v) {
@@ -575,13 +638,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
             Padding(padding: EdgeInsets.fromLTRB(12, night ? topPad + 4 : 4, 12, 4),
               child: Row(children: [
                 for (final view in ['列表', '关系图', '时间线', '人物'].indexed)
-                  Expanded(child: InkWell(onTap: () => _changeView(view.$1),
-                    child: Container(padding: const EdgeInsets.symmetric(vertical: 13),
-                      decoration: BoxDecoration(border: Border(bottom: BorderSide(width: 2,
-                        color: _cognitiveView == view.$1 ? (night ? const Color(0xffe1d3a8) : const Color(0xff8a7650)) : Colors.transparent))),
-                      child: Text(view.$2, textAlign: TextAlign.center, style: TextStyle(fontSize: 14,
-                        fontWeight: _cognitiveView == view.$1 ? FontWeight.w600 : FontWeight.normal,
-                        color: night ? Colors.white70 : Colors.black87))))),
+                  Expanded(child: _viewTab(view.$1, view.$2, night: night, timeline: timeline)),
                 if (night) IconButton(tooltip: '搜索名言', icon: const Icon(Icons.search, color: Colors.white70), onPressed: () async {
                   final text = TextEditingController(text: _q);
                   final value = await showDialog<String>(context: context, builder: (context) => AlertDialog(
@@ -592,42 +649,8 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
                   if (value != null && mounted) {setState(() => _q = value);_reload();}
                 }),
               ])),
-          if (QuoteInsightSettings.comparisonEnabled && !night)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Wrap(spacing: 12, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                  TextButton.icon(
-                    key: const ValueKey('quote-select-comparison'),
-                    icon: Icon(_selecting ? Icons.close : Icons.compare_arrows),
-                    label: Text(_selecting ? '退出选择（${_selected.length}/2）' : '选择比较'),
-                    onPressed: () => setState(() {
-                      _selecting = !_selecting;
-                      _selected.clear();
-                    }),
-                  ),
-                  if (_selecting)
-                    FilledButton(
-                      key: const ValueKey('quote-start-comparison'),
-                      onPressed: _selected.length == 2 ? _compareSelected : null,
-                      child: const Text('开始比较'),
-                    ),
-                ]),
-                if (_selecting && _selected.isEmpty)
-                  const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('选择两条名言；可以搜索后继续选择。')),
-                if (_selected.isNotEmpty)
-                  LayoutBuilder(builder: (context, bounds) {
-                    final compactPair = _selected.length == 2 &&
-                        bounds.maxWidth >= 300 && MediaQuery.textScalerOf(context).scale(14) <= 22;
-                    final labelWidth = compactPair ? (bounds.maxWidth - 8) / 2 - 80 : 220.0;
-                    return Wrap(spacing: 8, children: _selected.values.indexed.map((entry) => InputChip(
-                      label: ConstrainedBox(constraints: BoxConstraints(maxWidth: labelWidth),
-                        child: Text('${entry.$1 == 0 ? 'A' : 'B'} · ${entry.$2.content}', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      onDeleted: () => _toggleQuote(entry.$2),
-                    )).toList());
-                  }),
-              ]),
-            ),
+          if (QuoteInsightSettings.comparisonEnabled && !night && !timeline)
+            _comparisonControls(),
           // List content with zero top/bottom padding
           Expanded(
             child: _cognitiveView == 0 ? ListView.builder(
@@ -681,6 +704,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
               key: ValueKey('history-cognition-$_q-$_generation'),
               repository: widget.knowledgeRepository, query: _q, onCompare: _compareSelected,
               rows: List.of(_items), mode: _cognitiveView, revision: _insightRevision,
+              timelineControls: timeline && QuoteInsightSettings.comparisonEnabled ? _comparisonControls() : null,
               selectedKeys: _selected.keys.toSet(),
               onOpen: (row) => _showQuoteDetails(row),
               onSelect: (row) => _toggleQuote(QuoteReference.fromRow(row)),

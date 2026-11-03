@@ -1,4 +1,5 @@
 import 'reading_map_quality.dart';
+import '../services/semantic_json_transport.dart';
 import 'package:flutter/material.dart';
 import 'concept_meaning_diagram.dart';
 import 'concept_meaning_network.dart';
@@ -144,7 +145,9 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
       }
     } catch (e) {
       if (mounted && n == generation)
-        setState(() => error = e is FormatException
+        setState(() => error = e is SemanticRequestException
+            ? e.message
+            : e is FormatException
             ? e.message
             : e is StateError
                 ? e.message

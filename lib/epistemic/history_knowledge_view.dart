@@ -7,6 +7,7 @@ import '../data/quote_insight_store.dart';
 import '../models/quote_insight.dart';
 import 'cognitive_mode.dart';
 import 'reading_scope.dart';
+import 'history_timeline.dart';
 import '../widgets/quote_history_avatar.dart';
 
 class QuoteConceptGroup {
@@ -53,6 +54,7 @@ class HistoryKnowledgeView extends StatefulWidget {
   final QuoteKnowledgeRepository? repository;
   final String query;
   final VoidCallback? onCompare;
+  final Widget? timelineControls;
   const HistoryKnowledgeView({
     super.key,
     required this.rows,
@@ -68,6 +70,7 @@ class HistoryKnowledgeView extends StatefulWidget {
     this.repository,
     this.query = '',
     this.onCompare,
+    this.timelineControls,
   });
   @override
   State<HistoryKnowledgeView> createState() => _HistoryKnowledgeViewState();
@@ -124,43 +127,18 @@ class _HistoryKnowledgeViewState extends State<HistoryKnowledgeView> {
           onOpen: widget.onOpen,
           onSelect: widget.onSelect,
           onCompare: widget.onCompare);
+    if (widget.mode == 2) return _timeline();
     if (widget.rows.isEmpty)
       return const Center(child: Text('暂无匹配名言，可先导入或保存名言。'));
-    if (widget.mode == 2) return _timeline();
     if (widget.mode == 3) return _authors();
     return _timeline();
   }
 
-  Widget _timeline() {
-    final groups = <String, List<Map<String, dynamic>>>{};
-    for (final row in widget.rows) {
-      final raw = row['created_at'];
-      final date = DateTime.tryParse('${row['inserted_at'] ?? ''}') ??
-          (raw is num && raw > 0
-              ? DateTime.fromMillisecondsSinceEpoch(raw.toInt())
-              : null);
-      final label =
-          date == null ? '记录时间未知' : '${date.year}年${date.month}月${date.day}日';
-      groups.putIfAbsent(label, () => []).add(row);
-    }
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const Text('时间线 · 记录时间不证明思想之间存在因果', style: TextStyle(height: 1.6)),
-        for (final group in groups.entries) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Text(
-              group.key,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          for (final row in group.value) _quote(row),
-        ],
-        _more,
-      ],
-    );
-  }
+  Widget _timeline() => QuoteHistoryTimeline(
+      rows: widget.rows, selectedKeys: widget.selectedKeys,
+      onOpen: widget.onOpen, onSelect: widget.onSelect,
+      controls: widget.timelineControls, hasMore: widget.hasMore,
+      loading: widget.loading, onLoadMore: widget.onLoadMore);
 
   ImageProvider? _authorImage(List<Map<String, dynamic>> rows) {
     for (final row in rows) {

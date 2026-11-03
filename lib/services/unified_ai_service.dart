@@ -1,4 +1,5 @@
 import '../quote_knowledge/cost_policy.dart';
+import 'semantic_json_transport.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -587,13 +588,16 @@ class UnifiedAiService {
     final cfg = await resolveGlobalConfig(forcedProvider: forcedProvider, forcedModel: forcedModel);
     final requestCfg = await _requestSettings.getConfig();
     final classificationBatch = purpose == 'quote_knowledge.batch.v2';
-    final effectiveMaxTokens = classificationBatch
+    final semanticMap = SemanticJsonTransport.handles(purpose);
+    final effectiveMaxTokens = semanticMap
+        ? SemanticJsonTransport.outputLimit(maxTokens, requestCfg.resolveMaxTokens(maxTokens))
+        : classificationBatch
         ? ClassificationCostPolicy.capOutput(maxTokens, requestCfg.resolveMaxTokens(maxTokens))
         : requestCfg.resolveMaxTokens(maxTokens);
     final effectiveTemperature = requestCfg.resolveTemperature(temperature);
     final effectiveTopP = requestCfg.resolveTopP();
     var effectiveTimeout = requestCfg.resolveTimeout(const Duration(seconds: 90));
-    var effectiveRetryCount = classificationBatch ? 0 : requestCfg.resolveRetryCount();
+    var effectiveRetryCount = classificationBatch || semanticMap ? 0 : requestCfg.resolveRetryCount();
     var effectiveRetryDelayMs = requestCfg.resolveRetryDelayMs();
     // Movie episode generation calls many small JSON tasks. OpenRouter may
     // return temporary upstream 429 for a selected provider even when the
@@ -993,12 +997,14 @@ class UnifiedAiService {
     required int retryDelayMs,
   }) async {
     final uri = Uri.parse(endpoint.isEmpty ? openAiResponsesEndpoint : endpoint);
-    // JSON tasks are intentionally non-streaming. Several reasoning models
+    // Other JSON tasks remain non-streaming. Long semantic maps use a separate
+    // answer-only SSE assembler with completeness checks and one network send.
+    // Several reasoning models
     // stream long `reasoning_content` chunks before final `content`; if the
     // generation is truncated, downstream parsers see no valid JSON even though
     // HTTP succeeds. Non-streaming requests return a single final body that is
     // much safer for strict jsonDecode-based tasks.
-    final stream = !expectJson;
+    final stream = !expectJson || SemanticJsonTransport.handles(purpose);
     final headers = <String, String>{
       'Authorization': 'Bearer $apiKey',
       'Content-Type': 'application/json',
@@ -1067,7 +1073,7 @@ class UnifiedAiService {
     // reasoning-compatible streams often emit `reasoning_content` with
     // `delta.content = null` for a long time. For tasks that must return a
     // parseable JSON object, prefer a single final response body.
-    final stream = !expectJson;
+    final stream = !expectJson || SemanticJsonTransport.handles(purpose);
     final headers = <String, String>{
       'Authorization': 'Bearer $apiKey',
       'Content-Type': 'application/json',
@@ -1351,7 +1357,7 @@ class UnifiedAiService {
     // OpenAI-compatible Azure routes may stream ordinary chat. Claude uses the
     // Anthropic Messages API and stays non-streaming here so the same app parser
     // works reliably for both normal chat and strict-JSON tasks.
-    final stream = anthropic ? false : !expectJson;
+    final stream = anthropic ? false : !expectJson || SemanticJsonTransport.handles(purpose);
     final messages = <Map<String, dynamic>>[
       if ((systemPrompt ?? '').trim().isNotEmpty)
         <String, dynamic>{'role': 'system', 'content': systemPrompt!.trim()},
@@ -1732,6 +1738,23 @@ class UnifiedAiService {
       body: body,
       model: model,
     );
+    if (SemanticJsonTransport.handles(purpose)) {
+      try {
+        final reply = await SemanticJsonTransport().post(
+          uri: Uri.parse(endpoint), headers: headers, body: body, idleTimeout: timeout);
+        await DeepSeekLogger.logResponse(
+          provider: _providerLabel(provider), module: module, endpoint: endpoint,
+          statusCode: reply.statusCode, body: reply.wireBody, model: model);
+        if (reply.statusCode >= 200 && reply.statusCode < 300) return reply.text;
+        throw Exception('HTTP ${reply.statusCode}: ${reply.wireBody}');
+      } catch (error, stack) {
+        await DeepSeekLogger.logError(
+          provider: _providerLabel(provider), module: module, endpoint: endpoint,
+          error: error is SemanticRequestException ? error.cause ?? error : error,
+          stackTrace: stack, model: model);
+        rethrow;
+      }
+    }
     if (body['stream'] == true) {
       return _postStreamForText(
         provider: provider,
