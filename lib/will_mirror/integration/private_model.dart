@@ -91,8 +91,17 @@ class HostPrivateModel implements StructuredModel {
           },
         };
         if (isAnthropic) {
-          body['max_tokens'] = await AiOutputPolicy.anthropicCapacity(endpoint, {
-            'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01'}, config.deployment, client: client);
+          try {
+            body['max_tokens'] = await AiOutputPolicy.anthropicCapacity(
+                endpoint,
+                {'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01'},
+                config.deployment,
+                client: client);
+          } on StateError catch (error) {
+            // This policy error is safe and specific; do not misreport missing
+            // deployment metadata as a network interruption.
+            throw MirrorProblem(error.message);
+          }
         }
         response = await client
             .post(endpoint,
