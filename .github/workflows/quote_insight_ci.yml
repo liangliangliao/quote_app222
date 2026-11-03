@@ -33,6 +33,8 @@ on:
       - 'lib/services/quote_insight_settings.dart'
       - 'lib/services/task_runner.dart'
       - 'lib/services/unified_ai_service.dart'
+      - 'lib/services/semantic_json_transport.dart'
+      - 'test/semantic_*test.dart'
       - 'test/quote_*test.dart'
       - 'pubspec.*'
       - '.github/workflows/quote_insight_ci.yml'
@@ -69,6 +71,8 @@ on:
       - 'lib/services/quote_insight_settings.dart'
       - 'lib/services/task_runner.dart'
       - 'lib/services/unified_ai_service.dart'
+      - 'lib/services/semantic_json_transport.dart'
+      - 'test/semantic_*test.dart'
       - 'test/quote_*test.dart'
       - 'pubspec.*'
       - '.github/workflows/quote_insight_ci.yml'
@@ -104,6 +108,7 @@ jobs:
         run: >-
           flutter analyze --no-pub
           lib/epistemic lib/quote_knowledge
+          lib/services/semantic_json_transport.dart
           lib/widgets/quote_comparison_prototype.dart lib/widgets/quote_portrait.dart
           lib/pages/history_page.dart
           test/quote_knowledge_test.dart test/quote_knowledge_widgets_test.dart
@@ -113,6 +118,8 @@ jobs:
           test/cognitive_plan_contract_test.dart test/semantic_scope_test.dart
           test/cognitive_semantic_views_test.dart
           test/cognitive_reading_grounding_test.dart
+          test/cognitive_timeline_stream_test.dart test/semantic_json_transport_test.dart
+          test/services/unified_ai_service_azure_claude_test.dart
           test/cognitive_widgets_test.dart test/cognitive_flags_test.dart
           lib/models/quote_insight.dart lib/data/quote_insight_store.dart
           lib/services/quote_comparison_service.dart lib/services/quote_insight_settings.dart
@@ -130,6 +137,8 @@ jobs:
           test/cognitive_plan_contract_test.dart test/semantic_scope_test.dart
           test/cognitive_semantic_views_test.dart
           test/cognitive_reading_grounding_test.dart
+          test/cognitive_timeline_stream_test.dart test/semantic_json_transport_test.dart
+          test/services/unified_ai_service_azure_claude_test.dart
           test/cognitive_widgets_test.dart test/cognitive_flags_test.dart
           test/quote_insight_test.dart test/quote_comparison_test.dart
           test/quote_insight_store_test.dart test/quote_insight_widgets_test.dart
