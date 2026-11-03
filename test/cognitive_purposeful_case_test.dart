@@ -381,7 +381,7 @@ void main() {
           ConceptMeaningNetwork(value: value())
         ]));
     await capture(t, 'case-circles');
-    await t.tap(find.text('保持内在力量的经历').last);
+    await t.tap(find.text('展现韧性的经历').last);
     await t.pumpAndSettle();
     final core = find.text('本次共同尺度中的范围 · 对应核心概念：韧性');
     await t.ensureVisible(core);
