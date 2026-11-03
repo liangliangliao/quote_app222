@@ -101,9 +101,9 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
         final retainComplete =
             widget.analysisContext.purpose == readingMapPurpose &&
                 result != null &&
-                ReadingMapQuality.issues(result!).isEmpty &&
+                !ReadingMapQuality.issues(result!).any((i) => i.retryable) &&
                 value != null &&
-                ReadingMapQuality.issues(value).isNotEmpty;
+                ReadingMapQuality.issues(value).any((i) => i.retryable);
         setState(() {
           if (!retainComplete) result = value ?? result;
         });

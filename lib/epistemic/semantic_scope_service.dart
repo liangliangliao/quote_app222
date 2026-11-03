@@ -125,7 +125,7 @@ class SemanticScopeService {
               model: config.displayModel);
           if (context.conceptId.isNotEmpty ||
               context.purpose != readingMapPurpose ||
-              ReadingMapQuality.issues(saved, requestedViews: context.requestedViews).isEmpty) return saved;
+              !ReadingMapQuality.issues(saved, requestedViews: context.requestedViews).any((i) => i.retryable)) return saved;
         } catch (_) {}
       }
     }

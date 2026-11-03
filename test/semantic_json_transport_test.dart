@@ -148,6 +148,7 @@ void main() {
           readingSources, '完整阅读流式验收',
           context: readingMapContext, force: true);
       expect(result.needsRepair, isFalse);
+      expect(result.issues.any((i) => !i.retryable), isTrue); // A content-source notice must not cause another paid call.
       expect(result.concepts.first.definition, contains('可辨认的 活动'));
       expect(calls, 1);
       expect(sent!['response_format'], {'type': 'json_object'});
