@@ -1,6 +1,6 @@
 import 'semantic_scope.dart';
 
-const readingMapPurpose = '从一般规定逐层限定到可观察经验，并用多个概念含义圈呈现连续关系';
+const readingMapPurpose = '从一般规定经必要概念中介返回直观内容，按材料选择概念树与含义圈';
 const readingMapContext = SemanticContext(purpose: readingMapPurpose);
 
 class ReadingMapQuality {
@@ -13,7 +13,7 @@ class ReadingMapQuality {
     for (final node in value.concepts) {
       final raw = node.toJson();
       if (node.kind == 'experience' && placeholder(node.label)) {
-        if (node.definition.runes.length < 24 || placeholder(node.definition))
+        if (node.definition.trim().isEmpty || placeholder(node.definition))
           continue;
         raw['label'] = String.fromCharCodes(node.definition
             .replaceFirst(RegExp(r'^(?:模拟|示例|例子)[：:]\s*'), '')
@@ -74,43 +74,48 @@ class ReadingMapQuality {
   static List<AnalysisIssue> issues(SemanticScope value) {
     final issues = <AnalysisIssue>[];
     final examples =
-        value.concepts.where((c) => c.kind == 'experience').toList();
-    if (examples.any((c) =>
-        placeholder(c.label) ||
-        placeholder(c.definition) ||
-        c.definition.runes.length < 24)) {
-      issues.add(const AnalysisIssue('reading.experiences',
-          '具体经验仍是占位或过短：请写明人物/对象、情境、动作和可观察结果；节点标题直接描述该次事件。'));
+        value.concepts.where((c) => ['experience', 'formal'].contains(c.kind));
+    for (final c in examples) {
+      if (placeholder(c.label) ||
+          placeholder(c.definition) ||
+          c.definition.trim().isEmpty) {
+        issues.add(AnalysisIssue('reading.experience.${c.id}',
+            '“${c.label}”仍是文字占位；需要明确的对象、动作或可分辨的直观内容，不能把概念名加“具体表现”当作落地。'));
+      }
     }
     final groundable = <String>{
-      for (final n in examples)
-        if (!placeholder(n.label) && n.definition.runes.length >= 24) n.id
+      for (final n in value.concepts)
+        if ((n.kind == 'formal' || n.kind == 'experience') &&
+            !placeholder(n.label) &&
+            !placeholder(n.definition) &&
+            n.definition.trim().isNotEmpty)
+          n.id
     };
     var changed = true;
     while (changed) {
       changed = false;
       for (final e in value.hierarchy) {
-        if (groundable.contains(e.child) && groundable.add(e.parent))
-          changed = true;
+        // Each edge keeps its declared role. A teaching instance illustrates
+        // a concept; it does not establish the truth of an empirical premise.
+        if (groundable.contains(e.child) &&
+            e.explanation.trim().isNotEmpty &&
+            ['subtype', 'mediation', 'grounding', 'instance']
+                .contains(e.kind) &&
+            groundable.add(e.parent)) changed = true;
       }
     }
     final ungrounded = value.concepts
         .where((n) => n.kind == 'concept' && !groundable.contains(n.id))
         .toList();
-    if (ungrounded.isNotEmpty)
+    if (ungrounded.isNotEmpty &&
+        !['fact', 'definition'].contains(value.materialKind)) {
       issues.add(AnalysisIssue('reading.grounding',
-          '以下概念尚未经过中介链路落到具体经验：${ungrounded.take(6).map((n) => n.label).join('、')}。请补充概念依赖及最终的直观依据，不能用文字占位代替。'));
-    if (depth(value) < 4)
-      issues.add(const AnalysisIssue('reading.hierarchy',
-          '层级过短：需要一般概念→有意义的下位限定→更具体的条件/活动→可观察经验；不能靠同义改名凑层。'));
-    if (examples.length < 2)
-      issues.add(const AnalysisIssue(
-          'reading.examples', '请补充至少两条具体且明确标记的模拟经验，说明如何呈现共同规定及差异。'));
-    if (value.relations.where((r) => r.scope != null).length < 4 ||
-        connectedCircles(value) < 5) {
-      issues.add(const AnalysisIssue('reading.circles',
-          '含义圈缺少连续结构：在同一明确论域中复用至少5个概念节点并建立至少4条有成员例子的圈关系；可构造有边界的模拟练习，不将其冒充原句事实。'));
+          '以下概念的直观根据或形式构造尚未展示：${ungrounded.map((n) => n.label).join('、')}。这表示内容来源尚需说明，不以虚构生活场景补齐。',
+          retryable: false));
     }
+    // Depth, length and number of circles are descriptive statistics only.
+    // A short definition may be sufficient; a long argument must retain the
+    // intermediaries it actually needs. Neither receives a numeric quality score.
     return issues;
   }
 }

@@ -180,8 +180,8 @@ class ConceptDetails extends StatelessWidget {
                 style:
                     const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
             Text(
-                node.kind == 'experience'
-                    ? node.status == 'example'
+                ['experience', 'formal'].contains(node.kind)
+                    ? node.kind == 'formal' ? '形式构造 · 定义下的直观' : node.status == 'example'
                         ? '具体经验 · 模拟示例'
                         : '具体经验 · 原文材料'
                     : node.status == 'text_claim'
@@ -410,7 +410,7 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
                                               fontWeight: FontWeight.w700)),
                                       const SizedBox(height: 5),
                                       Text(
-                                          n.kind == 'experience'
+                                          n.kind == 'formal' ? '形式构造 · 定义下的直观' : n.kind == 'experience'
                                               ? n.status == 'example'
                                                   ? '具体经验 · 模拟'
                                                   : '具体经验'

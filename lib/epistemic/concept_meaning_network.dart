@@ -17,7 +17,9 @@ class MeaningCluster {
   final List<SemanticRelation> relations;
   final List<MeaningCircle> circles;
   final Size size;
+  /// Geometry consistency only; never source or philosophical verification.
   final bool verified;
+  bool get geometryConsistent => verified;
   const MeaningCluster(this.relations, this.circles, this.size, this.verified);
 }
 
@@ -292,8 +294,9 @@ class _ConceptMeaningNetworkState extends State<ConceptMeaningNetwork> {
             value: widget.value,
             onOpen: widget.onOpen,
             onExpand: widget.onExpand),
+      if (clusters.isNotEmpty) const Text('圆的布局仅核对几何关系；成员判准、原文支持与推理仍须分别核验。', style: TextStyle(fontSize: 11)),
       for (final cluster in clusters) ...[
-        if (cluster.verified)
+        if (cluster.geometryConsistent)
           ConceptCanvas(
               title:
                   '${cluster.relations.any((r) => r.scope!.illustration) ? '模拟练习 · ' : ''}多概念含义圈 · ${cluster.relations.first.scope!.universe}',

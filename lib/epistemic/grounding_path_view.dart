@@ -16,12 +16,12 @@ class _GroundingPathViewState extends State<GroundingPathView> {
     if (!visited.add(id)) return [];
     final node = widget.value.concepts.where((c) => c.id == id).firstOrNull;
     if (node == null) return [];
-    if (node.kind == 'experience') return [node];
+    if (['experience', 'formal'].contains(node.kind)) return [node];
     var best = <SemanticConcept>[];
     for (final e in widget.value.hierarchy.where((e) => e.parent == id)) {
       final child = _path(e.child, {...visited});
       if (child.isNotEmpty &&
-          child.last.kind == 'experience' &&
+          ['experience', 'formal'].contains(child.last.kind) &&
           child.length > best.length) best = child;
     }
     return [node, ...best];
@@ -78,7 +78,7 @@ class _GroundingPathViewState extends State<GroundingPathView> {
                     ]));
               }),
             Card(
-                color: item.$2.kind == 'experience'
+                color: ['experience', 'formal'].contains(item.$2.kind)
                     ? const Color(0xffe6eff0)
                     : const Color(0xfff7e7c5),
                 elevation: 0,
@@ -99,18 +99,21 @@ class _GroundingPathViewState extends State<GroundingPathView> {
                               Text(item.$2.definition,
                                   style: const TextStyle(
                                       fontSize: 13, height: 1.6)),
-                              if (item.$2.kind == 'experience') ...[
+                              if (['experience', 'formal']
+                                  .contains(item.$2.kind)) ...[
                                 const SizedBox(height: 8),
                                 Text(
-                                    item.$2.status == 'example'
-                                        ? '模拟场景 · 可据此观察人物、动作与条件，再与自己的经验对照。'
-                                        : '原文提供的具体材料 · 仍需核对其观察来源。',
+                                    item.$2.kind == 'formal'
+                                        ? '形式构造 · 定义下的直观内容，不冒充生活事件。'
+                                        : item.$2.status == 'example'
+                                            ? '模拟场景 · 可据此观察人物、动作与条件，再与自己的经验对照。'
+                                            : '原文提供的具体材料 · 仍需核对其观察来源。',
                                     style: const TextStyle(
                                         fontSize: 11, color: Color(0xff526e73)))
                               ],
                             ])))),
           ],
-          if (path.last.kind != 'experience')
+          if (!['experience', 'formal'].contains(path.last.kind))
             const Padding(
                 padding: EdgeInsets.only(top: 10),
                 child: Text('这条链尚缺直观依据；请补充可观察的具体材料，不能用概念名称代替。')),

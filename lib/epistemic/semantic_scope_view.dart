@@ -1,3 +1,5 @@
+import '../widgets/ai_budget_panel.dart';
+import '../services/ai_request_audit.dart';
 import 'reading_map_quality.dart';
 import '../services/semantic_json_transport.dart';
 import 'package:flutter/material.dart';
@@ -49,6 +51,8 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
   SemanticScope? result;
   bool busy = false, readingCache = false;
   String? error;
+  String? verification;
+  AiOperation? operation;
   int generation = 0;
   @override
   void initState() {
@@ -65,7 +69,9 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
         widget.focus != old.focus ||
         widget.analysisContext.toJson().toString() !=
             old.analysisContext.toJson().toString()) {
+      operation?.cancellation.cancel();
       generation++;
+      verification = null;
       result = widget.initial;
       busy = false;
       readingCache = false;
@@ -74,7 +80,9 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
     } else if (widget.initial?.toJson().toString() !=
             old.initial?.toJson().toString() &&
         widget.initial != null) {
+      operation?.cancellation.cancel();
       generation++;
+      verification = null;
       result = widget.initial;
       busy = false;
       readingCache = false;
@@ -123,8 +131,11 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
             conceptLabel: node.label,
             conceptDefinition: node.definition);
     try {
-      final value = await service.analyze(widget.sources, widget.focus,
-          force: conceptId == null && result != null, context: context);
+      operation = AiOperation('cognition.semantic.v4');
+      final value = await AiRequestAudit.runOperation(
+          operation!,
+          () => service.analyze(widget.sources, widget.focus,
+              force: conceptId == null && result != null, context: context));
       if (mounted && n == generation) {
         final combined = result != null && (node != null || value.needsRepair)
             ? result!.merge(value)
@@ -133,7 +144,7 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
             model: combined.model);
         setState(() => result = next);
         widget.onResult?.call(next);
-        if (node != null) {
+        if (node != null && !next.needsRepair) {
           try {
             await service.remember(widget.sources, widget.focus, next,
                 context: widget.analysisContext);
@@ -148,10 +159,68 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
         setState(() => error = e is SemanticRequestException
             ? e.message
             : e is FormatException
-            ? e.message
-            : e is StateError
                 ? e.message
-                : '分析暂未完成，请检查文字 AI 设置后重试');
+                : e is StateError
+                    ? e.message
+                    : '分析暂未完成，请检查文字 AI 设置后重试');
+    } finally {
+      if (mounted && n == generation) setState(() => busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    operation?.cancellation.cancel();
+    super.dispose();
+  }
+
+  Future<void> _auxiliary(bool repair) async {
+    final previous = result;
+    if (previous == null) return;
+    String? selectedClaim;
+    if (!repair) {
+      final targets = SemanticScopeService.verificationTargets(previous);
+      if (targets.isEmpty) return;
+      selectedClaim = targets.length == 1
+          ? '${targets.first['claim']}'
+          : await showDialog<String>(
+              context: context,
+              builder: (context) =>
+                  SimpleDialog(title: const Text('选择一条命题进行辅助核验'), children: [
+                    for (final target in targets)
+                      SimpleDialogOption(
+                          onPressed: () =>
+                              Navigator.pop(context, '${target['claim']}'),
+                          child: Text('${target['claim']}'))
+                  ]));
+      if (!mounted || selectedClaim == null) return;
+    }
+    final n = ++generation;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    operation = AiOperation(repair
+        ? 'cognition.semantic.repair.v4'
+        : 'cognition.semantic.verify.v4');
+    try {
+      await AiRequestAudit.runOperation(operation!, () async {
+        if (repair) {
+          final next = await service.repair(
+              widget.sources, widget.focus, previous,
+              context: widget.analysisContext);
+          if (mounted && n == generation) {
+            setState(() => result = next);
+            widget.onResult?.call(next);
+          }
+        } else {
+          final raw = await service.verify(widget.sources, previous,
+              claim: selectedClaim);
+          if (mounted && n == generation) setState(() => verification = raw);
+        }
+      });
+    } catch (e) {
+      if (mounted && n == generation) setState(() => error = e.toString());
     } finally {
       if (mounted && n == generation) setState(() => busy = false);
     }
@@ -170,6 +239,20 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
         const Text('概念关系与根据图',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         Text(widget.focus, style: const TextStyle(fontSize: 12)),
+        Text(
+            '材料来源：${widget.sources.map((s) => switch (s.origin) {
+                  'quote' => '引文（出处待核对）',
+                  'user_report' => '用户报告',
+                  'synopsis' => '剧情梗概',
+                  'ai_interpretation' => 'AI解释',
+                  'simulation' => '教学模拟',
+                  'direct_observation' => '直接观察记录',
+                  'teaching_text' => '教学材料',
+                  _ => '未核对的记录'
+                }).toSet().join('、')}',
+            style: const TextStyle(fontSize: 11)),
+        const AiBudgetPanel(
+            purpose: 'cognition.semantic.v4', defaultBudget: 10000),
         if (result case final value?)
           SemanticScopeView(
               value: value,
@@ -192,7 +275,43 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
         if (error != null)
           Text('$error${result != null ? ' 已保留已有分析。' : ''}',
               style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        if (verification != null)
+          ExpansionTile(
+              title: const Text('AI 辅助核验 · 仍需人工复核'),
+              children: [SelectableText(verification!)]),
+        ExpansionTile(
+            title: const Text('分支展开与辅助任务额度', style: TextStyle(fontSize: 12)),
+            expansionAnimationStyle: cognitiveExpansionStyle(context),
+            children: const [
+              AiBudgetPanel(
+                  purpose: 'cognition.semantic.expand.v4', defaultBudget: 4000),
+              AiBudgetPanel(
+                  purpose: 'cognition.semantic.repair.v4', defaultBudget: 2000),
+              AiBudgetPanel(
+                  purpose: 'cognition.semantic.verify.v4', defaultBudget: 2000),
+            ]),
+        if (result != null)
+          Wrap(spacing: 8, children: [
+            if (result!.needsRepair)
+              TextButton(
+                  onPressed: busy ? null : () => _auxiliary(true),
+                  child: const Text('仅修复有问题的项目（默认2000额度）')),
+            TextButton(
+                onPressed: busy ? null : () => _auxiliary(false),
+                child: const Text('主动 AI 辅助核验（默认2000额度）')),
+          ]),
         if (busy || readingCache) const LinearProgressIndicator(),
+        if (busy)
+          TextButton(
+              onPressed: () {
+                operation?.cancellation.cancel();
+                generation++;
+                setState(() {
+                  busy = false;
+                  error = '已停止接收，保留已有结果；未返回的用量未知。';
+                });
+              },
+              child: const Text('停止接收')),
         OutlinedButton.icon(
             onPressed: busy ? null : _analyze,
             icon: const Icon(Icons.auto_awesome_outlined),
@@ -201,7 +320,7 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
                 : widget.analysisContext.purpose == readingMapPurpose
                     ? (result == null ||
                             ReadingMapQuality.issues(result!).isNotEmpty
-                        ? '生成完整概念树与含义圈'
+                        ? '生成概念树与适用的含义圈'
                         : '完善概念链与含义圈')
                     : result == null
                         ? '分析概念关系并绘图'
@@ -272,6 +391,18 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
             : views.firstOrNull;
     final drawable = value.relations.where((r) => r.scope != null).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (value.legacy)
+        const Text('旧版缓存 · 可继续阅读，尚未按新版规则核验', style: TextStyle(fontSize: 11)),
+      const Text('本地检查只核对结构与可确定的逻辑；AI 解释和模拟不能作为事实证明。',
+          style: TextStyle(fontSize: 11)),
+      for (final proposition in value.propositions)
+        ExpansionTile(
+            title: Text(proposition.conclusion),
+            subtitle: Text(proposition.verification.reason),
+            children: [
+              SelectableText(
+                  '主词：${proposition.subject}；谓词：${proposition.predicate}；量词：${proposition.quantifier}；否定：${proposition.polarity}；条件：${proposition.condition}；模态：${proposition.modality}\n原文依据：${proposition.evidence}')
+            ]),
       if (readableModelName(value.model).isNotEmpty)
         Text('AI 分析 · ${readableModelName(value.model)}',
             style: const TextStyle(fontSize: 12)),
@@ -471,6 +602,7 @@ class GroundRelationView extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.bold)),
                   Text(scopeStatus(graph.status),
                       style: const TextStyle(fontSize: 12)),
+                  Text(graph.limitation, style: const TextStyle(fontSize: 11)),
                   if (graph.kind == 'space')
                     _space()
                   else

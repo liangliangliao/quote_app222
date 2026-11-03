@@ -1,3 +1,5 @@
+import '../epistemic/cognitive_preferences.dart';
+import '../epistemic/semantic_contract.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -400,15 +402,20 @@ class QuoteAiService {
 
     final cursor = int.tryParse((task['cursor'] ?? '0').toString()) ?? 0;
     final selectedFigure = config.figureForCursor(cursor);
-    final prompt = buildPrompt(
+    await CognitivePreferenceStore.instance.load();
+    final cognitive = CognitivePreferenceStore.active;
+    final fullPrompt = buildPrompt(
       taskUid: (task['task_uid'] ?? '').toString(),
       config: config,
       selectedFigure: selectedFigure,
       cursor: cursor,
     );
 
+    final prompt = cognitive ? fullPrompt : fullPrompt
+        .replaceFirst(RegExp(r'14\. cognition[^\n]*\n'), '')
+        .replaceFirst(RegExp(r'  "cognition": [^\n]*\n'), '');
     final raw = await _ai.generateText(
-      prompt: prompt,
+      prompt: '${cognitive ? MeaningCircleContract.prompt : '默认阅读模式：不生成cognition、概念树或圈图字段。'}\n$prompt',
       purpose: 'quote_ai.structured_generation',
       systemPrompt:
           '你是严谨的名言研究、思想分析与现实实践设计助手。只返回一个合法 JSON 对象；不得编造名言、作者、具体出处或历史事实，不确定时必须明确标注“出处待考”。实践活动必须安全、具体、可自愿停止。',
@@ -502,7 +509,7 @@ ${jsonEncode({'theme': theme, 'description': description})}
 4. 必须忠于可核验的原意。出处不确定时 source 写“出处待考”，source_confidence 写明原因；禁止为了显得完整而编造书名、演讲、年份或章节。
 5. analysis 要先忠实区分原句命题与解读，再解释思想语境、概念从哪些具体经验抽出共同规定、抽象省略的条件、容易混淆之处及影响当前判断的决定性差异、认识根据与可推翻结论的新材料；不要只做励志扩写，不猜作者心理；problem_addressed 要说明它试图解决、纠正或应对什么问题。
 6. related_person 与 related_thought 要给出最容易由此联想到的另一位人物及其高度相关思想，并说明关键联系或差异。
-7. practice_activities 必须包含 1 至 3 个实践活动，把这句名言中的抽象概念转化为用户能在现实中亲自完成、观察和感受的经验。至少一个活动应当今天就能开始，通常可在 5 至 30 分钟内完成。不要只给建议、观点或阅读清单；必须给出有先后顺序、可以观察到是否完成的动作，以及体验重点和复盘问题。
+7. practice_activities 只在原句适合实践时提供必要的活动，不凑数量；若不适用，返回practice_applicable:false及具体practice_limitation，活动数组可为空。把这句名言中的抽象概念转化为用户能在现实中亲自完成、观察和感受的经验。如有活动，可提供今天能开始的步骤，通常可在 5 至 30 分钟内完成。不要只给建议、观点或阅读清单；必须给出有先后顺序、可以观察到是否完成的动作，以及体验重点和复盘问题。
 8. 实践活动可以准确借鉴古今历史事件或典故，也可以借用电影人物、小说、文学、新闻、神话或艺术作品进行类比、角色模拟与情境想象；必须明确它是史实、作品情节、神话还是虚构模拟，不得把虚构当史实。没有可靠或真正相关的素材时，inspiration 留空，不要硬凑。
 9. 活动应让用户在感受、选择、行动及结果中理解概念，而不是要求用户证明名言必然正确。活动必须低风险、尊重本人和他人同意，不得包含违法、危险、自伤、羞辱、强迫公开隐私、冒充医疗治疗或故意诱发创伤的内容；用户应可随时暂停。
 10. avatar_search_query 返回适合在维基百科检索人物肖像的名称（优先通行中文名，可附原文名）。avatar_url 只有在确信是 Wikimedia/Wikipedia 的人物肖像直链时才填写，否则留空。
@@ -510,7 +517,7 @@ ${jsonEncode({'theme': theme, 'description': description})}
 12. 以下解读均为一种可能理解，不冒充作者原意；source_confidence 只是模型自评，不代表已核对。source_status 只能为 unverified 或 disputed，不得声明已核实。source_refs 只能列待核对的资料线索，没有依据就留空。
 13. concrete_example 写一个具体、可观察的生活情境，明确为“示例/模拟”，不得冒充史实；可以复用本次 practice_activities。commonality 与 critical_difference 说明容易混淆的两种行为哪里相似、关键区别何在；boundary 至少给出一个例外、限制或未知。analysis_basis 指明对应原句中的哪些词，不用作者声望代替根据。缺乏把握可留空，不要补造。
 
-14. cognition返回认识展开结构：abstractions包含2–4个{term,definition,observed,retained,omitted,counter_example}，分别写概念定义、对应的具体材料、共同规定、省略的处境和非成员。concept_scopes在适合外延关系时给出[{relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,illustration}]，关系限equal/partition/siblings/overlap/subset/superset/disjoint；basis逐字引原句，构造的分类模型必须illustration:true；不适合就[]，不可强行画圈。此结构复用本次请求，不另行调用模型。
+14. cognition返回认识展开结构：abstractions包含按需提取的{term,definition,observed,retained,omitted,counter_example}，分别写概念定义、对应的具体材料、共同规定、省略的处境和非成员。concept_scopes在适合外延关系时给出[{relation_type,relation_scope:"extension",universe,set_a,set_b,criterion_a,criterion_b,basis,justification,intersection,only_a,only_b,illustration}]，关系限equal/partition/siblings/overlap/subset/superset；basis逐字引原句，构造的分类模型必须illustration:true；不适合就[]，不可强行画圈。此结构复用本次请求，不另行调用模型。
 15. author_original_name 返回作者本人在其作品中常用的原文姓名或笔名（例如 Sigmund Freud、Jean-Paul Sartre、莫言），不将外国作者译成中文，保留原文拼写/变音符号/原文字母。这里只要姓名，不要破折号、书名、国籍、译名对照或手写签名图；不能确定时留空。author 字段仍按规则 2 原样返回，两个字段用途不同。
 
 JSON 字段必须完整：
@@ -525,6 +532,8 @@ JSON 字段必须完整：
   "problem_addressed": "试图解决或应对的问题",
   "related_person": "相关人物",
   "related_thought": "相关人物的思想及联系",
+  "practice_applicable": true,
+  "practice_limitation": "如实践不适用，说明具体原因",
   "practice_activities": [
     {
       "title": "实践活动名称",
@@ -607,7 +616,8 @@ JSON 字段必须完整：
       '头像搜索词',
     ]);
     final practiceActivities = _readPracticeActivities(map);
-    if (practiceActivities.isEmpty) {
+    if (practiceActivities.isEmpty && !(map['practice_applicable'] == false &&
+        insightText(map, 'practice_limitation').isNotEmpty)) {
       throw const FormatException('AI 返回缺少可执行的 practice_activities');
     }
     final addonFields = <String, dynamic>{...map};
@@ -638,12 +648,10 @@ JSON 字段必须完整：
         'coreMatch',
         '核心匹配',
       ]),
-      analysis: _readString(map, const <String>[
-        'analysis',
-        'explanation',
-        '深度分析',
-        '解释',
-      ]),
+      analysis: [_readString(map, const <String>[
+        'analysis', 'explanation', '深度分析', '解释',
+      ]), if (practiceActivities.isEmpty && insightText(map, 'practice_limitation').isNotEmpty)
+          '实践适用性：${insightText(map, 'practice_limitation')}'].where((s) => s.isNotEmpty).join('\n'),
       problemAddressed: _readString(map, const <String>[
         'problem_addressed',
         'problemAddressed',

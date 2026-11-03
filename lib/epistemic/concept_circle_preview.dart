@@ -22,7 +22,7 @@ class ConceptCirclePreview extends StatelessWidget {
         key: const ValueKey('concept-circle-preview'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('概念含义圈 · 已有概念预览',
+          const Text('独立概念预览 · 尚未建立外延关系',
               style: TextStyle(fontWeight: FontWeight.w600)),
           ConceptCanvas(
               title: '点选圆圈核对含义',
@@ -56,7 +56,7 @@ class ConceptCirclePreview extends StatelessWidget {
                                                   fontWeight:
                                                       FontWeight.w600)))))))),
               ])),
-          const Text('各圈展示概念含义。可继续核对论域、成员和交叠区域，生成连续的含义圈关系。',
+          const Text('各概念分别展示，位置和大小不表示相互排斥、包含或重合。尚缺论域、成员或区域依据时，可改看概念树或判断视图。',
               style: TextStyle(fontSize: 12, height: 1.6)),
         ]);
   }

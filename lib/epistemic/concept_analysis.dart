@@ -1,3 +1,4 @@
+import 'semantic_contract.dart';
 import '../models/quote_insight.dart';
 
 /// Optional additions. Legacy notes remain readable without these fields.
@@ -22,7 +23,7 @@ class ConceptAbstraction {
   });
 
   static List<ConceptAbstraction> parse(dynamic raw) => [
-        for (final value in raw is List ? raw.take(6) : const [])
+        for (final value in raw is List ? raw.take(60) : const [])
           if (insightText(insightObject(value), 'term').isNotEmpty &&
               insightText(insightObject(value), 'definition').isNotEmpty)
             ConceptAbstraction(
@@ -94,6 +95,7 @@ class ConceptScope {
 
   static ConceptScope? parse(dynamic raw, String original) {
     final m = insightObject(raw);
+    if (MeaningCircleContract.gaps(m).isNotEmpty) return null;
     final type = insightText(m, 'relation_type');
     final relation =
         QuoteRelation.values.where((r) => r.name == type).firstOrNull;
