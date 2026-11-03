@@ -419,6 +419,39 @@ void main() {
     }
   });
 
+  test('adding an article or repeating a definition cannot create a subtype',
+      () {
+    final raw = winterMap();
+    (raw['concepts'] as List).add(
+        meaningNode('summer/reworded', '一个不可战胜的夏天', '这是同一意象的改写，没有新增成员判准。'));
+    (raw['hierarchy'] as List).add({
+      'parent': 'summer',
+      'child': 'summer/reworded',
+      'kind': 'subtype',
+      'explanation': '从夏天到一个夏天',
+      'references': ['e1']
+    });
+    final result = SemanticScope.parse(raw, sources);
+    expect(result.hierarchy.any((e) => e.kind == 'subtype'), isFalse);
+    expect(result.issues.any((i) => i.message.contains('新增类属判准')), isTrue);
+  });
+  test('identical extension criteria cannot support a proper subset', () {
+    final raw =
+        teachingCircleFixture(winterQuote, willingQuote, type: 'subset');
+    final scope = (raw['relations'] as List).single['scope'];
+    scope['criterion_b'] = scope['criterion_a'];
+    raw['concepts'] = [
+      meaningNode('summer', '不可战胜的夏天', '原句中的内在季节意象')
+        ..['references'] = [
+          {'source': 'A', 'excerpt': winterQuote}
+        ]
+    ];
+    final result = SemanticScope.parse(raw,
+        const [ScopeSource('A', winterQuote), ScopeSource('B', willingQuote)]);
+    expect(result.relations.any((r) => r.scope != null), isFalse);
+    expect(result.issues.any((i) => i.message.contains('相同成员判准')), isTrue);
+  });
+
   Future<void> settle(WidgetTester tester) async {
     for (var i = 0; i < 20; i++) {
       await tester.runAsync(

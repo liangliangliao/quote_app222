@@ -589,6 +589,16 @@ class SemanticScope {
                     .where((e) => e.parent == at)
                     .any((e) => reaches(e.child, seen)));
         if (reaches(child, {})) throw const FormatException('概念层级出现循环');
+        if (kind == 'subtype') {
+          String term(String label) => PropositionConsistency.normalize(label)
+              .replaceFirst(RegExp(r'^(?:一个|某个|这个|一种|某种|一类|这类)'), '');
+          if (term(nodes[parent]!.label) == term(nodes[child]!.label) ||
+              PropositionConsistency.normalize(nodes[parent]!.definition) ==
+                  PropositionConsistency.normalize(nodes[child]!.definition)) {
+            throw const FormatException(
+                '同义改写或仅增加“一个”等词没有新增类属判准，不能作为下位概念；个别对象应按实例说明');
+          }
+        }
         hierarchy.add(ConceptHierarchyEdge(
             parent,
             child,
@@ -670,6 +680,13 @@ class SemanticScope {
           if (gaps.isNotEmpty) throw FormatException(gaps.join('；'));
           scope = ConceptScope.parse(
               scopeMap, references.map((r) => r.excerpt).join('\n'));
+          if (scope != null &&
+              [QuoteRelation.subset, QuoteRelation.superset]
+                  .contains(scope.relation) &&
+              PropositionConsistency.normalize(scope.criterionA) ==
+                  PropositionConsistency.normalize(scope.criterionB)) {
+            throw const FormatException('同一论域中的相同成员判准不能支持有独有成员的真包含');
+          }
           if (scope == null ||
               scope.relation == QuoteRelation.disjoint ||
               scope.setA == scope.setB) {
