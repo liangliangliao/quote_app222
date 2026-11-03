@@ -1,3 +1,4 @@
+import 'ai_budget_panel.dart';
 import 'package:flutter/material.dart';
 import '../models/quote_insight.dart';
 import '../services/quote_comparison_service.dart';
@@ -24,6 +25,8 @@ class QuoteComparisonPrototype extends StatelessWidget {
   final VoidCallback onCompare, onClear;
   final TextEditingController conditions;
   final Widget semanticPanel;
+  final Widget? revisionHistory;
+  final VoidCallback? onStop;
   final SemanticScope? semanticOverride;
   final Widget Function(String, QuoteReference) quoteCard;
   const QuoteComparisonPrototype(
@@ -45,7 +48,7 @@ class QuoteComparisonPrototype extends StatelessWidget {
       required this.conditions,
       required this.semanticPanel,
       required this.quoteCard,
-      this.semanticOverride});
+      this.semanticOverride, this.revisionHistory, this.onStop});
 
   SemanticScope? get semantic {
     if (semanticOverride != null) return semanticOverride;
@@ -178,6 +181,7 @@ class QuoteComparisonPrototype extends StatelessWidget {
         ?.scope;
     if (scope == null && !r.canDrawSets) return _judgment(r, value);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (scope?.illustration == true) const Text('教学模拟 · 按所列成员判准，不作为原句证明', style: TextStyle(fontSize: 11)),
       ConceptMeaningDiagram(
           key: ValueKey('comparison-diagram-$tab'),
           compact: true,
@@ -376,6 +380,9 @@ class QuoteComparisonPrototype extends StatelessWidget {
                           selected: purpose == e.$2,
                           onSelected: busy ? null : (_) => onPurpose(e.$2))
                   ]),
+                  const AiBudgetPanel(purpose: 'quote_ai.comparison.v7', defaultBudget: 10000),
+                  if (busy && onStop != null) TextButton(onPressed: onStop, child: const Text('停止接收')),
+                  if (revisionHistory != null) revisionHistory!,
                   if (r != null) ...[
                     if (tab == 3)
                       _own(r, value)

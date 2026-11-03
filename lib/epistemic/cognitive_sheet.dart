@@ -170,7 +170,8 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
             '修订后的判断',
             initialValue: note.currentJudgment,
           ),
-          const CognitiveInputField('reason', '为什么改变判断（可选）', required: false),
+          const CognitiveInputField('counter_evidence', '反对材料或替代解释（可选）', required: false),
+          const CognitiveInputField('reason', '新材料为什么改变判断'),
         ],
       ),
     );
@@ -180,6 +181,7 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
           judgment: values['judgment']!,
           evidence: values['evidence']!,
           reason: values['reason']!,
+          counterEvidence: values['counter_evidence'] ?? '',
         ),
         event: CognitiveEvent.revised,
       );
@@ -448,7 +450,7 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                     ),
                   ],
                   if (widget.task != CognitiveTask.concept && prefs.relations)
-                    PassageScopeView(text: widget.selection.text),
+                    PassageScopeView(text: widget.selection.text, origin: widget.selection.module == 'diary' ? 'user_report' : 'unverified_record'),
                   ConceptAnalysisView(
                     abstractions: note.analysis.abstractions,
                     scopes: const [],
@@ -551,6 +553,8 @@ class _CognitiveAnalysisSheetState extends State<CognitiveAnalysisSheet> {
                               ),
                               if (entry.$2.reason.isNotEmpty)
                                 Text('改判理由：${entry.$2.reason}'),
+                              if (entry.$2.counterEvidence.isNotEmpty)
+                                Text('反对材料或替代解释：${entry.$2.counterEvidence}'),
                               TextButton(
                                 onPressed: _busy || stale
                                     ? null
