@@ -95,7 +95,9 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     final loader = widget.loadQuotes;
     return loader != null
         ? loader(limit: limit, offset: offset, q: query.isEmpty ? null : query)
-        : _dao.latest(limit: limit, offset: offset, q: query.isEmpty ? null : query);
+        : (_cognitiveView == 2 && CognitivePreferenceStore.active
+            ? _dao.chronological(limit: limit, offset: offset, q: query.isEmpty ? null : query)
+            : _dao.latest(limit: limit, offset: offset, q: query.isEmpty ? null : query));
   }
 
   @override
@@ -142,7 +144,9 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   }
 
   void _changeView(int value) {
+    final chronologyChanged = (_cognitiveView == 2) != (value == 2);
     setState(() => _cognitiveView = value);
+    if (chronologyChanged) { _generation++; unawaited(_refresh()); }
     widget.onGraphChanged?.call(value == 1 && CognitivePreferenceStore.active);
   }
 
@@ -175,6 +179,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     if (_refreshing) return;
     final query = _q;
     try {
+      if (_cognitiveView == 2) { await _refresh(); return; }
       final head = await _query(1, 0, query);
       if (!mounted || query != _q) return;
       final latestId = head.isEmpty

@@ -187,12 +187,9 @@ void main() {
       'criterion_b': '属于苹果的果实'
     });
     (raw['relations'] as List).add(inverse);
-    expect(
-        ConceptCircleLayout.build(
-                SemanticScope.parse(raw, const [ScopeSource('A', networkText)]))
-            .single
-            .verified,
-        isFalse);
+    final value = SemanticScope.parse(raw, const [ScopeSource('A', networkText)]);
+    expect(value.issues.any((issue) => issue.message.contains('不能同时成立')), isTrue);
+    expect(value.relations.where((r) => r.scope != null).length, lessThan((raw['relations'] as List).length));
   });
   test('non-set philosophical questions recommend grounded alternate views',
       () {
@@ -217,7 +214,7 @@ void main() {
         'Azure / gpt-6-luna');
   });
   test(
-      'a bad relation cannot discard a good hierarchy; one structural repair only',
+      'a bad relation preserves visible hierarchy without an automatic paid repair',
       () async {
     final raw = happinessMap();
     raw['relations'] = [
@@ -235,14 +232,10 @@ void main() {
         ai: ai, store: CognitiveStore(database: () async => db));
     final result =
         await service.analyze(const [ScopeSource('A', happiness)], '概念树');
-    expect(ai.calls, 2);
+    expect(ai.calls, 1);
     expect(result.hierarchy.length, 2);
     expect(result.needsRepair, isTrue);
-    expect(
-        (await service.cached(const [ScopeSource('A', happiness)], '概念树'))!
-            .hierarchy
-            .length,
-        2);
+    expect(await service.cached(const [ScopeSource('A', happiness)], '概念树'), isNull);
     await db.close();
   });
   test(
@@ -287,7 +280,7 @@ void main() {
         const [ScopeSource('A', frankl), ScopeSource('B', willing)], '展开',
         context:
             const SemanticContext(conceptId: 'meaning', conceptLabel: '生命的意义'));
-    expect(ai.calls, 2);
+    expect(ai.calls, 1);
     expect(result.concepts.map((n) => n.id), ['meaning']);
     expect(result.issues.any((e) => e.message.contains('概念身份')), isTrue);
     await db.close();
@@ -312,7 +305,7 @@ void main() {
       'grounds': []
     };
     final key = 'cognition.semantic.1.${insightHash([
-          sources.map((s) => s.toJson()).toList(),
+          sources.map((s) => {...s.toJson()}..remove('origin')).toList(),
           '旧阅读',
           'last'
         ])}';
@@ -330,7 +323,7 @@ void main() {
     await db.close();
   });
 
-  test('a comparison repairs only its diagram and preserves useful prose',
+  test('a comparison preserves useful prose without silently repairing its diagram',
       () async {
     final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     final raw = {
@@ -347,12 +340,13 @@ void main() {
     const a = QuoteReference(id: 'a', content: frankl),
         b = QuoteReference(id: 'b', content: willing);
     final result = await service.compare(a, b);
-    expect(ai.calls, 2);
+    expect(ai.calls, 1);
     expect(result.difference, raw['critical_difference']);
-    expect(result.semanticMap['judgments'], hasLength(3));
+    expect(result.semanticMap['judgments'], hasLength(1));
+    expect(result.semanticMap['issues'], isNotEmpty);
     expect(result.modelDisplayName, '验收样例 · 模拟模型');
     await service.compare(a, b);
-    expect(ai.calls, 2);
+    expect(ai.calls, 1);
     await db.close();
   });
 

@@ -1,3 +1,4 @@
+import 'support/circle_fixture.dart';
 import 'package:quote_app/quote_knowledge/hierarchy_statistics_view.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -32,11 +33,12 @@ class PrototypeComparison extends QuoteComparisonService {
   Future<QuoteComparison> compareForPurpose(QuoteReference a, QuoteReference b,
       ComparisonPurpose purpose, String conditions) async {
     calls++;
-    return const QuoteComparison(
+    return QuoteComparison(
         common: '有方向地成长',
         difference: 'A关注承受挑战后的力量，B关注朝向目标时的体验价值。',
         notEquivalent: '承受挑战不一定感到愉悦；愉悦体验也不一定包含挑战。',
         limitation: '圆圈只描述构造的学习经历示例，不能概括所有苦难或幸福。',
+        semanticMap: teachingCircleFixture(a.content, b.content),
         relation: QuoteRelation.overlap,
         relationScope: 'extension',
         setA: '经历挑战',

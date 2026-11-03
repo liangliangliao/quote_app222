@@ -18,6 +18,9 @@ class QuoteTimelineEntry {
   QuoteTimelineEntry(this.row, this.inputPosition)
       : time = quoteRecordedAt(row);
   QuoteReference get quote => QuoteReference.fromRow(row);
+  String get instanceId => (row['quote_uid'] ?? row['fixed_uid'] ?? '').toString().isNotEmpty
+      ? 'uid:${row['quote_uid'] ?? row['fixed_uid']}'
+      : row['id'] != null ? 'row:${row['id']}' : 'position:$inputPosition:${quote.contentKey}';
   DateTime? get day =>
       time == null ? null : DateTime(time!.year, time!.month, time!.day);
 }
@@ -30,8 +33,8 @@ class QuoteTimelineDay {
       day == null ? '记录时间未知' : '${day!.year}年${day!.month}月${day!.day}日';
 }
 
-/// Recent days first, then earlier-to-later records within each day. Equal
-/// timestamps retain their input order and are labelled as simultaneous.
+/// One direction everywhere: oldest to newest, unknown dates last. Equal
+/// timestamps use stable record identity and remain labelled simultaneous.
 List<QuoteTimelineDay> groupTimelineRows(List<Map<String, dynamic>> rows) {
   final groups = <DateTime?, List<QuoteTimelineEntry>>{};
   for (final indexed in rows.indexed) {
@@ -43,7 +46,7 @@ List<QuoteTimelineDay> groupTimelineRows(List<Map<String, dynamic>> rows) {
         ? 1
         : b == null
             ? -1
-            : b.compareTo(a));
+            : a.compareTo(b));
   return [
     for (final day in days)
       QuoteTimelineDay(
@@ -55,7 +58,7 @@ List<QuoteTimelineDay> groupTimelineRows(List<Map<String, dynamic>> rows) {
                   : a.time!.compareTo(b.time!);
               return compared != 0
                   ? compared
-                  : a.inputPosition.compareTo(b.inputPosition);
+                  : a.instanceId.compareTo(b.instanceId);
             }))
   ];
 }
@@ -83,9 +86,12 @@ class QuoteHistoryTimeline extends StatefulWidget {
 
 class _QuoteHistoryTimelineState extends State<QuoteHistoryTimeline> {
   String? _focusKey;
+  final _scroll = ScrollController();
+  @override
+  void dispose() { _scroll.dispose(); super.dispose(); }
   String _relative(QuoteTimelineEntry entry, QuoteTimelineEntry focus) {
     if (entry.time == null) return '未标时';
-    if (entry.quote.contentKey == focus.quote.contentKey) return '此刻';
+    if (entry.instanceId == focus.instanceId) return '此刻';
     if (focus.time == null) return '已标时';
     if (entry.time == focus.time) return '同刻';
     final day = entry.day!, other = focus.day!;
@@ -102,14 +108,19 @@ class _QuoteHistoryTimelineState extends State<QuoteHistoryTimeline> {
   Widget build(BuildContext context) {
     final groups = groupTimelineRows(widget.rows);
     final entries = groups.expand((g) => g.entries).toList();
-    final known = groups.where((g) => g.day != null).firstOrNull?.entries ?? [];
+    final known = groups.where((g) => g.day != null).lastOrNull?.entries ?? [];
     final focus =
-        entries.where((e) => e.quote.contentKey == _focusKey).firstOrNull ??
+        entries.where((e) => e.instanceId == _focusKey).firstOrNull ??
             (known.isNotEmpty
                 ? known[known.length > 1 ? 1 : 0]
                 : entries.firstOrNull);
     final pieces = <Widget>[
       const TimelineScenicHeader(),
+      const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('从早到晚 · “此刻”是所选记录的参照点', style: TextStyle(fontSize: 11))),
+      Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () {
+        if (_scroll.hasClients) _scroll.animateTo(_scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+      }, child: const Text('定位已加载的最新记录'))),
       if (widget.controls != null) widget.controls!,
       if (entries.isEmpty)
         const Padding(
@@ -145,7 +156,7 @@ class _QuoteHistoryTimelineState extends State<QuoteHistoryTimeline> {
           )));
       for (final entry in group.entries) {
         final selected = widget.selectedKeys.contains(entry.quote.contentKey);
-        final focused = focus?.quote.contentKey == entry.quote.contentKey;
+        final focused = focus?.instanceId == entry.instanceId;
         final number = ++ordinal;
         pieces.add(_TimelineRecord(
             entry: entry,
@@ -153,7 +164,7 @@ class _QuoteHistoryTimelineState extends State<QuoteHistoryTimeline> {
             relative: _relative(entry, focus!),
             focused: focused,
             selected: selected,
-            onFocus: () => setState(() => _focusKey = entry.quote.contentKey),
+            onFocus: () => setState(() => _focusKey = entry.instanceId),
             onOpen: () => widget.onOpen(entry.row),
             onSelect: () => widget.onSelect(entry.row)));
       }
@@ -170,6 +181,7 @@ class _QuoteHistoryTimelineState extends State<QuoteHistoryTimeline> {
         color: const Color(0xfffcfaff),
         child: ListView.builder(
             key: const PageStorageKey('quote-history-timeline-scroll'),
+            controller: _scroll,
             padding: EdgeInsets.zero,
             itemCount: pieces.length,
             itemBuilder: (_, i) => pieces[i]));
@@ -259,7 +271,7 @@ class _TimelineRecord extends StatelessWidget {
             message: '以此条记录为“此刻”查看先后',
             child: InkResponse(
                 key: ValueKey(
-                    'timeline-node-${quote.id.isEmpty ? quote.contentKey : quote.id}'),
+                    'timeline-node-${quote.id.isEmpty ? entry.instanceId : quote.id}'),
                 radius: 24,
                 onTap: onFocus,
                 child: SizedBox(
@@ -308,7 +320,7 @@ class _TimelineRecord extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 child: InkWell(
                     key: ValueKey(
-                        'timeline-quote-${quote.id.isEmpty ? quote.contentKey : quote.id}'),
+                        'timeline-quote-${quote.id.isEmpty ? entry.instanceId : quote.id}'),
                     borderRadius: BorderRadius.circular(16),
                     onTap: onOpen,
                     child: content))));

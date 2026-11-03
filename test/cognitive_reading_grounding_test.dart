@@ -326,7 +326,7 @@ void main() {
     expect(value.concepts.last.label, isNot(contains('具体表现')));
   });
   test(
-      'generic model responses get one quality repair; completed maps are cached',
+      'generic responses require explicit retry; successful maps alone are cached',
       () async {
     expect(readingIllustration(travel), isNull);
     final good = travelMap();
@@ -337,10 +337,10 @@ void main() {
     final result = await service.analyze(
         const [ScopeSource('A', travel)], '完整阅读验收',
         context: readingMapContext, force: true);
-    expect(ai.calls, 2);
-    expect(ReadingMapQuality.issues(result), isEmpty);
-    expect(result.needsRepair, isFalse);
-    expect(ai.prompts.first, contains('每个概念'));
+    expect(ai.calls, 1);
+    expect(ReadingMapQuality.issues(result), isNotEmpty);
+    expect(result.needsRepair, isTrue);
+    expect(ai.prompts.first, contains('没有固定层数'));
     await service.analyze(const [ScopeSource('A', travel)], '完整阅读验收',
         context: readingMapContext);
     expect(ai.calls, 2);
@@ -359,6 +359,12 @@ void main() {
             note: '',
             semanticService: service));
     expect(ai.calls, 0);
+    expect(find.byType(GroundingPathView), findsNothing);
+    final generate = find.text('生成概念树与适用的含义圈');
+    await tester.ensureVisible(generate);
+    await tester.tap(generate);
+    await settle(tester);
+    expect(ai.calls, 1);
     expect(find.byType(GroundingPathView), findsOneWidget);
     await capture(tester, 'reading-grounded-chain');
     await tester.ensureVisible(
@@ -370,17 +376,17 @@ void main() {
     expect(find.byType(ConceptMeaningNetwork), findsOneWidget);
     expect(find.byType(GroundingPathView), findsNothing);
     expect(find.textContaining('当前内容更适合'), findsNothing);
-    expect(ai.calls, 0);
+    expect(ai.calls, 1);
     await tester.ensureVisible(find.byType(ConceptMeaningNetwork));
     await capture(tester, 'reading-multiple-circles');
     await tester.ensureVisible(find.text('完善概念链与含义圈'));
     await tester.tap(find.text('完善概念链与含义圈'));
     await settle(tester);
-    expect(ai.calls, 1);
+    expect(ai.calls, 2);
     await tester.ensureVisible(find.widgetWithText(ChoiceChip, '概念树'));
     await tester.tap(find.widgetWithText(ChoiceChip, '概念树'));
     await settle(tester);
-    expect(ai.calls, 1);
+    expect(ai.calls, 2);
   });
   testWidgets(
       'an unresolved circle request retains circles and large text stays readable',

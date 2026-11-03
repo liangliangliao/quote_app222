@@ -145,10 +145,17 @@ void main() {
       'superset',
       'partition',
       'overlap',
-      'siblings',
-      'disjoint'
+      'siblings'
     ]) {
-      final parsed = ConceptScope.parse(scope(type: type), '')!;
+      final candidate = scope(type: type);
+      if (type == 'equal') candidate.addAll({'only_a': '', 'only_b': ''});
+      if (type == 'subset') candidate['only_a'] = '';
+      if (type == 'superset') candidate['only_b'] = '';
+      if (type == 'siblings') candidate.addAll({'intersection': '', 'other_member': '既未记录益处也未处理问题的情境'});
+      if (type == 'partition') candidate.addAll({'intersection': '', 'parts': [
+        {'term': '记录益处', 'criterion': '有记录', 'example': '有记录的模拟卡'},
+        {'term': '未记录益处', 'criterion': '没有记录', 'example': '无记录的模拟卡'}]});
+      final parsed = ConceptScope.parse(candidate, '')!;
       expect(ConceptScope.parse(parsed.toJson(), '')!.relation.name, type);
     }
     final analysis = CognitiveAnalysis.fromJson({

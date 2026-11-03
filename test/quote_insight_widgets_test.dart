@@ -1,3 +1,4 @@
+import 'support/circle_fixture.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/data/dao.dart';
@@ -50,7 +51,8 @@ void main() {
   testWidgets(
       'relation selector draws sets only with grounded extension and directs evidence correctly',
       (tester) async {
-    const sets = QuoteComparison(
+    final sets = QuoteComparison(
+        semanticMap: teachingCircleFixture('每个学者都是学习者', '有些学习者不是学者', type: 'subset', setA: '学者', setB: '学习者'),
         common: '共同点',
         difference: '差异',
         notEquivalent: '不能等同',
@@ -61,7 +63,7 @@ void main() {
         setB: '学习者',
         justification: '原句说明包含关系',
         groundedInQuotes: true);
-    await tester.pumpWidget(const MaterialApp(
+    await tester.pumpWidget(MaterialApp(
         home: Scaffold(body: QuoteRelationView(result: sets))));
     expect(find.byKey(const ValueKey('quote-set-diagram')), findsOneWidget);
     const evidence = QuoteComparison(

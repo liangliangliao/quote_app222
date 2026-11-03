@@ -92,7 +92,7 @@ void main() {
       );
 
   test(
-      'explicit reanalysis preserves accepted history and rejects shallow output',
+      'explicit reanalysis preserves accepted history without forcing abstractions',
       () async {
     final ai = FakeCognitiveAi();
     final service = CognitiveService(ai: ai, store: store);
@@ -108,10 +108,10 @@ void main() {
     expect(notes.last.accepted, isTrue);
     expect(notes.last.currentJudgment, '保留的判断');
     ai.responseOverride = response()..remove('abstractions');
-    await expectLater(
-        service.analyze(selection(), CognitiveTask.diary, force: true),
-        throwsFormatException);
-    expect((await store.forRecord('diary', '1')).length, 2);
+    final compact = await service.analyze(selection(), CognitiveTask.diary, force: true);
+    expect(compact.analysis.abstractions, isEmpty);
+    expect(compact.analysis.basis, isNotEmpty);
+    expect((await store.forRecord('diary', '1')).length, 3);
   });
 
   test(

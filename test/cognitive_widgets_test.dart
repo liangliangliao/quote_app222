@@ -509,7 +509,7 @@ void main() {
         const Scaffold(
             body: QuoteCognitiveReader(
                 quote: ref, topic: '评审', authorLabel: '案例', note: '')));
-    await waitFor(tester, find.text('生成完整概念树与含义圈'));
+    await waitFor(tester, find.text('生成概念树与适用的含义圈'));
     expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
     expect(find.text('概念含义圈 · 单一范围'), findsNothing);
   });
@@ -1504,6 +1504,7 @@ void main() {
         find.widgetWithText(TextField, '具体的新材料或反例'), '调整方法后完成了下一次尝试。');
     await tester.enterText(
         find.widgetWithText(TextField, '修订后的判断'), '一次失败不能决定以后的每次尝试。');
+    await tester.enterText(find.widgetWithText(TextField, '新材料为什么改变判断'), '新尝试构成原来普遍判断的反例。');
     await tester.tap(find.text('保存修订'));
     await waitFor(tester, find.text('判断修订记录'));
     expect(tester.takeException(), isNull);
