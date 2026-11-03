@@ -11,6 +11,7 @@ import 'package:quote_app/epistemic/concept_meaning_network.dart';
 import 'package:quote_app/epistemic/grounding_path_view.dart';
 import 'package:quote_app/epistemic/reading_map_quality.dart';
 import 'package:quote_app/epistemic/semantic_scope.dart';
+import 'package:quote_app/epistemic/semantic_contract.dart';
 import 'package:quote_app/epistemic/semantic_scope_service.dart';
 import 'package:quote_app/epistemic/semantic_scope_view.dart';
 import 'package:quote_app/services/unified_ai_service.dart';
@@ -103,6 +104,11 @@ void main() {
     expect(good.needsRepair,isFalse);
     final prompt=SemanticScopeService.buildPrompt(sources,'持志',context:readingMapContext);
     expect(prompt,contains('requested_views'));expect(prompt,contains('intersection_id'));expect(prompt,contains('A 类属投影'));
+  });
+  test('retaining the condition cannot justify strengthening fear into necessity',() {
+    final result=PropositionConsistency.check('若只死死守着，必然于工夫上发病。',
+        '若只死死守着，恐于工夫上又发病。',condition:'若只死死守着');
+    expect(result.status,VerificationStatus.unknown);expect(result.reason,contains('强化'));
   });
   test('incremental expansion reconnects old classes and rewrites named-region IDs together',() async {
     final original=model();

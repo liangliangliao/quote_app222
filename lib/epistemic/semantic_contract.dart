@@ -120,7 +120,7 @@ class PropositionConsistency {
       return const SemanticVerification(
           VerificationStatus.supported, '与所引原句逐字一致；只核对转述忠实度，不证明原句为真');
     final weakEvidence = RegExp(
-            r'不(?:必然|一定|总是)|并非|可能|或许|有时|未必|notnecessarily|may|might|sometimes')
+            r'不(?:必然|一定|总是)|并非|可能|或许|有时|未必|恐怕|恐于|恐会|notnecessarily|may|might|sometimes')
         .hasMatch(e);
     final strongConclusion =
         RegExp(r'所有|总是|必然|一定|任何|一切|always|all|must|necessarily').hasMatch(c);

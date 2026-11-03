@@ -579,8 +579,7 @@ class SemanticScope {
               kind,
               insightText(m, 'explanation'),
               'interpretation',
-              linkRefs(parent, child, m['references']),
-            differentia: insightText(m, 'differentia'), basisKind: insightText(m, 'basis_kind').isEmpty ? 'source_assertion' : insightText(m, 'basis_kind')));
+              linkRefs(parent, child, m['references'])));
           return;
         }
         if (!nodes.containsKey(parent) ||
@@ -617,7 +616,8 @@ class SemanticScope {
             child,
             kind,
             insightText(m, 'explanation'),
-            linkRefs(parent, child, m['references'])));
+            linkRefs(parent, child, m['references']),
+            differentia: insightText(m, 'differentia'), basisKind: insightText(m, 'basis_kind').isEmpty ? 'source_assertion' : insightText(m, 'basis_kind')));
       });
     }
     for (final entry in items('meaning_links', 256).indexed) {
