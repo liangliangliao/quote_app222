@@ -110,6 +110,15 @@ class SettingsDashboard extends StatelessWidget {
                         onTap: () => onOpen(SettingsSection.ai),
                       ),
                       const SizedBox(height: 9),
+                      _SettingsWideTile(
+                        section: SettingsSection.prp,
+                        icon: Icons.spa_outlined,
+                        subtitle: '启用后可直接开始一次复盘\n缓一缓 · 对账 · 盖印 · 下次回访',
+                        art: _SettingsArt.journal,
+                        onOpen: onOpen,
+                        warm: true,
+                      ),
+                      const SizedBox(height: 9),
                       _pair(
                         _SettingsTile(
                           section: SettingsSection.voice,

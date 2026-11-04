@@ -239,7 +239,13 @@ jobs:
       - name: Build APK - Flutter release
         if: steps.detect.outputs.project_type == 'flutter'
         working-directory: ${{ steps.detect.outputs.project_dir }}
-        run: flutter build apk --release --build-name 0.1.5 --build-number 10 -t lib/main.dart
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE_REF: ${{ github.head_ref || github.ref_name }}
+        run: >-
+          flutter build apk --release -t lib/main.dart
+          --dart-define=APP_SOURCE_SHA="$SOURCE_SHA"
+          --dart-define=APP_SOURCE_REF="$SOURCE_REF"
 
       - name: Package APK with source identity
         id: apk_package
@@ -268,6 +274,8 @@ jobs:
           cp docs/meaning_relationships_v10.md build/apk-delivery/MEANING-RELATIONSHIPS-V10.md
           cp docs/schopenhauer_forms_v11.md build/apk-delivery/SCHOPENHAUER-FORMS-V11.md
           cp docs/purposeful_analysis_unbounded_v12.md build/apk-delivery/PURPOSE-CASE-AND-OUTPUT-V12.md
+          cp docs/prp/GETTING_STARTED.md build/apk-delivery/PRP-START-HERE.md
+          cp VERSION_prp_v1.0.1.md build/apk-delivery/PRP-VERSION.md
           cp docs/quote_knowledge_prototypes_v5.md build/apk-delivery/QUOTE-KNOWLEDGE-V5.md
           cp docs/quote_epistemic_p0_implementation.md build/apk-delivery/READING-AND-COMPARISON.md
           cp docs/cognitive_prototypes_2_10.md build/apk-delivery/COGNITIVE-MODES.md
@@ -314,6 +322,10 @@ jobs:
           assert certificates == [expected_cert], "Unexpected release signing certificate"
           badging = output(str(build_tools / "aapt"), "dump", "badging", str(apk))
           assert "package: name='com.example.quote_app'" in badging
+          app_version = re.search(r"^version:\s*([^+\s]+)\+(\d+)", pathlib.Path("pubspec.yaml").read_text(), re.M)
+          assert app_version, "pubspec version must include a build number"
+          assert f"versionCode='{app_version[2]}'" in badging
+          assert f"versionName='{app_version[1]}'" in badging
           assert "sdkVersion:'26'" in badging
           assert "application-debuggable" not in badging
           native = re.search(r"^native-code:(.*)$", badging, re.M)
@@ -321,7 +333,8 @@ jobs:
           assert abis == sorted(["arm64-v8a", "armeabi-v7a", "x86_64"])
           report = dict(source_sha=source, build_sha=info["build_sha"], source_tree=source_tree,
                         build_tree=build_tree, apk=apk.name, sha256=digest, certificate_sha256=expected_cert,
-                        package="com.example.quote_app", min_sdk=26, abis=abis, release=True)
+                        package="com.example.quote_app", min_sdk=26, abis=abis, release=True,
+                        version_name=app_version[1], version_code=int(app_version[2]))
           (folder / "release-verification.json").write_text(json.dumps(report, indent=2) + "\n")
           print(json.dumps(report, indent=2))
           PY

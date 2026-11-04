@@ -1,0 +1,3 @@
+Command: flutter build bundle --debug --no-pub --target-platform android-arm64 --dart-define=APP_SOURCE_SHA=local-validation
+
+Exit code: 0

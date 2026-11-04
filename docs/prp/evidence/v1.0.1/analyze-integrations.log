@@ -1,0 +1,5 @@
+Command: flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos lib/widgets/settings_dashboard.dart test/settings_dashboard_test.dart
+Analyzing 2 items...                                            
+No issues found! (ran in 1.3s)
+
+Exit code: 0

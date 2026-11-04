@@ -35,8 +35,8 @@ android {
         // Keeping it below 26 causes manifest merge failure during release builds.
         minSdk = 26
         targetSdk = 36
-        versionCode 13
-        versionName "1.0"
+        versionCode flutter.versionCode
+        versionName flutter.versionName
         multiDexEnabled true
         testInstrumentationRunner "com.example.quote_app.ReminderProbe"
     }

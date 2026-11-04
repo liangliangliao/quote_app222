@@ -10,7 +10,7 @@ import zipfile
 
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
-    version = "v1.0.0"
+    version = "v1.0.1"
     package = f"quote_app_prp_{version}"
     destination = root / "build" / "prp" / f"{package}.zip"
     destination.parent.mkdir(parents=True, exist_ok=True)

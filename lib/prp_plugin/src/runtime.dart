@@ -212,17 +212,20 @@ class PrpRuntime extends PrpPlugin {
           final row = existing.first;
           return row['outcome'] == 'open' ? (row['id'] as num).toInt() : null;
         }
+        // Daily caps limit automatic offers. An explicit manual review is a
+        // user action, like continuing a draft, and consumes no offer budget.
+        final automatic = signal.kind != 'manual';
         final count = Sqflite.firstIntValue(await txn.rawQuery(
                 "SELECT COUNT(*) FROM prp_session WHERE started_ms >= ? AND counts_offer = 1",
                 [dayStartMs])) ??
             0;
-        if (count >= preferences.offerCap) return null;
+        if (automatic && count >= preferences.offerCap) return null;
         final ignored = await txn.query('prp_session',
             columns: ['ended_ms'],
             where: "outcome = 'skipped' AND counts_offer = 1 AND ended_ms > ?",
             whereArgs: [nowMs - const Duration(hours: 24).inMilliseconds],
             limit: 1);
-        if (ignored.isNotEmpty) return null;
+        if (automatic && ignored.isNotEmpty) return null;
         final id = await txn.insert('prp_session', {
           'surface': signal.surface.key,
           'trigger_kind': signal.kind,
@@ -230,6 +233,7 @@ class PrpRuntime extends PrpPlugin {
           'subject_key': signal.subjectKey,
           'expected': signal.expected,
           'started_ms': nowMs,
+          'counts_offer': automatic ? 1 : 0,
           'step': preferences.sessions ? 'pause' : 'ledger',
         });
         _check(epoch, signal.surface);

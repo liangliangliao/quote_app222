@@ -11,7 +11,11 @@ import 'package:quote_app/services/global_ai_request_settings.dart';
 import 'package:quote_app/services/global_ai_settings.dart';
 import 'package:quote_app/services/native_guard.dart';
 import 'package:quote_app/widgets/settings_dashboard.dart';
+import 'package:quote_app/prp_plugin/prp_plugin.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'prp_plugin/fixtures.dart';
+import 'prp_plugin/widget_test.dart' show prpIo, settlePrp;
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +75,7 @@ void main() {
       expect(find.byType(TextField), findsNothing);
       for (final section in [
         SettingsSection.ai,
+        SettingsSection.prp,
         SettingsSection.voice,
         SettingsSection.prompts,
         SettingsSection.parameters,
@@ -221,6 +226,7 @@ void main() {
         SettingsSection.voice: ['名言朗读服务商', '语音服务与声音库'],
         SettingsSection.prompts: ['提示词配置中心', '电影分析提示词', '首页侧栏 AI 主题开关'],
         SettingsSection.modules: [
+          'PRP 插件 · 失败成长',
           '健康饮食配置',
           '心情与自尊问答',
           '运动与音乐',
@@ -274,5 +280,92 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'settings entry completes a manual PRP review and shows its sealed lesson',
+      (tester) async {
+    final fixture = PrpFixture();
+    await tester.runAsync(fixture.open);
+    addTearDown(() => PrpPlugin.instance = const NoopPrpPlugin());
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
+    final entry = find.byKey(const ValueKey('settings-entry-prp'));
+    await waitUntil(tester, () => entry.evaluate().isNotEmpty);
+    expect(entry.hitTestable(), findsOneWidget);
+    await tester.tap(entry);
+    await settlePrp(tester,
+        until: find.byKey(const ValueKey('prp_master_switch')));
+    final begin = find.byKey(const ValueKey('prp_begin_reflection'));
+    expect(tester.widget<FilledButton>(begin).onPressed, isNull);
+    expect(fixture.databaseOpens, 0);
+    await tester.tap(find.byKey(const ValueKey('prp_master_switch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('按这些选择开启'));
+    await waitUntil(tester, () => fixture.runtime.enabled);
+    expect(fixture.runtime.preferences.aiConsent, false);
+    expect(fixture.runtime.preferences.surfaces[PrpSurface.quoteHome], false);
+    expect(fixture.runtime.preferences.surfaces[PrpSurface.kindling], false);
+    await settlePrp(tester, until: find.textContaining('已盖印 0 条'));
+    expect(find.textContaining('首页调用点未开启'), findsOneWidget);
+    expect(tester.widget<FilledButton>(begin).onPressed, isNotNull);
+    await tester.tap(begin);
+    await settlePrp(tester, until: find.text('先缓一缓'));
+    expect(find.text('60 秒'), findsOneWidget);
+    expect(find.text('把事实摆出来'), findsNothing);
+    final rows = await prpIo(tester, () => fixture.db.query('prp_session'));
+    expect(rows.single['surface'], 'failure_module');
+    expect(rows.single['counts_offer'], 0);
+    fixture.clock.advance(const Duration(seconds: 60));
+    await tester.pump(const Duration(milliseconds: 250));
+    Future<void> next(String title) async {
+      final control = find.byKey(const ValueKey('prp_next'));
+      await tester.ensureVisible(control);
+      await tester.tap(control);
+      await settlePrp(tester, until: find.text(title));
+    }
+
+    Future<void> enter(String label, String value) async {
+      final field = find.byWidgetPredicate(
+          (w) => w is TextField && w.decoration?.labelText == label);
+      await tester.ensureVisible(field);
+      await tester.enterText(field, value);
+    }
+
+    await next('把事实摆出来');
+    await enter('原本希望做到什么？', '阅读20分钟');
+    await enter('你的话', '今天先读了1页，后来打开短视频');
+    await next('先看有效，再看无效');
+    await enter('有效：这次有哪件事是对的？', '把书放到桌上读了1页');
+    await enter('无效：当时什么没起作用？', '坐下后打开短视频');
+    await next('把教训写成下一次的动作');
+    await enter('最早出现的信号是什么？', '准备阅读时打开短视频');
+    await enter('如果：一个能认出来的线索', '准备阅读时打开短视频');
+    await enter('那么：一个可检验的小动作', '打开书读1页');
+    await next('这条教训，你认可吗？');
+    final stamp = find.byKey(const ValueKey('prp_seal_hold'));
+    await tester.ensureVisible(stamp);
+    final gesture = await tester.startGesture(tester.getCenter(stamp));
+    fixture.clock.advance(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 3));
+    await settlePrp(tester, until: find.text('已盖印'));
+    await gesture.up();
+    await tester.ensureVisible(find.text('这次先到这里'));
+    await tester.tap(find.text('这次先到这里'));
+    await settlePrp(tester, until: begin);
+    expect(find.text('先缓一缓'), findsNothing);
+    expect(tester.widget<FilledButton>(begin).onPressed, isNotNull);
+    await settlePrp(tester, until: find.textContaining('已盖印 1 条'));
+    final book = find.text('我的教训手册');
+    await tester.scrollUntilVisible(book, 300,
+        scrollable: find.byType(Scrollable).last);
+    await tester.tap(book);
+    await settlePrp(tester, until: find.textContaining('打开书读1页'));
+    final lessons = await prpIo(tester, () => fixture.runtime.store.lessons());
+    expect(lessons.single.state, 'sealed');
+    expect(lessons.single.triggerText, '阅读20分钟');
+    await tester.pumpWidget(const SizedBox());
+    await settlePrp(tester);
   });
 }

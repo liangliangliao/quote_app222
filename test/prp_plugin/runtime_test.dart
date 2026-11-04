@@ -131,6 +131,33 @@ void main() {
     expect(await f.db.query('prp_session'), hasLength(1));
   });
 
+  test(
+      'explicit manual reviews do not consume automatic offers and still obey governance',
+      () async {
+    await f.enable(cap: 0);
+    expect(await f.runtime.signal(f.signal(ref: 'automatic')), isNull);
+    for (var i = 0; i < 2; i++) {
+      expect(
+          await f.runtime.signal(f.signal(
+              surface: PrpSurface.failureModule,
+              kind: 'manual',
+              subject: 'free',
+              ref: 'manual:$i')),
+          isNotNull);
+    }
+    final rows = await f.db.query('prp_session');
+    expect(rows, hasLength(2));
+    expect(rows.every((row) => row['counts_offer'] == 0), true);
+    f.host.quiet = true;
+    expect(
+        await f.runtime.signal(f.signal(
+            surface: PrpSurface.failureModule,
+            kind: 'manual',
+            ref: 'manual:quiet')),
+        isNull);
+    expect(await f.db.query('prp_session'), hasLength(2));
+  });
+
   test('missing data, skipped and kindling aborted never become misses',
       () async {
     await f.enable();

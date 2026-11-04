@@ -1,0 +1,5 @@
+Command: flutter analyze --no-pub --no-fatal-infos lib/prp_plugin lib/prp_plugin_host test/prp_plugin
+Analyzing 3 items...                                            
+No issues found! (ran in 1.2s)
+
+Exit code: 0

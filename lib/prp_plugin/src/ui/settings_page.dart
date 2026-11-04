@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../prp_plugin.dart';
+import '../build_info.dart';
 import '../runtime.dart';
 import 'presentation.dart';
 
@@ -15,18 +16,47 @@ class PrpSettingsPage extends StatefulWidget {
 class _PrpSettingsPageState extends State<PrpSettingsPage> {
   bool _loading = true;
   bool _saving = false;
+  bool _opening = false;
+  int _eligibilityGeneration = 0;
+  int? _sealedCount;
+  int _quotedCount = 0;
+  bool _eligibilityFailed = false;
   PrpRuntime get r => widget.runtime;
   @override
   void initState() {
     super.initState();
     r.initialize().then((_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        _refreshEligibility();
+      }
     });
     PrpPlugin.changes.addListener(_changed);
   }
 
   void _changed() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      _refreshEligibility();
+    }
+  }
+
+  Future<void> _refreshEligibility() async {
+    final generation = ++_eligibilityGeneration;
+    if (!r.preferences.enabled) return;
+    try {
+      final lessons = await r.store.lessons(sealedOnly: true);
+      if (!mounted || generation != _eligibilityGeneration) return;
+      setState(() {
+        _sealedCount = lessons.length;
+        _quotedCount = lessons.where((lesson) => lesson.quoteAllowed).length;
+        _eligibilityFailed = false;
+      });
+    } catch (_) {
+      if (mounted && generation == _eligibilityGeneration) {
+        setState(() => _eligibilityFailed = true);
+      }
+    }
   }
 
   @override
@@ -110,6 +140,35 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
     if (value != null) save(value);
   }
 
+  Future<void> _beginReflection() async {
+    if (_saving || _opening || !r.enabledFor(PrpSurface.failureModule)) return;
+    setState(() => _opening = true);
+    try {
+      final now = r.nowMs;
+      final offer = await r.signal(PrpSignal(
+          surface: PrpSurface.failureModule,
+          kind: 'manual',
+          subjectKey: 'free',
+          expected: '',
+          tsMs: now,
+          reference: 'settings:manual:$now'));
+      if (!mounted) return;
+      if (offer == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('当前未能开始。请在诊断中查看静默、静音或安全退场状态。')));
+        return;
+      }
+      await r.showOffer(context, offer, fullScreen: true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('暂时无法打开复盘，请稍后重试。')));
+      }
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
   Future<void> _export() async {
     try {
       final json = await r.exportData();
@@ -191,6 +250,55 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
                     subtitle: const Text('关闭后，相关提示和界面都会消失，已保存的教训保留。'),
                     value: p.enabled,
                     onChanged: _saving ? null : _enable),
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                    child: FilledButton.icon(
+                        key: const ValueKey('prp_begin_reflection'),
+                        icon: const Icon(Icons.edit_note),
+                        label: Text(_opening ? '复盘进行中' : '开始一次复盘'),
+                        onPressed: _saving ||
+                                _opening ||
+                                !r.enabledFor(PrpSurface.failureModule)
+                            ? null
+                            : _beginReflection)),
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                    child: Text(!p.enabled
+                        ? '先开启插件，就能从这里开始。AI 不会自动开启。'
+                        : p.surfaces[PrpSurface.failureModule] != true
+                            ? '开启下方“失败与完美主义”，即可从这里开始。'
+                            : '从一件真实的经历开始；这是手动复盘，不占自动提议额度。')),
+                const ExpansionTile(
+                    title: Text('功能会出现在哪里？'),
+                    childrenPadding: EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('美丽的敌人：字据确认没做到后，显示会话卡片。\n'
+                          '行为追踪：标记未完成时打开会话，每日确认处回访。\n'
+                          '失败与完美主义：3P 急救与失败复盘入口。'),
+                      SizedBox(height: 10),
+                      Text('火种：开启调用点后，在“回溯”的候选步骤复用已盖印的有效做法。'),
+                      SizedBox(height: 10),
+                      Text('名言首页：开启首页调用点和“自己的名言混入首页”，并逐条同意教训后，'
+                          '点击“换一条”按每日限额展示。普通首页和火种清单不会自动改变。'),
+                    ]),
+                if (p.enabled)
+                  Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                      child: Text(
+                          _eligibilityFailed
+                              ? '教训状态暂时无法读取，请稍后重试。'
+                              : _sealedCount == null
+                                  ? '正在读取教训状态…'
+                                  : '已盖印 $_sealedCount 条 · 已同意作为自己的名言 $_quotedCount 条\n'
+                                      '火种：${p.surfaces[PrpSurface.kindling] != true ? '调用点未开启' : _sealedCount == 0 ? '尚无盖印教训，先完成一次复盘' : '可在回溯的候选步骤选择有效做法'}\n'
+                                      '首页：${p.surfaces[PrpSurface.quoteHome] != true ? '首页调用点未开启' : !p.quoteStream ? '自己的名言流未开启' : !p.recalls ? '回访开关未开启' : _quotedCount == 0 ? '尚无逐条同意的盖印教训' : '候选已准备好；点击换一条，仍受静默与每日限额约束'}',
+                          key: const ValueKey('prp_surface_readiness'))),
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                    child: SelectableText(PrpBuildInfo.label,
+                        key: const ValueKey('prp_build_identity'),
+                        style: const TextStyle(fontSize: 12))),
                 if (r.circuitOpen || r.crisisUntilMs > r.nowMs)
                   const Padding(
                       padding: EdgeInsets.all(16),

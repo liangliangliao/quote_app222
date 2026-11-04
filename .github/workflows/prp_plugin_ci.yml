@@ -1,6 +1,8 @@
 name: PRP Plugin CI
 
 on:
+  push:
+    branches: ['feature/prp-plugin']
   pull_request:
     paths:
       - 'lib/prp_plugin/**'
@@ -74,5 +76,5 @@ jobs:
         run: python3 tools/pack_prp.py
       - uses: actions/upload-artifact@v4
         with:
-          name: quote-app-prp-v1.0.0-source
-          path: build/prp/quote_app_prp_v1.0.0.zip
+          name: quote-app-prp-v1.0.1-source
+          path: build/prp/quote_app_prp_v1.0.1.zip

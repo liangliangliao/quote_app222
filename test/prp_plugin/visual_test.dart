@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/prp_plugin/prp_plugin.dart';
+import 'package:quote_app/widgets/settings_dashboard.dart';
 
 import 'fixtures.dart';
 import 'widget_test.dart' show prpIo, settlePrp;
@@ -18,12 +19,14 @@ void main() {
       ..addFont(rootBundle.load('assets/fonts/MaShanZheng-Regular.ttf'));
     final brush = FontLoader('QuoteXingShu')
       ..addFont(rootBundle.load('assets/fonts/ZhiMangXing-Regular.ttf'));
+    final kai = FontLoader('QuoteKaiShu')
+      ..addFont(rootBundle.load('assets/fonts/MaShanZheng-Regular.ttf'));
     final latin = FontLoader('QuoteLiterarySerif')
       ..addFont(rootBundle.load('assets/fonts/LibreBaskerville-Variable.ttf'));
     final icons = FontLoader('MaterialIcons')
       ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
-    await tester.runAsync(() =>
-        Future.wait([font.load(), brush.load(), latin.load(), icons.load()]));
+    await tester.runAsync(() => Future.wait(
+        [font.load(), brush.load(), kai.load(), latin.load(), icons.load()]));
     final f = PrpFixture();
     await tester.runAsync(f.open);
     addTearDown(() {
@@ -52,6 +55,9 @@ void main() {
           matchesGoldenFile('../../docs/prp/screenshots/$name.png'));
     }
 
+    await screen(
+        SettingsDashboard(summary: const SettingsAiSummary(), onOpen: (_) {}));
+    await capture('PRP_09_settings_entry');
     await screen(f.runtime.settingsPage());
     await capture('PRP_01_settings_off');
     await prpIo(tester, () => f.enable());
