@@ -79,9 +79,11 @@ import 'beautiful_enemy/beautiful_enemy.dart' show EnemyEntry;
 import 'beautiful_enemy_host/enemy_host_page.dart';
 import 'beautiful_enemy_host/enemy_host_patrol.dart';
 import 'beautiful_enemy_host/enemy_host_presence.dart';
+import 'prp_plugin_host/prp_host_impl.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  configurePrpPlugin();
   NativeGuard.ensureNotificationTapHandler();
   // 只保留首帧真正需要的同步设置。MethodChannel、数据库、后台任务和
   // 通知插件初始化全部放到首帧之后，避免 Android 12+ 启动画面长时间停留。
@@ -101,6 +103,7 @@ void main() {
 
 Future<void> _bootstrapAfterFirstFrame() async {
   final startedAt = DateTime.now();
+  unawaited(_runBestEffort(initializePrpPlugin));
   try { SimpleBus.init(); } catch (_) {}
   try { _registerHomeRefreshPort(); } catch (_) {}
   try { _registerQuoteChangePort(); } catch (_) {}

@@ -1,0 +1,78 @@
+name: PRP Plugin CI
+
+on:
+  pull_request:
+    paths:
+      - 'lib/prp_plugin/**'
+      - 'lib/prp_plugin_host/**'
+      - 'test/prp_plugin/**'
+      - 'lib/beautiful_enemy/**'
+      - 'lib/beautiful_enemy_host/**'
+      - 'lib/behavior_tracking/**'
+      - 'lib/failure_module/**'
+      - 'lib/kindling/**'
+      - 'lib/main.dart'
+      - 'lib/pages/home_page.dart'
+      - 'lib/pages/settings_page.dart'
+      - 'lib/widgets/settings_dashboard.dart'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'tools/pack_prp.py'
+      - 'docs/prp/**'
+      - '.github/workflows/prp_plugin_ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prp-plugin-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+      - name: Install SQLite development library
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - run: flutter pub get
+      - name: Analyze plugin and adapters
+        run: flutter analyze --no-pub --no-fatal-infos lib/prp_plugin lib/prp_plugin_host test/prp_plugin
+      - name: Analyze integration points
+        run: >-
+          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
+          lib/beautiful_enemy lib/beautiful_enemy_host lib/behavior_tracking
+          lib/failure_module lib/kindling lib/pages/home_page.dart
+          lib/pages/settings_page.dart lib/widgets/settings_dashboard.dart lib/main.dart
+      - name: Plugin contracts and interactive flows
+        run: flutter test --no-pub --reporter expanded test/prp_plugin
+      - name: Build the complete Flutter bundle for Android arm64
+        run: flutter build bundle --debug --no-pub --target-platform android-arm64
+      - name: Safety, kindling and settings regressions
+        run: >-
+          flutter test --no-pub --reporter expanded
+          test/beautiful_enemy/enemy_guard_test.dart
+          test/kindling/kindling_red_lines_test.dart
+          test/kindling/kindling_schema_test.dart
+          test/kindling/kindling_flow_widget_test.dart
+          test/settings_dashboard_test.dart
+          test/quote_home_refresh_test.dart
+          test/quote_home_controls_test.dart
+      - name: Existing Beautiful Enemy engine baseline
+        # The upstream workflow already marks the full suite as a known-failure
+        # baseline. Keep its result visible independently from the PRP gate.
+        continue-on-error: true
+        run: flutter test --no-pub --reporter expanded test/beautiful_enemy
+      - name: Package reviewable source
+        run: python3 tools/pack_prp.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quote-app-prp-v1.0.0-source
+          path: build/prp/quote_app_prp_v1.0.0.zip

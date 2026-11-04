@@ -1,0 +1,10 @@
+Baseline: d83386c20f8243cd0e35f5c582de03e5a1595a8c
+Baseline matching test files: 53 passed, 5 failed
+Current complete Beautiful Enemy + Kindling suites: 242 passed, 5 failed
+Failed case names compared exactly: MATCH
+
+beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词
+beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结
+beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话
+beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静
+beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因

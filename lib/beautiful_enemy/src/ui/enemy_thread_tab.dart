@@ -14,6 +14,7 @@ import '../enemy_talker.dart';
 import 'enemy_tabs.dart';
 import 'ui_helpers.dart';
 import '../../../../epistemic/gentle_counterexample.dart';
+import '../../../prp_plugin/prp_plugin.dart';
 
 /// 对峙：和敌人在同一条时间线上说话。
 ///
@@ -43,6 +44,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   final Map<int, String> _stimulusStyles = <int, String>{};
   final Map<int, String> _stimulusFeedback = <int, String>{};
   int _latestVerdictId = -1;
+  PrpOffer? _prpOffer;
 
   Timer? _timer;
   bool _sending = false;
@@ -64,12 +66,14 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    PrpPlugin.changes.addListener(_prpSafetyChanged);
     _boot();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    PrpPlugin.changes.removeListener(_prpSafetyChanged);
     _timer?.cancel();
     _input.dispose();
     _scroll.dispose();
@@ -95,16 +99,27 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
     unawaited(_tick());
   }
 
+  void _prpSafetyChanged() {
+    unawaited(() async {
+      try {
+        if (!mounted || !await _engine.isMuted()) return;
+        await widget.voice.stop();
+        if (mounted) await _load();
+      } catch (_) {}
+    }());
+  }
+
   int _ticks = 0;
 
   Future<void> _tick({bool force = false}) async {
+    if (PrpPlugin.instance.hasActiveSession) return;
     EnemyMessage? msg;
     try {
       msg = await _presence.step(force: force);
     } catch (_) {
       msg = null;
     }
-    if (!mounted) return;
+    if (!mounted || PrpPlugin.instance.hasActiveSession) return;
     // 状态行每 ~9 秒刷新一次，不必每次都查。
     if (++_ticks % 3 == 0 || msg != null) _refreshStatusLine();
     if (msg != null) {
@@ -117,6 +132,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
 
   /// 敌人开口：震一下，开了「出声」就念出来。
   Future<void> _announce(EnemyMessage msg) async {
+    if (PrpPlugin.instance.hasActiveSession) return;
     HapticFeedback.heavyImpact();
     if (await _dao.boolSetting(EnemySettings.voiceOut)) {
       await widget.voice.speak(msg.text);
@@ -307,7 +323,9 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   }
 
   Future<void> _failed(EnemyCommitment c) async {
-    await attributeFlow(context, _engine, c);
+    await attributeFlow(context, _engine, c, onPrpOffer: (offer) {
+      if (mounted) setState(() => _prpOffer = offer);
+    });
     await _tick(force: true);
   }
 
@@ -380,6 +398,7 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final latestUser = _messages.reversed.where((m) => m.role == MessageRole.user).firstOrNull;
+    final showPrp = _prpOffer != null && !_crisisNotice && !_muted;
     return Column(
       children: <Widget>[
         if (!_crisisNotice && !_noConsent && latestUser != null)
@@ -402,8 +421,9 @@ class _ThreadTabState extends State<ThreadTab> with WidgetsBindingObserver {
           child: ListView.builder(
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            itemCount: _messages.length + (_sending ? 1 : 0),
+            itemCount: _messages.length + (showPrp ? 1 : 0) + (_sending ? 1 : 0),
             itemBuilder: (BuildContext context, int i) {
+              if (i == _messages.length && showPrp) return PrpPlugin.instance.sessionCard(_prpOffer!);
               if (i >= _messages.length) return _typing();
               return _row(_messages[i]);
             },

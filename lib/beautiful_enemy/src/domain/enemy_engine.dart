@@ -8,6 +8,7 @@ import 'digest_builder.dart';
 import 'evidence_source.dart';
 import 'guard.dart';
 import 'motivation_stimulus.dart';
+import '../../../prp_plugin/prp_plugin.dart';
 
 enum EnemyOutcomeKind { verdict, insufficient, skipped }
 
@@ -221,6 +222,8 @@ class EnemyEngine {
   /// 到期还没兑现的承诺一律记为失效，并写进证据。
   Future<int> settleOverdue() async {
     if (!await isEnabled()) return 0;
+    // With PRP on, an expired deadline waits for the user's done/missed choice.
+    if (PrpPlugin.instance.enabledFor(PrpSurface.enemy)) return 0;
     final int now = nowMs();
     final List<EnemyCommitment> overdue = await dao.overdueOpen(now);
     for (final EnemyCommitment c in overdue) {
@@ -280,6 +283,8 @@ class EnemyEngine {
     );
     final EnemyCommitment? c = await dao.commitment(id);
     if (c != null) await _commitmentEvent(c, 'commitment_created', now);
+    await PrpPlugin.instance.linkAttempt(PrpContext(surface: PrpSurface.enemy,
+      subjectKey: 'commitment:$id', text: t, location: 'new_commitment'));
     return (id: id, crisis: false, error: null);
   }
 
@@ -310,6 +315,10 @@ class EnemyEngine {
       }
     }
     await _learnStimulusOutcome(c, done: verified);
+    if (verified) await PrpPlugin.instance.reportSubjectOutcome(
+      PrpContext(surface: PrpSurface.enemy, subjectKey: 'commitment:${c.id}', text: c.text),
+      PrpOutcome.helped,
+    );
     final List<EnemyVerdict> recent = await dao.recentVerdicts(limit: 10);
     int streak = 0;
     for (final EnemyVerdict v in recent) {

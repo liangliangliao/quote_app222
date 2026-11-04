@@ -11,6 +11,7 @@ export 'src/data/enemy_schema.dart' show EnemySchema;
 export 'src/data/enemy_dao.dart' show EnemyDao, EnemySettings;
 export 'src/domain/enemy_engine.dart' show EnemyEngine, EnemyOutcome, EnemyOutcomeKind;
 export 'src/domain/evidence_source.dart' show EvidenceSource;
+export 'src/domain/guard.dart' show DraftValidator, SafetyValve;
 export 'src/domain/motivation_profile.dart'
     show MotivationProfile, MotivationQuestion;
 export 'src/domain/motivation_stimulus.dart'

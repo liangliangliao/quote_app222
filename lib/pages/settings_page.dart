@@ -12,6 +12,7 @@ import 'package:quote_app/services/native_am.dart';
 import 'package:quote_app/services/native_wm.dart';
 import 'package:quote_app/services/native_guard.dart';
 import 'package:flutter/material.dart';
+import '../prp_plugin/prp_plugin.dart';
 import '../epistemic/cognitive_settings.dart';
 import 'package:image_picker/image_picker.dart';
 // removed duplicate import of path_provider
@@ -3575,6 +3576,7 @@ Future<String?> _saveAvatarTemp(File file) async {
     final Widget page = switch (section) {
       SettingsSection.semantic => const SemanticConsistencySettingsPage(),
       SettingsSection.movies => const MovieRoleLabSettingsPage(),
+      SettingsSection.prp => PrpPlugin.instance.settingsPage(),
       SettingsSection.logs => Scaffold(
         backgroundColor: settingsPaper,
         appBar: AppBar(
@@ -3785,6 +3787,11 @@ Future<String?> _saveAvatarTemp(File file) async {
       _formCard(children: _buildDrawerPromptControls()),
     ],
     SettingsSection.modules => [
+      _sectionLink(
+        SettingsSection.prp,
+        '缓一缓、对账、盖印；可随时关闭，教训保留',
+        Icons.spa_outlined,
+      ),
       _settingsLink(
         '健康饮食配置',
         '营养膳食、食物数据源与菜谱服务',

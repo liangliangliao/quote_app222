@@ -10,6 +10,22 @@ import 'behavior_preset_ai_analysis_service.dart';
 import '../platform/exact_alarm_permission_coordinator.dart';
 import '../platform/native_scheduler.dart';
 import 'behavior_tracking_external_sources.dart';
+import '../prp_plugin/prp_plugin.dart';
+
+Future<PrpOffer?> _prpPresetOutcome(BehaviorPreset preset, DateTime date, String status, {String reason = ''}) async {
+  final plugin = PrpPlugin.instance;
+  if (!plugin.enabledFor(PrpSurface.behavior) || !['done', 'missed'].contains(status)) return null;
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final endOfDay = DateTime(date.year, date.month, date.day + 1).millisecondsSinceEpoch - 1;
+  final subject = 'habit:preset:${preset.id}';
+  await plugin.reportSubjectOutcome(PrpContext(surface: PrpSurface.behavior, subjectKey: subject,
+    occurredMs: endOfDay < now ? endOfDay : now), status == 'done' ? PrpOutcome.helped : PrpOutcome.repeated);
+  if (status != 'missed') return null;
+  return plugin.signal(PrpSignal(surface: PrpSurface.behavior, kind: 'habit_missed',
+    subjectKey: subject, expected: preset.name, confirmed: true,
+    reference: 'preset:${preset.id}:${DateTime(date.year, date.month, date.day).millisecondsSinceEpoch}',
+    facts: ['用户在 ${DateFormat('yyyy-MM-dd').format(date)} 明确标记未完成'], tsMs: now));
+}
 
 class BehaviorObservationPresetsPage extends StatefulWidget {
   final List<String> categories;
@@ -617,6 +633,7 @@ class _BehaviorObservationPresetsPageState extends State<BehaviorObservationPres
     duration.dispose();
     note.dispose();
     if (result == null) return;
+    final prpChanged = _checkIns[preset.id]?.status != 'done';
     await _dao.setPresetCheckIn(
       preset: preset,
       date: _date,
@@ -625,14 +642,20 @@ class _BehaviorObservationPresetsPageState extends State<BehaviorObservationPres
       actualDurationMin: result.actualDurationMin,
       note: result.note,
     );
+    if (prpChanged) await _prpPresetOutcome(preset, _date, 'done');
     await _load();
     widget.onRecordsChanged();
   }
 
   Future<void> _setSimpleStatus(BehaviorPreset preset, String status) async {
+    final changed = _checkIns[preset.id]?.status != status;
     await _dao.setPresetCheckIn(preset: preset, date: _date, status: status);
     await _load();
     widget.onRecordsChanged();
+    if (changed) {
+      final offer = await _prpPresetOutcome(preset, _date, status);
+      if (mounted && offer != null) await PrpPlugin.instance.showOffer(context, offer);
+    }
   }
 
   @override
@@ -679,14 +702,19 @@ class _BehaviorObservationPresetsPageState extends State<BehaviorObservationPres
             const Text('这一天没有启用的预设行为。可以先新增一个固定行为，比如“阅读 20 分钟”或“散步 30 分钟”。', style: TextStyle(color: Color(0xFF64748B), height: 1.45)),
           ] else ...[
             const SizedBox(height: 12),
-            for (final preset in scheduled) _PresetCheckTile(
+            for (final preset in scheduled) ...[
+              _PresetCheckTile(
               preset: preset,
               checkIn: preset.id == null ? null : _checkIns[preset.id],
               onDone: () => _confirmDone(preset),
               onMissed: () => _setSimpleStatus(preset, 'missed'),
               onSkipped: () => _setSimpleStatus(preset, 'skipped'),
               onEdit: () => _editPreset(preset),
-            ),
+              ),
+              if (preset.id != null) PrpPlugin.instance.recallChip(PrpContext(
+                surface: PrpSurface.behavior, subjectKey: 'habit:preset:${preset.id}',
+                text: preset.name, location: 'habit_reminder', reference: 'preset:${preset.id}:${_date.millisecondsSinceEpoch}')),
+            ],
           ],
         ]),
         const SizedBox(height: 12),
@@ -797,6 +825,8 @@ class _BehaviorPresetDailyReviewPageState extends State<BehaviorPresetDailyRevie
     final details = <Map<String, dynamic>>[];
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     try {
+      final prpPrevious = await _dao.presetCheckInMap(_date);
+      PrpOffer? prpOffer;
       for (final preset in _scheduled) {
         if (preset.id == null) continue;
         final draft = _drafts[preset.id]!;
@@ -845,6 +875,11 @@ class _BehaviorPresetDailyReviewPageState extends State<BehaviorPresetDailyRevie
           'reminderTime': preset.reminderEnabled ? '${_two(preset.reminderHour ?? 21)}:${_two(preset.reminderMinute ?? 0)}' : '',
           'notes': preset.notes,
         });
+        final prpStatus = draft.done == true ? 'done' : 'missed';
+        if (prpPrevious[preset.id]?.status != prpStatus) {
+          final offer = await _prpPresetOutcome(preset, _date, prpStatus, reason: draft.reasonText.trim());
+          prpOffer ??= offer;
+        }
       }
       await _dao.saveDailyPresetReview(BehaviorPresetDailyReviewRecord(
         reviewDateMs: _date.millisecondsSinceEpoch,
@@ -857,6 +892,8 @@ class _BehaviorPresetDailyReviewPageState extends State<BehaviorPresetDailyRevie
         updatedAtMs: nowMs,
       ));
       await _rescheduleAllPresetAlarmsFromDao();
+      await PrpPlugin.instance.importReviewDrafts(details, reviewMs: _date.millisecondsSinceEpoch);
+      if (mounted && prpOffer != null) await PrpPlugin.instance.showOffer(context, prpOffer);
       await _runAiAnalysis(details: details, showSnack: false);
       if (!mounted) return;
       setState(() => _saving = false);
@@ -979,6 +1016,12 @@ class _BehaviorPresetDailyReviewPageState extends State<BehaviorPresetDailyRevie
         updatedAtMs: DateTime.now().millisecondsSinceEpoch,
       );
       await _dao.savePresetAiAnalysis(record);
+      final prpCandidates = result.analysisJson['lesson_candidates'];
+      await PrpPlugin.instance.importReviewDrafts(analysisDetails.map((detail) => <String, dynamic>{
+        ...detail,
+        if (prpCandidates is List) 'prp_candidate': prpCandidates.whereType<Map>()
+          .where((candidate) => '${candidate['preset_id']}' == '${detail['presetId']}').firstOrNull,
+      }).toList(), reviewMs: _date.millisecondsSinceEpoch);
       final saved = await _dao.presetAiAnalysisForDate(_date);
       if (!mounted) return;
       setState(() {

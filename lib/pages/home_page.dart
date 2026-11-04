@@ -23,6 +23,7 @@ import '../services/quote_library_store.dart';
 import '../utils/debug_logger.dart';
 import '../epistemic/cognitive_mode.dart';
 import '../epistemic/quote_cognitive_reader.dart';
+import '../prp_plugin/prp_plugin.dart';
 import 'package:quote_app/services/native_guard.dart';
 
 
@@ -38,6 +39,29 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
+  Map<String, dynamic>? _beforePrpQuote;
+
+  void _onPrpChanged() {
+    if (!mounted) return;
+    final visible = _todayData?['prp_lesson_id'] != null;
+    final before = _readingHistory.length;
+    _readingHistory.removeWhere((row) => row['prp_lesson_id'] != null);
+    if (visible) {
+      final previous = _beforePrpQuote;
+      setState(() {
+        _todayData = previous; _frameImagePath = null; _fav = false;
+        _readingIndex = previous == null ? 0 : _readingHistory.indexWhere((row) => QuoteLibraryStore.identity(row) == QuoteLibraryStore.identity(previous));
+        if (_readingIndex < 0) _readingIndex = 0;
+      });
+      if (previous != null) unawaited(_activateFrame(previous));
+      else _load();
+    } else if (before != _readingHistory.length) {
+      setState(() {
+        _readingIndex = _todayData == null ? 0 : _readingHistory.indexWhere((row) => QuoteLibraryStore.identity(row) == QuoteLibraryStore.identity(_todayData!));
+        if (_readingIndex < 0) _readingIndex = 0;
+      });
+    }
+  }
   // Truncate huge strings for logging to avoid performance issues on phone.
   String _truncateForLog(String? s, {int maxLen = 140}) {
     if (s == null) return '';
@@ -138,14 +162,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _activateFrame(Map<String, dynamic> payload) async {
+    if (payload['prp_lesson_id'] != null) {
+      // Personal reflections never go to author lookup or automatic AI artwork.
+      ++_frameRevision;
+      if (mounted) setState(() {
+        _frameImagePath = null; _fav = false;
+        final existing = _readingHistory.indexWhere((row) => row['prp_lesson_id'] == payload['prp_lesson_id']);
+        if (existing >= 0) { _readingIndex = existing; }
+        else {
+          _readingHistory.add(Map<String, dynamic>.from(payload));
+          if (_readingHistory.length > 6) _readingHistory.removeAt(0);
+          _readingIndex = _readingHistory.length - 1;
+        }
+      });
+      return;
+    }
     unawaited(_resolveOriginalAuthor(payload));
     unawaited(_loadFavoriteFor(payload));
     final topic = (payload['topic'] ?? '').toString();
     final quote = (payload['quote'] ?? '').toString();
     final key = _frameAi.cacheKey(topic, quote);
     final int revision = ++_frameRevision;
-    if (_visibleFrameKey != key && mounted) {
+    if (mounted) {
       setState(() {
+        final frameChanged = _visibleFrameKey != key;
         _visibleFrameKey = key;
         final readingKey = QuoteLibraryStore.identity(payload);
         _readingIndex = _readingHistory.indexWhere((row) => QuoteLibraryStore.identity(row) == readingKey);
@@ -154,7 +194,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (_readingHistory.length > 6) _readingHistory.removeAt(0);
           _readingIndex = _readingHistory.length - 1;
         }
-        _frameImagePath = null; // 不展示上一条名言的画面
+        if (frameChanged) _frameImagePath = null; // 不展示上一条名言的画面
       });
     }
     if (quote.trim().isEmpty) return;
@@ -173,6 +213,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _generateFrameFor(Map<String, dynamic> payload, {required bool userInitiated}) async {
+    if (payload['prp_lesson_id'] != null) {
+      if (userInitiated && mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('自己的话使用本地书法卡片呈现。')));
+      return;
+    }
     if (_frameGenerating) {
       if (userInitiated && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已有一幅画正在生成')));
@@ -431,6 +476,7 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    PrpPlugin.changes.addListener(_onPrpChanged);
     SimpleBus.homeTick.addListener(_onBus);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       NotificationService.markHomeVisible();
@@ -451,6 +497,7 @@ Future<String?> _matchAvatarAssetByAuthor(String author) async {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    PrpPlugin.changes.removeListener(_onPrpChanged);
     SimpleBus.homeTick.removeListener(_onBus);
     QuoteCalligraphySettings.changeTick
         .removeListener(_onCalligraphyPreferenceChanged);
@@ -819,6 +866,10 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
   Future<void> _toggleFavorite() async {
     final payload = _todayData;
     if (payload == null || _favoriteBusy) return;
+    if (payload['prp_lesson_id'] != null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('这句话已保存在“我的教训手册”。')));
+      return;
+    }
     _favoriteBusy = true;
     final identity = QuoteLibraryStore.identity(payload);
     try {
@@ -852,6 +903,17 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
     if (_nextBusy || _todayData == null) return;
     setState(() => _nextBusy = true);
     try {
+      final own = await PrpPlugin.instance.quotesForStream();
+      if (mounted && own.isNotEmpty && PrpPlugin.instance.quoteStreamEnabled) {
+        final quote = own.first;
+        if (_todayData?['prp_lesson_id'] == null) _beforePrpQuote = Map<String, dynamic>.from(_todayData!);
+        final payload = <String, dynamic>{'topic': '自己的话', 'quote': quote.text,
+          'author': quote.author, 'author_original_name': quote.author, 'source': '我的教训手册',
+          'note': '自己认可过的教训，下一次再验证。', 'prp_lesson_id': quote.lessonId};
+        setState(() => _todayData = payload);
+        await _activateFrame(payload);
+        return;
+      }
       Map<String, dynamic>? row;
       try {
         row = await _library.randomOther(
@@ -889,6 +951,7 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
   void _readHistoryAt(int index) {
     if (index < 0 || index >= _readingHistory.length) return;
     final payload = _readingHistory[index];
+    if (payload['prp_lesson_id'] != null && !PrpPlugin.instance.quoteStreamEnabled) return;
     setState(() => _todayData = payload);
     unawaited(_activateFrame(payload));
   }
@@ -907,25 +970,28 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         ? _originalAuthorName
         : (_signatures.displayName(authorName,
             originalName: '${content['author_original_name'] ?? ''}') ?? '');
+    final poster = PosterPureFlutter(
+      topic: '${content['topic'] ?? ''}', quote: '${content['quote'] ?? ''}',
+      author: '${content['author'] ?? ''}', originalAuthor: originalAuthor,
+      signaturePending: originalAuthor.isEmpty && authorName.isNotEmpty,
+      source: '${content['source'] ?? ''}', note: '${content['note'] ?? ''}',
+      quoteReference: QuoteReference.fromPosterPayload(content),
+      avatar: '${content['avatar'] ?? content['avatarUrl'] ?? ''}',
+      woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset, aiFramePath: _frameImagePath,
+      animateCalligraphy: _quoteCalligraphyEnabled, calligraphyStyle: _quoteCalligraphyStyle,
+      englishFontStyle: _quoteEnglishFontStyle,
+    );
     return Scaffold(
       backgroundColor: const Color(0xfff7f4ed),
       body: QuoteHomeScene(
-        poster: PosterPureFlutter(
-          topic: '${content['topic'] ?? ''}',
-          quote: '${content['quote'] ?? ''}',
-          author: '${content['author'] ?? ''}',
-          originalAuthor: originalAuthor,
-          signaturePending: originalAuthor.isEmpty && authorName.isNotEmpty,
-          source: '${content['source'] ?? ''}',
-          note: '${content['note'] ?? ''}',
-          quoteReference: QuoteReference.fromPosterPayload(content),
-          avatar: '${content['avatar'] ?? content['avatarUrl'] ?? ''}',
-          woodBgAsset: QuoteAdaptiveFrame.defaultBackgroundAsset,
-          aiFramePath: _frameImagePath,
-          animateCalligraphy: _quoteCalligraphyEnabled,
-          calligraphyStyle: _quoteCalligraphyStyle,
-          englishFontStyle: _quoteEnglishFontStyle,
-        ),
+        poster: content['prp_lesson_id'] == null ? poster : Stack(children: [poster,
+          Positioned(top: 22, right: 22, child: IgnorePointer(child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(border: Border.all(color: const Color(0xffb74435), width: 2),
+              borderRadius: BorderRadius.circular(3)),
+            child: const Text('己言\n已盖印', style: TextStyle(color: Color(0xffb74435), fontSize: 12, fontWeight: FontWeight.w700)),
+          ))),
+        ]),
         moreMenu: _buildMoreMenu(),
         onMenu: _openLeftDrawer,
         onSearch: () => _openLibrary(search: true),

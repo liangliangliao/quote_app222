@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_tts/flutter_tts.dart';
 
 import '../beautiful_enemy/beautiful_enemy.dart';
+import '../prp_plugin/prp_plugin.dart';
 
 /// 敌人的声音：宿主已有的 flutter_tts。语速放慢、音调压低，听起来冷一点。
 /// 任何一步失败都吞掉：没声音不该影响敌人说话。
@@ -25,10 +26,12 @@ class EnemyHostVoiceOut implements EnemyVoiceOut {
 
   @override
   Future<void> speak(String text) async {
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty || PrpPlugin.instance.hasActiveSession) return;
     try {
       final FlutterTts tts = await _ensure();
+      if (PrpPlugin.instance.hasActiveSession) return;
       await tts.stop();
+      if (PrpPlugin.instance.hasActiveSession) return;
       await tts.speak(text);
     } catch (_) {
       // 没有语音引擎就算了。
@@ -39,9 +42,11 @@ class EnemyHostVoiceOut implements EnemyVoiceOut {
   /// if the module or voice switch is turned off from another isolate.
   Future<void> speakWhileEnabled(EnemyDao dao, String text) async {
     if (!await dao.boolSetting(EnemySettings.enabled, fallback: true) ||
+        await dao.intSetting(EnemySettings.mutedUntilMs, 0) > DateTime.now().millisecondsSinceEpoch ||
         !await dao.boolSetting(EnemySettings.voiceOut)) return;
     final timer = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!await dao.boolSetting(EnemySettings.enabled, fallback: true) ||
+          await dao.intSetting(EnemySettings.mutedUntilMs, 0) > DateTime.now().millisecondsSinceEpoch ||
           !await dao.boolSetting(EnemySettings.voiceOut)) await stop();
     });
     try { await speak(text).timeout(const Duration(minutes: 2)); }

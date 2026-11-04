@@ -1,0 +1,9 @@
+Command: flutter build bundle --debug --no-pub --target-platform android-arm64
+
+Exit code: 0
+
+Compiled kernel: build/flutter_assets/kernel_blob.bin
+Size: 134740248 bytes
+SHA-256: a9a9582aa98db53f8585522fd4c999cf4ff66a98deb19a65a3424a3226a98570
+Flutter: 3.35.3, Dart: 3.9.2
+Bundle compilation only; no APK/native Gradle build or device run.

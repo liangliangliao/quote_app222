@@ -12,15 +12,44 @@ import '../domain/motivation_stimulus.dart';
 import '../enemy_reminder.dart';
 import '../enemy_talker.dart';
 import 'ui_helpers.dart';
+import '../../../prp_plugin/prp_plugin.dart';
 
 /// 失败归因：先记为失效，再问原因。空话不收。
 Future<void> attributeFlow(
   BuildContext context,
   EnemyEngine engine,
-  EnemyCommitment c,
+  EnemyCommitment c, {
+  ValueChanged<PrpOffer>? onPrpOffer,
+  }
 ) async {
+  final plugin = PrpPlugin.instance;
+  if (plugin.enabledFor(PrpSurface.enemy) && c.status == CommitmentStatus.missed) {
+    // Legacy records may have been auto-settled. Confirm instead of inferring.
+    final missed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('这条字据，做了吗？'), content: Text(c.text),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('暂不确认')),
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('已经做到了')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认没做到'))],
+    ));
+    if (missed != true) { if (missed == false) await engine.complete(c.id); return; }
+  }
   if (c.status == CommitmentStatus.open) await engine.markMissed(c.id);
   if (!context.mounted) return;
+  if (plugin.enabledFor(PrpSurface.enemy)) {
+    await plugin.reportSubjectOutcome(PrpContext(surface: PrpSurface.enemy,
+      subjectKey: 'commitment:${c.id}', text: c.text), PrpOutcome.repeated);
+    final offer = await plugin.signal(PrpSignal(surface: PrpSurface.enemy,
+      kind: 'commitment_missed', subjectKey: 'commitment:${c.id}', expected: c.text,
+      facts: const ['用户明确确认这条字据没做到'], confirmed: true,
+      reference: 'commitment:${c.id}', tsMs: engine.nowMs()));
+    if (!context.mounted) return;
+    if (offer != null) {
+      if (onPrpOffer != null) { onPrpOffer(offer); }
+      else { await plugin.showOffer(context, offer); }
+      return;
+    }
+    if (plugin.enabledFor(PrpSurface.enemy)) return;
+  }
 
   String category = EnemyCopy.failureCategories.first;
   final TextEditingController controller = TextEditingController();
@@ -259,6 +288,7 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
 
   final TextEditingController _controller = TextEditingController();
   final TextEditingController _stake = TextEditingController();
+  String _prpRecallText = '';
   List<EnemyCommitment> _items = <EnemyCommitment>[];
   int _dueIndex = 1;
 
@@ -330,14 +360,19 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
-          TextField(
+          Focus(onFocusChange: (focused) {
+            if (!focused && mounted) setState(() => _prpRecallText = _controller.text.trim());
+          }, child: TextField(
             controller: _controller,
+            onSubmitted: (v) => setState(() => _prpRecallText = v.trim()),
             style: const TextStyle(color: kEnemyText),
             decoration: const InputDecoration(
               hintText: '我立字据：做什么',
               hintStyle: TextStyle(color: kEnemyMuted),
             ),
-          ),
+          )),
+          PrpPlugin.instance.recallChip(PrpContext(surface: PrpSurface.enemy,
+            text: _prpRecallText, location: 'new_commitment', reference: 'new_commitment_form')),
           const SizedBox(height: 4),
           TextField(
             controller: _stake,
@@ -381,6 +416,8 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
                     if (c.dueMs != null) '截止 ${fmtTime(c.dueMs!)}',
                     if (c.status == CommitmentStatus.open && c.dueMs != null)
                       fmtRemaining(c.dueMs!, now),
+                    if (c.isOverdue(now) && PrpPlugin.instance.enabledFor(PrpSurface.enemy))
+                      '到期了，做了吗？尚未确认不算没做',
                     commitmentStatusLabels[c.status] ?? c.status,
                     if (c.origin == 'verdict') '来自判词',
                     if (c.stake.isNotEmpty) '赌注：${c.stake}',
@@ -466,6 +503,7 @@ class _LessonsTabState extends State<LessonsTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
+          PrpPlugin.instance.playbook(),
           if (r != null)
             Container(
               padding: const EdgeInsets.all(14),

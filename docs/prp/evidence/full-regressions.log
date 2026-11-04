@@ -1,0 +1,327 @@
+Command: flutter test --no-pub --reporter expanded test/beautiful_enemy test/kindling
+00:00 +0: loading <checkout>/test/beautiful_enemy/background_voice_test.dart
+00:00 +0: <checkout>/test/beautiful_enemy/background_voice_test.dart: 后台播报等待语音完成，并在两种开关关闭时保持静默
+00:00 +1: loading <checkout>/test/beautiful_enemy/enemy_portrait_test.dart
+00:00 +1: <checkout>/test/beautiful_enemy/enemy_portrait_test.dart: 美丽的敌人：双重特征与七项职责 AI 的判词和对话共享相同人格核心
+00:00 +2: <checkout>/test/beautiful_enemy/enemy_portrait_test.dart: 美丽的敌人：双重特征与七项职责 对话强度不允许改写尊重与同意边界
+00:00 +3: <checkout>/test/beautiful_enemy/enemy_portrait_test.dart: 美丽的敌人：双重特征与七项职责 本地展示能解释角色职责和自主权
+00:00 +4: <checkout>/test/beautiful_enemy/enemy_portrait_test.dart: 美丽的敌人：双重特征与七项职责 成功时认可可验证的进步，而不是自动加压
+00:00 +5: <checkout>/test/beautiful_enemy/enemy_portrait_test.dart: 美丽的敌人：双重特征与七项职责 数据缺失与用户拒绝不能被当作失败或默许
+00:00 +6: loading <checkout>/test/beautiful_enemy/enemy_guard_test.dart
+00:00 +6: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: a concrete, evidenced draft passes
+00:00 +7: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: no evidence, or evidence outside the digest, is rejected
+00:00 +8: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: a charge without a number or quote is not concrete
+00:00 +9: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: every action needs a due time inside the next seven days
+00:00 +10: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: tone may not exceed the effective intensity
+00:00 +11: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: identity attacks, threats and control language are banned
+00:00 +12: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: a harsh line aimed at behaviour is not banned
+00:00 +13: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: profanity is rejected at every intensity
+00:00 +14: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: fact-only drafts skip the concreteness rule but not the banned list
+00:00 +15: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: safety valve detects crisis wording and the truce word
+00:00 +16: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: intensity governor never exceeds the base and never rises on its own
+00:00 +17: <checkout>/test/beautiful_enemy/enemy_guard_test.dart: intensity governor truce day forces fact-only
+00:00 +18: loading <checkout>/test/beautiful_enemy/motivation_stimulus_test.dart
+00:01 +18: <checkout>/test/beautiful_enemy/motivation_stimulus_test.dart: MotivationStimulus 轻度挑衅必须同时满足明确授权和强度至少 2
+00:01 +19: <checkout>/test/beautiful_enemy/motivation_stimulus_test.dart: MotivationStimulus 用户反馈会学习，但分数有上下界
+00:01 +20: <checkout>/test/beautiful_enemy/motivation_stimulus_test.dart: MotivationStimulus 历史反馈让真正点着过的方式获得优先级
+00:01 +21: <checkout>/test/beautiful_enemy/motivation_stimulus_test.dart: MotivationStimulus 本地刺激台词仍通过统一安全校验
+00:01 +22: <checkout>/test/beautiful_enemy/motivation_stimulus_test.dart: MotivationStimulus 言行一致和挑衅策略都明确把刺激收束到行动
+00:01 +23: loading <checkout>/test/beautiful_enemy/enemy_engine_test.dart
+00:01 +23: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 证据采集 没授权的来源不采集；授权后采集一次，重复同步不重复入库
+00:01 +24: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 证据采集 来源抛异常不会拖垮同步
+00:01 +25: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 摘要 同一项同一天只认最后一次状态
+00:01 +26: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 摘要 没有任何证据就是不足
+00:01 +27: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 开庭 证据不足时不生成判词
+00:01 +28: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 开庭 合规的模型判词被保存，动作自动成为承诺
+00:01 +29: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 开庭 违规输出最多重试两次，然后降级成事实播报
+00:01 +30: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 开庭 模型没产出就不重试，直接降级
+00:01 +31: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 开庭 模型引用了摘要里没有的证据会被拒绝
+00:01 +32: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 开庭 休战日只报事实，不调模型
+00:01 +33: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 开庭 静默时段和每日上限只拦自动开庭，手动开庭不受限
+00:01 +34: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 闭环 兑现：认账，判词记为完成
+00:01 +35: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 闭环 到期没兑现：承诺失效，判词记为失败
+00:01 +36: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 闭环 归因不收空话；同类别再次失败只累加次数
+00:02 +37: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 闭环 申辩要写理由；成立的记为豁免；每周额度用完后照记
+00:02 +38: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 申辩里出现危机表达：立刻静音，不当作申辩处理
+00:02 +39: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 立承诺、写归因时出现危机表达同样静音，且不入库
+00:02 +40: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 只说「停战」：静音，但不显示危机文案
+00:02 +41: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 点了「太过了」之后实际档位下降
+00:02 +42: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 安全阀 连续三条判词过了一天都没回应：降一档
+00:02 +43: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 每周审判 本周没有数据时不给百分比
+00:02 +44: <checkout>/test/beautiful_enemy/enemy_engine_test.dart: 每周审判 统计兑现率，并把最常见的失败类别作为下周重点
+00:02 +45: loading <checkout>/test/beautiful_enemy/enemy_opposition_test.dart
+00:02 +45: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 什么都抓不到也要问：兜底的开放式质询，不是沉默
+00:02 +46: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 手里一条字据都没有：质询，并正式提动议（要他亲手写具体内容）
+00:02 +47: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 动议不可用（有未决动议、到上限、或太晚）：只质询，不提动议
+00:02 +48: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 火种 24 小时没有完整的十五分钟：质询并提动议，动议带核实
+00:02 +49: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 知识转化了、行动是零：纸上谈兵
+00:02 +50: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 沉寂的模块、预设打卡七天零条、驳回成习惯、重复踩坑、判词被无视
+00:02 +51: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 没回答的质询：2 小时后追问，最多两次，追问优先于其它
+00:02 +52: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 每一类都有冷却：刚问过就换下一件，全部冷却中则不开口
+00:02 +53: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 选质询（纯逻辑） 情境里写明了不能编造：账上没有的只说账上没有
+00:02 +54: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 台词 质询、动议、反驳、通过：全部过同一套校验，1 档没有粗口
+00:02 +55: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 台词 质询里带着事实
+00:02 +56: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 案卷空空如也、一条字据都没有：它自己开口质询，还提了动议
+00:02 +57: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 节奏：间隔没到不再质询；到了就换一件事问；有未决动议时不再提新动议
+00:02 +58: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 每日上限：到了就不再质询
+00:02 +59: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 质询频率可调：改成「密」45 分钟
+00:02 +60: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 开关：反对党质询关掉就不质询；静默时段、静音也不
+00:02 +61: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 火种质询：提动议；接受后立成带核实的字据
+00:02 +62: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 需要亲手写内容的动议：不写不行；赌注不合规被拒；处理过的不能再处理
+00:02 +63: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 驳回动议：尊重拒绝，理由选填，动议状态记下
+00:02 +64: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 驳回的理由里出现危机表达：敌人退场、静音，这句话不存储
+00:03 +65: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 追问：没回答的质询 2 小时后追问，最多两次
+00:03 +66: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 用户回答之后就不再追问；敌人对话时知道他在回应哪条质询
+00:03 +67: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 不回应也不是好结果：没说话的人，不会因为没动静被放过
+00:03 +68: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 沉寂的模块：曾经常有记录、最近 5 天一条没有
+00:03 +69: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 只有最近发生的事才值得插话：灌进来的旧账不触发反应
+00:03 +70: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 字据标记完成但账上没有火种：敌人不认
+00:03 +71: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 字据标记完成而且账上确实有火种：不质疑
+00:03 +72: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 质询演练：带【演练】，不提动议，不占今天的次数和间隔
+00:03 +73: <checkout>/test/beautiful_enemy/enemy_opposition_test.dart: 反对党在场：用户一声不响，敌人不跟着安静 自检状态包含质询的节奏
+00:03 +74: loading <checkout>/test/beautiful_enemy/enemy_presence_test.dart
+00:03 +74: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 本地台词 每一句都过同一套校验：禁区、长度、粗口只在 3 档
+00:03 +75: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 本地台词 台词带着事实：对象、称呼、赌注
+00:03 +76: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 本地台词 1、2 档绝不出现粗口
+00:03 +77: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 对话 时间线为空时敌人先开口，只开一次，并带上称呼
+00:03 +78: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 对话 合规的模型回复被采用，并带着情境发给模型
+00:03 +79: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 对话 模型违规：重试一次，仍违规就用本地台词
+00:03 +80: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 对话 2 档下模型说粗口算违规
+00:03 +81: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 对话 模型没产出就不重试，直接用本地台词
+00:03 +82: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 对话 没接模型也能对话
+00:03 +83: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 对话 危机表达：敌人退场、静音，这句话既不存储也不发给模型
+00:03 +84: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 对话 只说停战：静音，但不显示危机文案
+00:03 +85: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 对话 静音期间说话送不出去，也不留下记录
+00:03 +86: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 开庭 判词作为敌人的一条消息进入时间线
+00:03 +87: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 第一次只定起点，不翻旧账；之后的新事件才开口
+00:03 +88: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 有模型时用模型的话，并把事件作为情境发过去
+00:03 +89: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 间隔太近不开口，且不丢事件：过了间隔再说
+00:04 +90: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 force 绕过间隔和上限，但不绕过静音
+00:04 +91: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 每日上限：到了就不再插话
+00:04 +92: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 静默时段不插话，这批事件也不会在早上被翻出来
+00:04 +93: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 总开关关掉：不插话
+00:04 +94: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 静音时不插话
+00:04 +95: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 字据快到期：提醒一次，只一次
+00:04 +96: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 字据到期输了：敌人当场把赌注摆出来
+00:04 +97: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 实时插话 兑现字据：认账，赌注作废
+00:04 +98: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 赌注与称呼 赌注只能是行动：伤害自己、羞辱、涉及钱都被拒绝
+00:04 +99: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 赌注与称呼 赌注里出现危机表达：按安全阀处理，不入库
+00:04 +100: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 赌注与称呼 称呼不能是羞辱性的，也不能太长
+00:04 +101: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 行对话校验 空、过长、禁区、所有档位粗口都被拦
+00:04 +102: <checkout>/test/beautiful_enemy/enemy_presence_test.dart: 迁移 v1 的库（承诺表没有赌注列）进场后补列，已有数据保留
+00:04 +103: loading <checkout>/test/beautiful_enemy/growth_ui_test.dart
+00:04 +103: <checkout>/test/beautiful_enemy/growth_ui_test.dart: 上传后直接保存全部文字，无需逐项确认
+00:05 +104: <checkout>/test/beautiful_enemy/growth_ui_test.dart: 取消导入不改变已有档案，也不会创建新档案
+00:05 +105: loading <checkout>/test/beautiful_enemy/enemy_host_test.dart
+00:05 +105: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 证据来源 宿主的表还不存在时，所有来源都返回空而不是抛
+00:05 +106: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 证据来源 打卡只取 done / missed / skipped，pending 不算证据
+00:05 +107: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结
+00:05 +107 -1: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结 [E]
+  Expected: Set:['手动记录', '没有来源']
+    Actual: Set:[]
+     Which: does not contain '手动记录'
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_host_test.dart 92:7      main.<fn>.<fn>
+  
+00:05 +107 -1: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 证据来源 火种区分完成和中途退出，并带上分钟数
+00:05 +108 -1: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 证据来源 重复采集产出同样的 dedupeKey
+00:05 +109 -1: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 证据来源 端到端：授权后同步进案卷，开庭得到带证据的事实播报
+00:05 +110 -1: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 解析标准 JSON，包括被代码围栏包着的
+00:05 +111 -1: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 模型自己说证据不足，或输出不是 JSON，都返回 null
+00:05 +112 -1: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词
+00:05 +112 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词 [E]
+  Expected: <7201000>
+    Actual: <978307200000>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_host_test.dart 184:7     main.<fn>.<fn>
+  
+00:05 +112 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 模型不可用或抛错时返回 null，让引擎降级
+00:05 +113 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 0 档（休战日）不调模型
+00:05 +114 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 系统提示里写死了铁律和各档边界
+00:05 +115 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 认得出毫秒、秒、数字字符串、ISO 时间；认不出的返回 null
+00:05 +116 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 库里没有这些表：不抛，也没有指纹
+00:05 +117 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 找得到时间列的表产出动静；没有时间列的表跳过；旧的不翻
+00:05 +118 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 同一模块 10 分钟内的多条新记录合并成一次动静
+00:05 +119 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 新增一行，指纹就变；没动，指纹不变
+00:05 +120 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 使用时长来源只是授权开关，不读任何表
+00:05 +121 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: 其它模块的动静 默认接入的来源包含动静和使用时长，且标识不重复
+00:05 +122 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 清理模型输出：围栏、角色前缀、旁白、外层引号
+00:05 +123 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 提示里带情境、称呼、强度、证据摘要，历史只取最近几条并截断
+00:05 +124 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 主动开口时标明「没有用户输入」
+00:05 +125 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 模型不可用、抛错或只返回空白：返回 null，让模块用本地台词
+00:05 +126 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 正常返回时清理后交给模块
+00:05 +127 -2: <checkout>/test/beautiful_enemy/enemy_host_test.dart: AI 说话（对话 / 插话） 系统提示写死了人设、铁律和退场条件
+00:05 +128 -2: loading <checkout>/test/beautiful_enemy/growth_profile_test.dart
+00:06 +128 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: 档案持久化，完整原文作为自述而非行为证据
+00:06 +129 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: 行动原子关联弱点、目标、预案和验证；完成与复盘持续进入上下文
+00:06 +130 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: 未启用、不属于档案、缺少预案、过期时间均不能创建行动
+00:06 +131 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: 停用、删除、全量清空均使下一次请求停止引用档案
+00:06 +132 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: 页面与后台共享上下文，AI 对话和反馈都能收到档案
+00:06 +133 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: 离线对话对相关弱点提出待核实关联，停用后不再引用
+00:06 +134 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: AI 建议只有接受后才成为承诺；不接受、不回应都不算失约
+00:06 +135 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: 成长行动允许具体描述超过 40 字，不误用赌注的长度限制
+00:06 +136 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: 总开关关闭后停止对话、判词和到期监督，恢复后重新工作
+00:06 +137 -2: <checkout>/test/beautiful_enemy/growth_profile_test.dart: 高强度仍禁止粗口；缺少记录不推断逃避；完成不自动加码
+00:06 +138 -2: loading <checkout>/test/beautiful_enemy/weakness_importer_test.dart
+00:07 +138 -2: <checkout>/test/beautiful_enemy/weakness_importer_test.dart: TXT 支持 UTF-8、UTF-16 LE/BE 和 GBK 中文
+00:07 +139 -2: <checkout>/test/beautiful_enemy/weakness_importer_test.dart: DOCX 正文保留中文段落、制表符、换行，忽略元数据
+00:07 +140 -2: <checkout>/test/beautiful_enemy/weakness_importer_test.dart: 旧版 DOC 按正文 piece table 读取，不把已删除内容当成弱点
+00:07 +141 -2: <checkout>/test/beautiful_enemy/weakness_importer_test.dart: 空文档、超限、损坏、加密、扫描件都给明确错误，不能静默存乱码
+00:07 +142 -2: <checkout>/test/beautiful_enemy/weakness_importer_test.dart: PDF 使用本机原生提取通道；无路径时临时文件在完成后清理
+00:07 +143 -2: loading <checkout>/test/beautiful_enemy/enemy_patrol_test.dart
+00:07 +143 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 指纹没变就不重新收集；变了才收集
+00:07 +144 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 来源不提供指纹（null）时每次都收集
+00:07 +145 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 变更指纹 没授权的来源既不查指纹也不收集
+00:07 +146 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 授权后每分钟累加；没授权不记
+00:07 +147 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 静默时段内的算深夜使用
+00:07 +148 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 使用时长 使用时长进入证据摘要
+00:07 +149 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 说做完了但账上没有；账上有；说没时间但在线很久
+00:07 +150 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说做完了、账上没有，敌人当场盘问
+00:07 +151 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说做完了、账上有，敌人核对后认
+00:07 +152 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 核对说法 对话里：说没时间，但今天在 App 里待了 45 分钟
+00:07 +153 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晨报：早上的第一次巡查自己开口，一天只一次
+00:07 +154 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 安静时段不开口；没有账可报也不开口
+00:07 +155 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晚间结算：到钟点后还有账没平就开口，一天一次
+00:07 +156 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 晚间结算：今天一件完成的事都没有，就算没有字据也要说
+00:07 +157 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：人在 App 里 25 分钟、案卷没有新记录、字据还开着
+00:07 +158 -2: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话
+00:07 +158 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话 [E]
+  Expected: null
+    Actual: <Instance of 'EnemyMessage'>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 290:7   main.<fn>.<fn>
+  
+00:07 +158 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 开关：主动巡查关掉、实时插话总开关关掉、静音时都不开口
+00:07 +159 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 force 只接话，不做主动巡查
+00:07 +160 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 新事件优先：有事件时 step 先接话，不抢着做晨报
+00:07 +161 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 其它模块有动静 字据开着时点出「在忙别处」；没有字据就不吭声
+00:07 +162 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 其它模块有动静 其它模块的动静进入摘要，并被计成「有记录」
+00:07 +163 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 间隔只防刷屏：20 秒后又有新事，立刻接话，不用等 5 分钟
+00:07 +164 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 每日上限默认 30，不是 6：连续做 8 件事，敌人每一件都接话
+00:08 +165 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 开口的节奏 主动巡查不占事件插话的上限：上限用光了，晚间结算照样开口
+00:08 +166 -3: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静
+00:08 +166 -4: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静 [E]
+  Expected: 'baseline'
+    Actual: 'opposition_off'
+     Which: is different.
+            Expected: baseline
+              Actual: opposition ...
+                      ^
+             Differ at offset 0
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 425:7   main.<fn>.<fn>
+  
+00:08 +166 -4: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因
+00:08 +166 -5: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因 [E]
+  Expected: 'capped'
+    Actual: 'opposition_off'
+     Which: is different.
+            Expected: capped
+              Actual: opposition ...
+                      ^
+             Differ at offset 0
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/beautiful_enemy/enemy_patrol_test.dart 463:7   main.<fn>.<fn>
+  
+00:08 +166 -5: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 开关关掉有各自的原因
+00:08 +167 -5: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 状态快照：来源授权与条数、静默时段、今日开口、使用时长、后台记录
+00:08 +168 -5: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 心跳年龄
+00:08 +169 -5: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 演练 不等时段也能走一遍：带【演练】，不占上限，也不让今天真正的结算作废
+00:08 +170 -5: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 演练 晨报演练、发呆演练
+00:08 +171 -5: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 演练 发呆演练：没有字据就说明为什么做不了；静音时不演练；不认识的演练
+00:08 +172 -5: <checkout>/test/beautiful_enemy/enemy_patrol_test.dart: 台词 巡查和核对的台词都过同一套校验
+00:08 +173 -5: loading <checkout>/test/beautiful_enemy/motivation_profile_test.dart
+00:08 +173 -5: <checkout>/test/beautiful_enemy/motivation_profile_test.dart: MotivationProfile 冷启动画像只是一组温和先验，直接挑战最高但不垄断
+00:08 +174 -5: <checkout>/test/beautiful_enemy/motivation_profile_test.dart: MotivationProfile 问卷把 1..5 映射到 -4..4，并覆盖默认先验
+00:08 +175 -5: <checkout>/test/beautiful_enemy/motivation_profile_test.dart: MotivationProfile 没有回答的维度保留默认值，不把未知误当成零
+00:08 +176 -5: <checkout>/test/beautiful_enemy/motivation_profile_test.dart: MotivationProfile 真实经验可以反转默认先验
+00:08 +177 -5: <checkout>/test/beautiful_enemy/motivation_profile_test.dart: MotivationProfile 情境记忆只做局部修正，不会无限放大单一场景
+00:08 +178 -5: <checkout>/test/beautiful_enemy/motivation_profile_test.dart: MotivationProfile 置信度明确区分默认、问卷和真实行为样本
+00:08 +179 -5: loading <checkout>/test/kindling/kindling_schema_test.dart
+00:09 +179 -5: <checkout>/test/kindling/kindling_schema_test.dart: createAll builds every k_ table and is idempotent
+00:09 +180 -5: <checkout>/test/kindling/kindling_schema_test.dart: migrate is idempotent and independent of host version numbers
+00:09 +181 -5: <checkout>/test/kindling/kindling_schema_test.dart: no foreign key points outside the module
+00:09 +182 -5: <checkout>/test/kindling/kindling_schema_test.dart: item schema carries no goal / plan / deadline / streak column
+00:09 +183 -5: <checkout>/test/kindling/kindling_schema_test.dart: probe score is constrained to 0..4
+00:09 +184 -5: loading <checkout>/test/kindling/kindling_heat_test.dart
+00:09 +184 -5: <checkout>/test/kindling/kindling_heat_test.dart: "不做" sinks the item to the bottom
+00:09 +185 -5: <checkout>/test/kindling/kindling_heat_test.dart: "做" adds a bonus over an otherwise identical item
+00:09 +186 -5: <checkout>/test/kindling/kindling_heat_test.dart: an unrated item lands on the neutral middle
+00:09 +187 -5: <checkout>/test/kindling/kindling_heat_test.dart: a 14-day-old self report is halved in weight
+00:09 +188 -5: <checkout>/test/kindling/kindling_heat_test.dart: the result stays inside 0..1.2
+00:09 +189 -5: <checkout>/test/kindling/kindling_heat_test.dart: sortByHeat only reorders, it never annotates
+00:09 +190 -5: loading <checkout>/test/kindling/kindling_flow_widget_test.dart
+00:09 +190 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: an empty list offers 回溯, 十五分钟 and 直接写一个 only
+00:10 +191 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: 直接写一个 immediately asks the verdict question
+00:10 +192 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: answering 不做 keeps the item and moves it to 放掉的
+00:11 +193 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: long press opens 换个说法 / 问一句 / 卡住了 / 放掉
+00:11 +194 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: 痒度自评只给措辞，不给任何数字
+00:11 +195 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: 换个说法可以顺手留一句备注
+00:12 +196 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: 卡住了 only asks and ends with the fixed closing line
+00:12 +197 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: 卡住了 进场立刻有第一问，不等追问器
+00:12 +198 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: 回溯 turns raw answers into candidates the user may keep
+00:13 +199 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: the discover entry hands the tap back to the host
+00:14 +200 -5: <checkout>/test/kindling/kindling_flow_widget_test.dart: (tearDownAll)
+00:14 +200 -5: loading <checkout>/test/kindling/kindling_red_lines_test.dart
+00:14 +200 -5: <checkout>/test/kindling/kindling_red_lines_test.dart: (setUpAll)
+00:14 +200 -5: <checkout>/test/kindling/kindling_red_lines_test.dart: no copy carries an exclamation mark or a pep-talk word
+00:14 +201 -5: <checkout>/test/kindling/kindling_red_lines_test.dart: the module never speaks of streaks, badges, ranking or sharing
+00:14 +202 -5: <checkout>/test/kindling/kindling_red_lines_test.dart: no progress indicator or percentage is rendered
+00:14 +203 -5: <checkout>/test/kindling/kindling_red_lines_test.dart: UI files hold no literal copy of their own
+00:14 +204 -5: <checkout>/test/kindling/kindling_red_lines_test.dart: the module depends on nothing beyond flutter and sqflite
+00:14 +205 -5: <checkout>/test/kindling/kindling_red_lines_test.dart: the probe ladder shows wording only, never a score
+00:14 +206 -5: <checkout>/test/kindling/kindling_red_lines_test.dart: the recall questions keep their fixed wording and order
+00:14 +207 -5: <checkout>/test/kindling/kindling_red_lines_test.dart: (tearDownAll)
+00:14 +207 -5: loading <checkout>/test/kindling/kindling_oracle_test.dart
+00:15 +207 -5: <checkout>/test/kindling/kindling_oracle_test.dart: candidates are split on line breaks and Chinese punctuation
+00:15 +208 -5: <checkout>/test/kindling/kindling_oracle_test.dart: too short, too long and duplicate fragments are dropped
+00:15 +209 -5: <checkout>/test/kindling/kindling_oracle_test.dart: list markers are stripped from candidates
+00:15 +210 -5: <checkout>/test/kindling/kindling_oracle_test.dart: the resistance ladder asks four questions and then stops
+00:15 +211 -5: loading <checkout>/test/kindling/kindling_host_test.dart
+00:15 +211 -5: <checkout>/test/kindling/kindling_host_test.dart: 候选切分 AI 不可用时用本地规则
+00:15 +212 -5: <checkout>/test/kindling/kindling_host_test.dart: 候选切分 AI 抛错时用本地规则
+00:15 +213 -5: <checkout>/test/kindling/kindling_host_test.dart: 候选切分 AI 返回空内容时用本地规则
+00:15 +214 -5: <checkout>/test/kindling/kindling_host_test.dart: 候选切分 AI 的切分同样受 2–40 字与去重约束
+00:15 +215 -5: <checkout>/test/kindling/kindling_host_test.dart: 阻抗追问 第一问不碰网络，进场就有内容
+00:15 +216 -5: <checkout>/test/kindling/kindling_host_test.dart: 阻抗追问 模型太慢就用本地问题梯，不干等
+00:18 +217 -5: <checkout>/test/kindling/kindling_host_test.dart: 阻抗追问 AI 不可用时走本地问题梯
+00:18 +218 -5: <checkout>/test/kindling/kindling_host_test.dart: 阻抗追问 问句超过 25 字就不采用
+00:18 +219 -5: <checkout>/test/kindling/kindling_host_test.dart: 阻抗追问 出现禁用词就不采用
+00:18 +220 -5: <checkout>/test/kindling/kindling_host_test.dart: 阻抗追问 不是问句就不采用
+00:18 +221 -5: <checkout>/test/kindling/kindling_host_test.dart: 阻抗追问 合规的问句照用
+00:18 +222 -5: <checkout>/test/kindling/kindling_host_test.dart: 阻抗追问 问满四步就结束，不无限追问
+00:18 +223 -5: <checkout>/test/kindling/kindling_host_test.dart: 阻抗追问 system prompt 与方案 §7 逐字一致
+00:18 +224 -5: <checkout>/test/kindling/kindling_host_test.dart: 复问提醒 默认实现什么都不做，也就是默认关
+00:18 +225 -5: <checkout>/test/kindling/kindling_host_test.dart: 复问提醒 通知文案与模块内的文案逐字一致
+00:18 +226 -5: <checkout>/test/kindling/kindling_host_test.dart: 复问提醒 宿主实现挂得上模块的接口
+00:18 +227 -5: loading <checkout>/test/kindling/kindling_dao_test.dart
+00:18 +227 -5: <checkout>/test/kindling/kindling_dao_test.dart: verdict "no" keeps the item and moves it to released
+00:18 +228 -5: <checkout>/test/kindling/kindling_dao_test.dart: released_count counter tracks the核心成功指标
+00:18 +229 -5: <checkout>/test/kindling/kindling_dao_test.dart: an aborted run never drags the want ratio down
+00:18 +230 -5: <checkout>/test/kindling/kindling_dao_test.dart: recall candidates keep the kind of the question they came from
+00:18 +231 -5: <checkout>/test/kindling/kindling_dao_test.dart: a fully blank recall is not counted as a session
+00:18 +232 -5: <checkout>/test/kindling/kindling_dao_test.dart: 换个说法 can also leave a note behind
+00:18 +233 -5: <checkout>/test/kindling/kindling_dao_test.dart: recall answers are stored verbatim and bump the session counter
+00:18 +234 -5: <checkout>/test/kindling/kindling_dao_test.dart: burn records aborted runs without any failure marker
+00:18 +235 -5: <checkout>/test/kindling/kindling_dao_test.dart: want_more rate is kept in k_meta only
+00:18 +236 -5: <checkout>/test/kindling/kindling_dao_test.dart: three consecutive "不想" answers pin 放掉 in the long-press menu
+00:19 +237 -5: <checkout>/test/kindling/kindling_dao_test.dart: "说不准" comes back for one more question after 7 days
+00:19 +238 -5: <checkout>/test/kindling/kindling_dao_test.dart: item views aggregate the signals used for ordering
+00:19 +239 -5: <checkout>/test/kindling/kindling_dao_test.dart: probe scores are clamped into 0..4
+00:19 +240 -5: <checkout>/test/kindling/kindling_dao_test.dart: resistance steps are recorded and answers may stay empty
+00:19 +241 -5: loading <checkout>/test/kindling/host_db_open_smoke_test.dart
+00:19 +241 -5: <checkout>/test/kindling/host_db_open_smoke_test.dart: opening the host database finishes instead of hanging
+[DBG] AppDatabase opened at: /tmp/host_db_open_RKLRPI/quotes.db
+00:19 +242 -5: Some tests failed.
+
+Exit code: 1

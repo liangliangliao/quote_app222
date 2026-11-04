@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../beautiful_enemy/beautiful_enemy.dart';
+import '../prp_plugin/prp_plugin.dart';
 
 String _dayKey(int ms) {
   final DateTime d = DateTime.fromMillisecondsSinceEpoch(ms);
@@ -406,6 +407,7 @@ class ModuleActivitySource extends EvidenceSource {
 
 /// 宿主接入的全部证据来源。以后要让敌人多看一个模块，就在这里加一个类。
 List<EvidenceSource> defaultEnemySources() => <EvidenceSource>[
+      PrpEvidenceSource(),
       HabitEvidenceSource(),
       JournalEvidenceSource(),
       KindlingEvidenceSource(),
@@ -413,3 +415,23 @@ List<EvidenceSource> defaultEnemySources() => <EvidenceSource>[
       ModuleActivitySource(),
       UsageEvidenceSource(),
     ];
+
+/// Uses the enemy's existing per-source consent switch; the plugin additionally
+/// enforces its own master and enemy switches on every read.
+class PrpEvidenceSource extends EvidenceSource {
+  @override
+  String get id => 'prp';
+  @override
+  String get label => 'PRP 盖印与验证次数（不读复盘文字）';
+  @override
+  Future<String?> watermark(Database db) async => '${PrpPlugin.instance.enabledFor(PrpSurface.enemy)}:${PrpPlugin.changes.value}';
+  @override
+  Future<List<EventDraft>> collect(Database db, int sinceMs) async {
+    final rows = await PrpPlugin.instance.evidenceRows(sinceMs);
+    return rows.map((r) => EventDraft(ts: r['ts'] as int, source: id, type: 'prp_lesson_sealed',
+      dedupeKey: 'prp:${r['id']}:${r['verified']}:${r['repeated']}', payload: {
+        'subject': 'prp_lesson:${r['id']}', 'label': r['label'],
+        'verified': r['verified'], 'repeated': r['repeated'],
+      })).toList();
+  }
+}

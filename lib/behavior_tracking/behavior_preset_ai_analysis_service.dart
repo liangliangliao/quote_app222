@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../services/global_ai_settings.dart';
 import '../services/unified_ai_service.dart';
+import '../prp_plugin/prp_plugin.dart';
 import 'behavior_tracking_models.dart';
 
 class BehaviorPresetAiAnalysisService {
@@ -38,7 +39,13 @@ class BehaviorPresetAiAnalysisService {
       ],
     };
     final inputJson = const JsonEncoder.withIndent('  ').convert(input);
-    final prompt = template.replaceAll('{{review_input_json}}', inputJson);
+    final prp = PrpPlugin.instance.aiAllowed && PrpPlugin.instance.enabledFor(PrpSurface.behavior);
+    final prompt = template.replaceAll('{{review_input_json}}', inputJson) + (prp
+      ? '\n另可输出 lesson_candidates 数组：[{"preset_id":数字,"category":"拖延|回避|目标太大|被打断|精力不足|其他",'
+        '"worked":["原话"],"failed":["原话"],"early_signal":"原话","if_cue":"原话","then_action":"原话"}]。'
+        '只处理 status=missed 的条目；所有文字必须逐字摘自该条 presetName、missedReason 或 notes 的连续片段；'
+        '没有依据的字段留空。只形成待用户补充的草稿，不声称已验证，不写人格评价。'
+      : '');
     final raw = await _ai.generateChatMessages(
       purpose: 'behavior_tracking.preset_daily_review_ai_analysis',
       maxTokens: 5200,

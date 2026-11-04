@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../fp_dao.dart';
 import '../fp_models.dart';
 import 'fp_practice_runner_page.dart';
+import '../../prp_plugin/prp_plugin.dart';
 
 class FpPracticePage extends StatefulWidget {
   final String? openTaskId;
@@ -30,12 +31,23 @@ class _FpPracticePageState extends State<FpPracticePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final id = widget.openQuick3P ? 'TASK_QUICK_3P' : widget.openTaskId;
       if (id != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => FpPracticeRunnerPage(taskId: id)),
-        );
+        _openTask(id);
       }
     });
+  }
+
+  Future<void> _openTask(String id) async {
+    final plugin = PrpPlugin.instance;
+    if (['TASK_QUICK_3P', 'TASK_A01'].contains(id) && plugin.enabledFor(PrpSurface.failureModule)) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final offer = await plugin.signal(PrpSignal(surface: PrpSurface.failureModule, kind: 'manual',
+        subjectKey: 'free', expected: '',
+        reference: 'failure:$id:$now', tsMs: now));
+      if (!mounted) return;
+      if (offer != null) { await plugin.showOffer(context, offer, fullScreen: true); return; }
+    }
+    if (mounted) await Navigator.push(context,
+      MaterialPageRoute(builder: (_) => FpPracticeRunnerPage(taskId: id)));
   }
 
   Future<void> _load() async {
@@ -95,10 +107,7 @@ class _FpPracticePageState extends State<FpPracticePage> {
                   title: Text(t.title, style: const TextStyle(fontWeight: FontWeight.w800)),
                   subtitle: Text('${t.taskId.replaceFirst('TASK_', '')} · 难度${t.difficulty} · ${t.durationMin}分钟'),
                   trailing: const Icon(Icons.play_arrow),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => FpPracticeRunnerPage(taskId: t.taskId)),
-                  ),
+                  onTap: () => _openTask(t.taskId),
                 ),
               );
             },

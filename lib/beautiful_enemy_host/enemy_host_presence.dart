@@ -10,6 +10,7 @@ import 'enemy_ai_talker.dart';
 import 'enemy_host_reminder.dart';
 import 'enemy_sources.dart';
 import 'enemy_voice_out.dart';
+import '../prp_plugin/prp_plugin.dart';
 
 /// 敌人在 App 里的「常驻」：App 一启动它就开始工作，不需要任何人去叫醒。
 ///
@@ -101,14 +102,14 @@ class EnemyHostPresence with WidgetsBindingObserver {
         EnemySettings.heartbeatMs,
         '${DateTime.now().millisecondsSinceEpoch}',
       );
-      if (pageOpen) return;
+      if (pageOpen || PrpPlugin.instance.hasActiveSession) return;
       final bool everywhere =
           await presence.dao.boolSetting(EnemySettings.interjectEverywhere, fallback: true);
       if (!everywhere) return;
       final EnemyMessage? msg = await presence.step(
         ctx: PatrolContext(foreground: true, sessionStartMs: _sessionStartMs),
       );
-      if (msg == null || !await presence.engine.isEnabled()) return;
+      if (msg == null || !await presence.engine.isEnabled() || PrpPlugin.instance.hasActiveSession) return;
       await NotificationService.show(
         id: notificationId,
         title: '美丽的敌人',
@@ -116,7 +117,7 @@ class EnemyHostPresence with WidgetsBindingObserver {
         payload: EnemyHostReminder.notificationPayload,
       );
       HapticFeedback.heavyImpact();
-      if (await presence.dao.boolSetting(EnemySettings.voiceOut)) {
+      if (!PrpPlugin.instance.hasActiveSession && await presence.dao.boolSetting(EnemySettings.voiceOut)) {
         await _voice.speak(msg.text);
       }
     } catch (_) {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../copy.dart';
 import '../data/models.dart';
 import '../domain/controller.dart';
+import '../../../prp_plugin/prp_plugin.dart';
 
 /// 回溯里新建出来的火种。返回给清单页，由它逐条弹判别式。
 typedef KindlingCreatedItem = ({int id, String title});
@@ -86,9 +87,10 @@ class _KindlingRecallPageState extends State<KindlingRecallPage> {
     await widget.controller.saveRecall(answers);
     final List<String> candidates =
         await widget.controller.extractCandidates(answers);
+    final worked = await PrpPlugin.instance.workedItems();
     if (!mounted) return;
     setState(() {
-      _candidates = candidates;
+      _candidates = {...candidates, ...worked}.toList();
       _checked
         ..clear()
         ..addAll(candidates);
