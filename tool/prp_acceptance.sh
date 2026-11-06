@@ -93,13 +93,15 @@ adb -s "$prp_device" shell am instrument -w \
 prp_native_ok=false
 if prp_find 'PRP_NATIVE_ACCEPTANCE_PASS' build/prp/device-evidence/native-probe.log; then
   prp_native_ok=true
-  for prp_name in native_01_on.png native_02_off.png native_03_overlay.png native-results.json; do
-    adb -s "$prp_device" exec-out run-as com.example.quote_app cat "files/prp-ci/$prp_name" \
-      >"build/prp/device-evidence/$prp_name"
-  done
 else
   cat build/prp/device-evidence/native-probe.log
 fi
+for prp_name in native_01_on.png native_02_off.png native_03_overlay.png native-results.json; do
+  if adb -s "$prp_device" shell run-as com.example.quote_app test -f "files/prp-ci/$prp_name"; then
+    adb -s "$prp_device" exec-out run-as com.example.quote_app cat "files/prp-ci/$prp_name" \
+      >"build/prp/device-evidence/$prp_name"
+  fi
+done
 if [ "$prp_drive_ok" != true ] || [ "$prp_native_ok" != true ]; then
   exit 1
 fi

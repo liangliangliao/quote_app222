@@ -20,7 +20,15 @@ class PrpAcceptanceProbe: Instrumentation() {
     override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
     private val evidence=JSONArray()
     private val screenshotMethods=JSONObject()
-    private fun pass(name:String) { evidence.put(name) }
+    private fun pass(name:String) {
+        evidence.put(name)
+        sendStatus(0,Bundle().apply {putString("stream","PRP_NATIVE_CHECK_PASS:$name\n")})
+    }
+    private fun onMain(action:()->Unit) {
+        var failure:Throwable?=null
+        runOnMainSync { try { action() } catch(t:Throwable) { failure=t } }
+        failure?.let {throw it}
+    }
     private fun waitFor(message:String, condition:()->Boolean) {
         val end=System.currentTimeMillis()+8000
         while(!condition()&&System.currentTimeMillis()<end)Thread.sleep(50)
@@ -42,7 +50,7 @@ class PrpAcceptanceProbe: Instrumentation() {
                 .put("native_voice",true).put("voice",true)
             p.put("surfaces",p.optJSONObject("surfaces")?:JSONObject()).getJSONObject("surfaces").put("behavior",true)
             fun kv(key:String,value:String) { db.execSQL("INSERT OR REPLACE INTO notify_config(key,value) VALUES (?,?)",arrayOf(key,value)) }
-            fun settings() { kv("prp.preferences.v1",p.toString());runOnMainSync{PrpAlarmBridge.stateChanged(ctx,JSONObject(p.toString()))} }
+            fun settings() { kv("prp.preferences.v1",p.toString());onMain{PrpAlarmBridge.stateChanged(ctx,JSONObject(p.toString()))} }
             db.execSQL("INSERT OR REPLACE INTO be_setting(key,value) VALUES ('quiet_start_hour','0')")
             db.execSQL("INSERT OR REPLACE INTO be_setting(key,value) VALUES ('quiet_end_hour','0')")
             db.execSQL("INSERT OR REPLACE INTO be_setting(key,value) VALUES ('muted_until_ms','0')")
@@ -89,9 +97,9 @@ class PrpAcceptanceProbe: Instrumentation() {
             check(hint.lessonId==lessonId)
             check(PrpAlarmBridge.hint(ctx,payload)?.recallId==hint.recallId)
             check(count()==before+1);pass("service_overlay_form_share_one_exposure")
-            runOnMainSync {PrpAlarmBridge.stateChanged(ctx,JSONObject(p.toString()).put("session_active",true))}
+            onMain {PrpAlarmBridge.stateChanged(ctx,JSONObject(p.toString()).put("session_active",true))}
             check(!PrpAlarmBridge.stillAllowed(ctx,hint))
-            runOnMainSync {PrpAlarmBridge.flutterStopped(ctx)}
+            onMain {PrpAlarmBridge.flutterStopped(ctx)}
             check(PrpAlarmBridge.stillAllowed(ctx,hint));pass("destroyed_flutter_session_releases_native_gate")
             check(PrpAlarmBridge.adopt(ctx,hint));check(PrpAlarmBridge.adopt(ctx,hint))
             check(db.rawQuery("SELECT COUNT(*) FROM prp_event WHERE recall_id=?",arrayOf(hint.recallId.toString())).use{it.moveToFirst();it.getInt(0)}==1)
@@ -105,45 +113,56 @@ class PrpAcceptanceProbe: Instrumentation() {
             val activity=startActivitySync(Intent(ctx,BehaviorPresetAlarmFormActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("payload",payload.toString()))
             waitForIdleSync();Thread.sleep(700)
-            runOnMainSync {
+            onMain {
                 val card=activity.window.decorView.findViewWithTag<View>("prp_native_card")
                 check(card!=null&&card.visibility==View.VISIBLE&&card.getGlobalVisibleRect(android.graphics.Rect())){"Native PRP card not visible"}
             }
             screenshot("native_01_on");pass("native_form_actual_view")
-            runOnMainSync {
+            onMain {
                 val card=activity.window.decorView.findViewWithTag<PrpAlarmCard>("prp_native_card")
                 card.refresh();card.refresh()
             }
             waitForIdleSync()
-            runOnMainSync {check(activity.window.decorView.findViewWithTag<View>("prp_native_card").visibility==View.VISIBLE)}
+            onMain {check(activity.window.decorView.findViewWithTag<View>("prp_native_card").visibility==View.VISIBLE)}
             pass("repeated_refresh_keeps_current_card_visible")
             BehaviorPresetAlarmSettings.set(ctx,null,null,.2f,false)
-            runOnMainSync { check(PrpAlarmAudio.play(ctx,hint)) }
+            onMain { check(PrpAlarmAudio.play(ctx,hint)) }
             waitFor("Local MediaPlayer did not start"){PrpAlarmAudio.isPlaying}
             pass("local_audio_played")
             p.put("enabled",false);settings()
             waitFor("Audio survived disabling"){!PrpAlarmAudio.isPlaying}
-            waitForIdleSync()
-            runOnMainSync {check(activity.window.decorView.findViewWithTag<View>("prp_native_card")?.visibility==View.GONE)}
+            waitFor("Disabled card survived the preference broadcast") {
+                var hidden=false
+                onMain {hidden=activity.window.decorView.findViewWithTag<View>("prp_native_card")?.visibility==View.GONE}
+                hidden
+            }
             screenshot("native_02_off");pass("off_hides_card_and_stops_voice")
             p.put("enabled",true);settings();waitForIdleSync()
-            runOnMainSync {
+            onMain {
                 BehaviorPresetAlarmRingingService.startRinging(ctx,97191001,payload.toString())
             }
             waitFor("Ringing service did not play the local PRP clip"){PrpAlarmAudio.isPlaying}
             pass("existing_ringing_service_audio")
             waitFor("Native overlay did not appear"){BehaviorPresetAlarmOverlay.isShowing()}
-            waitFor("The actual overlay has no readable lesson"){hasText(uiAutomation.rootInActiveWindow,hint.rule)}
+            // API 26 does not reliably expose application overlays through
+            // UiAutomation's active accessibility window. Inspect our actual
+            // attached overlay and require its lesson to intersect the screen.
+            val overlayField=BehaviorPresetAlarmOverlay::class.java.getDeclaredField("rootView").apply {isAccessible=true}
+            waitFor("The actual overlay has no readable lesson") {
+                var visible=false
+                onMain {visible=hasViewText(overlayField.get(null) as? View,hint.rule)}
+                visible
+            }
             screenshot("native_03_overlay");pass("native_overlay_actual_view")
             check(count()==before+1);pass("overlay_service_no_duplicate_exposure")
-            runOnMainSync {BehaviorPresetAlarmRingingService.stopRinging(ctx)}
+            onMain {BehaviorPresetAlarmRingingService.stopRinging(ctx)}
             waitFor("Ringing overlay did not stop"){!BehaviorPresetAlarmOverlay.isShowing()}
             check(PrpAlarmBridge.report(ctx,hint,"helped"));check(!PrpAlarmBridge.report(ctx,hint,"helped"))
             check(db.rawQuery("SELECT verified_cnt,repeated_cnt FROM prp_lesson WHERE id=?",arrayOf(lessonId.toString())).use{
                 it.moveToFirst();it.getInt(0)==1&&it.getInt(1)==0})
             pass("explicit_result_once_no_false_failure")
             check(PrpAlarmBridge.hint(ctx,payload)==null);pass("settled_recall_not_reoffered")
-            runOnMainSync {activity.finish();PrpAlarmAudio.stop()}
+            onMain {activity.finish();PrpAlarmAudio.stop()}
             val report=JSONObject().put("api_level",Build.VERSION.SDK_INT).put("hardware",Build.HARDWARE)
                 .put("physical_device",false).put("passed",evidence).put("status","passed")
                 .put("screenshot_methods",screenshotMethods)
@@ -180,10 +199,11 @@ class PrpAcceptanceProbe: Instrumentation() {
         image.recycle()
         screenshotMethods.put(name,method)
     }
-    private fun hasText(node:android.view.accessibility.AccessibilityNodeInfo?, text:String):Boolean {
+    private fun hasViewText(node:View?, text:String):Boolean {
         if(node==null)return false
-        if(node.isVisibleToUser&&node.text?.toString()==text)return true
-        for(i in 0 until node.childCount)if(hasText(node.getChild(i),text))return true
+        if(node.visibility!=View.VISIBLE)return false
+        if(node is android.widget.TextView&&node.text.toString()==text&&node.getGlobalVisibleRect(android.graphics.Rect()))return true
+        if(node is android.view.ViewGroup)for(i in 0 until node.childCount)if(hasViewText(node.getChildAt(i),text))return true
         return false
     }
     private fun wave(milliseconds:Int):ByteArray{
