@@ -37,8 +37,18 @@ void main() {
     }
 
     Future<void> visible(Finder target) async {
+      // A returning settings route can coexist with the outgoing PRP route
+      // during its pop animation. Never scroll that outgoing session or an
+      // inner TextField's Scrollable while looking for a settings entry.
+      await tester.pump(const Duration(milliseconds: 400));
       if (target.evaluate().isEmpty) {
-        final scroll = find.byType(Scrollable).last;
+        final routeScroll = find.byElementPredicate((element) =>
+            element.widget is Scrollable &&
+            (element.widget as Scrollable).axisDirection ==
+                AxisDirection.down &&
+            ModalRoute.of(element)?.isCurrent == true);
+        await until(() => routeScroll.evaluate().isNotEmpty);
+        final scroll = routeScroll.first;
         for (var i = 0; i < 15; i++) {
           final position = tester.state<ScrollableState>(scroll).position;
           if (position.pixels <= position.minScrollExtent + 1) break;
@@ -46,7 +56,7 @@ void main() {
           await tester.pump(const Duration(milliseconds: 100));
         }
         await tester.scrollUntilVisible(target, 250,
-            scrollable: find.byType(Scrollable).last, maxScrolls: 60);
+            scrollable: scroll, maxScrolls: 60);
       }
       await tester.ensureVisible(target);
       await tester.pump(const Duration(milliseconds: 200));
@@ -149,6 +159,7 @@ void main() {
         .byKey(const ValueKey('prp_begin_reflection'))
         .evaluate()
         .isNotEmpty);
+    await tester.pump(const Duration(seconds: 1));
     expect((await db.query('prp_lesson')).where((r) => r['state'] == 'sealed'),
         hasLength(1));
     expect(

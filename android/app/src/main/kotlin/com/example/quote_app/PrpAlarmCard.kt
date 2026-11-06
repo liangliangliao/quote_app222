@@ -64,7 +64,10 @@ class PrpAlarmCard(context: Context, private val payload: JSONObject): LinearLay
             }},LayoutParams(0,LayoutParams.WRAP_CONTENT,1f))
         }
         addView(outcomes)
-        handler.post { if(current !== value || !PrpAlarmBridge.stillAllowed(context,value)) { visibility=View.GONE;PrpAlarmAudio.stop() } }
+        handler.post {
+            if(current !== value)return@post
+            if(!PrpAlarmBridge.stillAllowed(context,value)) { visibility=View.GONE;PrpAlarmAudio.stop() }
+        }
     }
     private fun dp(n:Int)=(n*resources.displayMetrics.density).toInt()
 }

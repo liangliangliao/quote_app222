@@ -17,8 +17,7 @@ class PrpParticlesPage extends StatefulWidget {
 class _PrpParticlesPageState extends State<PrpParticlesPage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ticker =
-      AnimationController(vsync: this, duration: const Duration(seconds: 12))
-        ..repeat();
+      AnimationController(vsync: this, duration: const Duration(seconds: 12));
   bool _pressed = false;
   Offset? _touch;
   int? _pointer;
@@ -30,9 +29,13 @@ class _PrpParticlesPageState extends State<PrpParticlesPage>
   }
 
   void _tick() {
-    if (!_pressed)
+    if (!_pressed) {
       _energy *= .955;
-    else
+      if (_energy < .005) {
+        _energy = 0;
+        _ticker.stop();
+      }
+    } else
       _energy = (_energy + .035).clamp(0, 1);
   }
 
@@ -67,6 +70,7 @@ class _PrpParticlesPageState extends State<PrpParticlesPage>
                             _pressed = true;
                             _touch = e.localPosition;
                           });
+                          if (!_ticker.isAnimating) _ticker.repeat();
                         },
                         onPointerMove: (e) {
                           if (_pointer == e.pointer) _touch = e.localPosition;
@@ -107,7 +111,7 @@ class _TidePainter extends CustomPainter {
     final scale = math.min(size.width, size.height) * .33;
     final paint = Paint();
     for (var i = 0; i < 80; i++) {
-      final angle = i * 2.399963 + time * math.pi * 2;
+      final angle = i * 2.399963 + time * math.pi * 2 * energy;
       final radius = math.sqrt((i + 1) / 80) * scale;
       var point = center +
           Offset(math.cos(angle) * radius, math.sin(angle) * radius * .72);

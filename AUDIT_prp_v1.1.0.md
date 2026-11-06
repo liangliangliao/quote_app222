@@ -10,13 +10,13 @@
 
 ## 验证状态
 
-本地必需检查已全部完成，共 159 项测试通过；发布 APK 及 API 26/35 模拟器验收正在执行，完成后补充真实运行链接及设备证据，不提前将其记为通过。
+本地必需检查已全部完成，共 160 项测试通过；发布 APK 及 API 26/35 模拟器验收正在执行，完成后补充真实运行链接及设备证据，不提前将其记为通过。
 
 | 检查 | 结果 |
 | --- | --- |
 | 插件、宿主及设备测试代码静态分析 | [无问题](docs/prp/evidence/v1.1.0/analyze-core.log) |
 | 集成模块静态分析 | [无错误，既有 lint 提示保留](docs/prp/evidence/v1.1.0/analyze-integrations.log) |
-| 插件和真实模块/设置入口 | [118 项通过](docs/prp/evidence/v1.1.0/plugin-and-entry-tests.log)，含 3P/AAR 开关两条路径、行为明确未完成、敌人没做到与完整空白输入盖印 |
+| 插件和真实模块/设置入口 | [119 项通过](docs/prp/evidence/v1.1.0/plugin-and-entry-tests.log)，含 3P/AAR 开关两条路径、行为明确未完成、敌人没做到与完整空白输入盖印 |
 | 其它受影响功能回归 | [41 项通过](docs/prp/evidence/v1.1.0/regressions.log)，不重复计算设置测试 |
 | 整应用 Dart 编译 | [Android arm64 Flutter bundle 通过](docs/prp/evidence/v1.1.0/local-checks.json)；APK/系统行为另外验证 |
 
@@ -25,6 +25,8 @@ Android 验收测试从真实设置入口开始：默认关闭 → 开启 → �
 模拟器证据标记 `physical_device=false`。本会话没有连接用户手机，未宣称已在用户手机上操作验证。
 
 第一轮 Android 8 实际流程已走到盖印，发现失败模块双写依赖设备未提供的 SQLite JSON1（`json_extract`）。现改为在同一事务内用 Dart 解码 PRP 历史行，兼容旧 SQLite，并增加损坏历史 JSON 不阻止新双写的回归测试；相关 12 项宿主测试通过。Android 15 第一轮发生测试 VM 连接中断，调整为不经 DDS 连接并仅对测试开始前的连接故障重试。原生还补充 Flutter 引擎销毁后释放临时会话占用的处理，保留关闭、危机、静默等禁止条件。设备流程继续执行，不将首次失败记为通过。
+
+第二轮 API 26/35 均通过盖印及失败模块双写。后续脚本误选退出中的旧会话滚动容器，改为定位当前路由的外层竖向滚动区域，并等待退出动画。同步修正粒子松手后真正静止，以及原生卡片连续刷新时过期回调不能隐藏当前新卡片；各有回归检查。粒子相关 [3 项界面测试通过](docs/prp/evidence/v1.1.0/particle-rest-tests.log)。
 
 ## 既有基线
 

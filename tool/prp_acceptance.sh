@@ -4,6 +4,16 @@ set -euo pipefail
 prp_device="${PRP_DEVICE:-emulator-5554}"
 test "$(adb -s "$prp_device" shell getprop ro.kernel.qemu | tr -d '\r')" = "1"
 mkdir -p build/prp/device-evidence
+prp_collect_exit() {
+  prp_exit_status=$?
+  trap - EXIT
+  adb -s "$prp_device" logcat -d >build/prp/device-evidence/logcat.txt || true
+  if [ "$prp_exit_status" -ne 0 ]; then
+    adb -s "$prp_device" exec-out screencap -p >build/prp/device-evidence/failure-screen.png || true
+  fi
+  exit "$prp_exit_status"
+}
+trap prp_collect_exit EXIT
 adb -s "$prp_device" shell wm size 480x1000
 adb -s "$prp_device" shell wm density 160
 adb -s "$prp_device" install -r build/prp/acceptance/app-debug.apk

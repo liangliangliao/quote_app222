@@ -183,6 +183,15 @@ jobs:
         working-directory: ${{ steps.detect.outputs.project_dir }}
         run: flutter pub get
 
+      - name: Restore Android dependency cache
+        if: steps.detect.outputs.project_type == 'flutter'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: prp-gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle', 'android/gradle/wrapper/gradle-wrapper.properties', 'pubspec.lock') }}
+
       # Automatic APK delivery remains compile-only. A manual dispatch may
       # explicitly request Self OS checks without running other module suites.
       - name: Prepare SQLite for Self OS tests

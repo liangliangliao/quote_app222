@@ -1,0 +1,5 @@
+00:00 +0: loading /workspace/quote_app222/test/prp_plugin/enhancement_widget_test.dart
+00:00 +0: forecast UI saves actuals once and preserves a readable record when disabled
+00:05 +1: crisis in a new prediction closes its editor, presents help and stores no label
+00:07 +2: press and release remain an unscored experiment and disabling closes its actual route
+00:09 +3: All tests passed!

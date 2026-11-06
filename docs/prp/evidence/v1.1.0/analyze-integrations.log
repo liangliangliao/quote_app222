@@ -1,4 +1,4 @@
-Analyzing 9 items...                                            
+Analyzing 9 items...
 
 warning • The value of the field '_fast' isn't used • lib/beautiful_enemy_host/enemy_host_presence.dart:43:10 • unused_field
 warning • The value of the field '_minute' isn't used • lib/beautiful_enemy_host/enemy_host_presence.dart:44:10 • unused_field
@@ -250,4 +250,4 @@ warning • The left operand can't be null, so the right operand is never execut
    info • 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre • lib/pages/settings_page.dart:5417:13 • deprecated_member_use
 warning • A value for optional parameter 'key' isn't ever given • lib/pages/settings_page.dart:5455:39 • unused_element_parameter
 
-249 issues found. (ran in 4.6s)
+249 issues found. (ran in 1.5s)

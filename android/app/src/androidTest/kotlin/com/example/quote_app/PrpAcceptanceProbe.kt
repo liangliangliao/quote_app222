@@ -109,6 +109,13 @@ class PrpAcceptanceProbe: Instrumentation() {
                 check(card!=null&&card.visibility==View.VISIBLE&&card.getGlobalVisibleRect(android.graphics.Rect())){"Native PRP card not visible"}
             }
             screenshot("native_01_on");pass("native_form_actual_view")
+            runOnMainSync {
+                val card=activity.window.decorView.findViewWithTag<PrpAlarmCard>("prp_native_card")
+                card.refresh();card.refresh()
+            }
+            waitForIdleSync()
+            runOnMainSync {check(activity.window.decorView.findViewWithTag<View>("prp_native_card").visibility==View.VISIBLE)}
+            pass("repeated_refresh_keeps_current_card_visible")
             BehaviorPresetAlarmSettings.set(ctx,null,null,.2f,false)
             runOnMainSync { check(PrpAlarmAudio.play(ctx,hint)) }
             waitFor("Local MediaPlayer did not start"){PrpAlarmAudio.isPlaying}
@@ -142,7 +149,11 @@ class PrpAcceptanceProbe: Instrumentation() {
             db.close()
             result.putString("stream","PRP_NATIVE_ACCEPTANCE_PASS\n${report}\n")
             finish(-1,result)
-        }catch(t:Throwable){result.putString("stream","PRP_NATIVE_ACCEPTANCE_FAILED:${t.javaClass.simpleName}:${t.message}\n");finish(1,result)}
+        }catch(t:Throwable){
+            android.util.Log.e("PrpAcceptance","Native acceptance failed",t)
+            result.putString("stream","PRP_NATIVE_ACCEPTANCE_FAILED:${t.javaClass.simpleName}:${t.message}\n${android.util.Log.getStackTraceString(t)}\n")
+            finish(1,result)
+        }
     }
     private fun screenshot(name:String){
         val target=File(targetContext.filesDir,"prp-ci/$name.png").apply{parentFile!!.mkdirs()}

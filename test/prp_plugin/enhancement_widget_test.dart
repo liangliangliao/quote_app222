@@ -111,6 +111,9 @@ void main() {
     expect(find.text('按住时：粒子散开'), findsOneWidget);
     await gesture.up();
     await tester.pump(const Duration(seconds: 2));
+    // Releasing must reach rest, rather than leave a permanent spinning ticker.
+    await tester.pumpAndSettle(const Duration(milliseconds: 16),
+        EnginePhase.sendSemanticsUpdate, const Duration(seconds: 10));
     expect(find.text('松手后：粒子缓缓回落'), findsOneWidget);
     expect(f.databaseOpens, 0);
     await prpIo(

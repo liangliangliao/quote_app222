@@ -41,31 +41,31 @@
 00:05 +34: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: (tearDownAll)
 00:05 +34: loading /workspace/quote_app222/test/quote_home_refresh_test.dart
 00:06 +34: /workspace/quote_app222/test/quote_home_refresh_test.dart: (setUpAll)
-[DBG] AppDatabase opened at: /tmp/quote_home_refresh_FABXUR/quotes.db
+[DBG] AppDatabase opened at: /tmp/quote_home_refresh_NIKWKC/quotes.db
 00:06 +34: /workspace/quote_app222/test/quote_home_refresh_test.dart: home keeps its poster on repeated refreshes and shows a newly notified quote
-【信息】[2026-11-06T07:32:34.119003][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
-【信息】[2026-11-06T07:32:34.121972][HOME] 今日未检索到有效记录：显示默认名言
-【信息】[2026-11-06T07:32:34.285507][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
-【信息】[2026-11-06T07:32:34.287550][HOME] 今日未检索到有效记录：显示默认名言
-【信息】[2026-11-06T07:32:35.044767][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 1
-【信息】[2026-11-06T07:32:35.049307][HOME] 已检索到今日最新已通知记录：准备注入
-00:07 +35: /workspace/quote_app222/test/quote_home_refresh_test.dart: an asynchronous original signature keeps the quote excerpt and spacing still
-【信息】[2026-11-06T07:32:35.290249][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 1
-【信息】[2026-11-06T07:32:35.292809][HOME] 已检索到今日最新已通知记录：准备注入
+【信息】[2026-11-06T07:59:31.901321][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:59:31.904438][HOME] 今日未检索到有效记录：显示默认名言
+【信息】[2026-11-06T07:59:32.066897][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:59:32.068939][HOME] 今日未检索到有效记录：显示默认名言
+【信息】[2026-11-06T07:59:32.823827][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 1
+【信息】[2026-11-06T07:59:32.828325][HOME] 已检索到今日最新已通知记录：准备注入
+00:08 +35: /workspace/quote_app222/test/quote_home_refresh_test.dart: an asynchronous original signature keeps the quote excerpt and spacing still
+【信息】[2026-11-06T07:59:33.058359][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 1
+【信息】[2026-11-06T07:59:33.060144][HOME] 已检索到今日最新已通知记录：准备注入
 00:08 +36: /workspace/quote_app222/test/quote_home_refresh_test.dart: (tearDownAll)
 00:08 +36: loading /workspace/quote_app222/test/quote_home_controls_test.dart
 00:08 +36: /workspace/quote_app222/test/quote_home_controls_test.dart: (setUpAll)
-[DBG] AppDatabase opened at: /tmp/quote_home_controls_MBVPPU/quotes.db
-00:08 +36: /workspace/quote_app222/test/quote_home_controls_test.dart: library identity and signature survive home payload normalization
-00:08 +37: /workspace/quote_app222/test/quote_home_controls_test.dart: bundled quotations can be collected and shared before any task exists
-【信息】[2026-11-06T07:32:36.386735][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
-【信息】[2026-11-06T07:32:36.390155][HOME] 今日未检索到有效记录：显示默认名言
+[DBG] AppDatabase opened at: /tmp/quote_home_controls_DNWDFN/quotes.db
+00:09 +36: /workspace/quote_app222/test/quote_home_controls_test.dart: library identity and signature survive home payload normalization
+00:09 +37: /workspace/quote_app222/test/quote_home_controls_test.dart: bundled quotations can be collected and shared before any task exists
+【信息】[2026-11-06T07:59:34.321140][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:59:34.325551][HOME] 今日未检索到有效记录：显示默认名言
 00:09 +38: /workspace/quote_app222/test/quote_home_controls_test.dart: search and next quotation change the actual shared quotation
-【信息】[2026-11-06T07:32:36.725473][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
-【信息】[2026-11-06T07:32:36.728113][HOME] 今日未检索到有效记录：显示默认名言
+【信息】[2026-11-06T07:59:34.673317][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:59:34.675241][HOME] 今日未检索到有效记录：显示默认名言
 00:10 +39: /workspace/quote_app222/test/quote_home_controls_test.dart: the collection remains available in a new library instance
 00:10 +40: /workspace/quote_app222/test/quote_home_controls_test.dart: more menu fits larger text and opens the saved collection
-【信息】[2026-11-06T07:32:37.434139][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
-【信息】[2026-11-06T07:32:37.436362][HOME] 今日未检索到有效记录：显示默认名言
+【信息】[2026-11-06T07:59:35.355803][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:59:35.357757][HOME] 今日未检索到有效记录：显示默认名言
 00:10 +41: /workspace/quote_app222/test/quote_home_controls_test.dart: (tearDownAll)
 00:10 +41: All tests passed!
