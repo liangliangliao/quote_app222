@@ -154,7 +154,7 @@ extension QuoteKnowledgeEconomy on QuoteKnowledgeRepository {
                   (15000 * (1 << math.min(3, attempts - 1).clamp(0, 3)))
               : 0,
           'last_error': retry
-              ? '$message 已安排重试，最多3次，计入本轮预算。'
+              ? '$message 已安排重试，最多3次，计入本轮请求次数。'
               : '$message 已达3次重试上限，请人工调整或手动重试。'
         },
         where: 'quote_key=? AND token=?',

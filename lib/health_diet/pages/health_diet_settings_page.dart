@@ -276,7 +276,7 @@ class _HealthDietSettingsPageState extends State<HealthDietSettingsPage> {
                   value: _externalApiAiTranslationEnabled,
                   onChanged: (v) => setState(() => _externalApiAiTranslationEnabled = v),
                   title: const Text('外部平台英文结果用 AI 翻译'),
-                  subtitle: const Text('仅建议少量手动查询时开启。自动托管/菜谱搜索会调用大量平台数据，开启后会连续消耗 token 并让日志快速刷新。默认关闭以避免卡顿。'),
+                  subtitle: const Text('仅建议少量手动查询时开启。自动托管/菜谱搜索会调用大量平台数据，开启后会连续请求模型并让日志快速刷新。默认关闭以避免卡顿。'),
                 ),
                 SwitchListTile(
                   value: _medicalNoticeEnabled,
@@ -346,7 +346,7 @@ class _HealthDietSettingsPageState extends State<HealthDietSettingsPage> {
             value: _agentAutoAiEnabled,
             onChanged: (v) => setState(() => _agentAutoAiEnabled = v),
             title: const Text('自动调用 AI 完成专家分析'),
-            subtitle: const Text('使用全局 AI Provider / 模型配置；会消耗用户选择模型的 token 或额度。'),
+            subtitle: const Text('使用全局 AI Provider / 模型配置。'),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,

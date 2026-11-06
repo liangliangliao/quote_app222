@@ -12,6 +12,8 @@ class QuoteInsightStore {
   QuoteInsightStore({Future<Database> Function()? database})
       : _database = database ?? AppDatabase.instance;
 
+  Future<Database> get database => _ready();
+
   Future<Database> _ready() async {
     final db = await _database();
     await db.execute(

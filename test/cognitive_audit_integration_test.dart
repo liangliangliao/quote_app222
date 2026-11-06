@@ -230,7 +230,7 @@ void main() {
     }
   });
   test(
-      'length reports actual quota, records usage, never stacks three global retries',
+      'truncation has no usage UI message, records internal usage, never stacks global retries',
       () async {
     var calls = 0;
     final operation = AiOperation('limit');
@@ -251,7 +251,7 @@ void main() {
                   maxTokens: 10000,
                   expectJson: true)),
           throwsA(isA<SemanticRequestException>()
-              .having((e) => e.message, 'service truncation', contains('应用没有设置输出 Token 上限'))));
+              .having((e) => e.message, 'service truncation', contains('本次响应未完整返回'))));
     });
     expect(calls, 1);
     expect(operation.attempts, hasLength(1));

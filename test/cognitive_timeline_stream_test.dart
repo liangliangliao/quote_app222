@@ -300,14 +300,19 @@ void main() {
                     analysisContext: readingMapContext,
                     preferredView: EpistemicViewKind.hierarchy))));
     expect(service.calls, 0);
-    await tester.ensureVisible(find.text('按新版重新分析概念与连线'));
-    await tester.tap(find.text('按新版重新分析概念与连线'));
+    await tester.ensureVisible(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.tap(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试深入分析'));
     await settle(tester);
     expect(service.calls, 1);
     expect(find.textContaining('连接在完整结果返回前中断'), findsOneWidget);
     expect(find.byType(ConceptHierarchyView), findsOneWidget);
     await capture(tester, 'reading-stream-retry');
-    await tester.tap(find.text('按新版重新分析概念与连线'));
+    await tester.ensureVisible(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.tap(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试深入分析'));
     await settle(tester);
     expect(service.calls, 2);
     expect(find.textContaining('连接在完整结果返回前中断'), findsNothing);

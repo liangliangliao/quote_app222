@@ -4,6 +4,7 @@ import '../data/quote_insight_store.dart';
 import '../epistemic/concept_analysis.dart';
 import '../epistemic/semantic_scope.dart';
 import '../epistemic/semantic_scope_service.dart';
+import '../epistemic/semantic_analysis_archive.dart';
 import '../models/quote_insight.dart';
 import 'unified_ai_service.dart';
 import '../epistemic/cognitive_preferences.dart';
@@ -18,7 +19,7 @@ enum ComparisonPurpose {
 }
 
 class QuoteComparisonService {
-  static const promptVersion = 9;
+  static const promptVersion = 10;
   static final Map<String, Future<QuoteComparison>> _pending = {};
   final UnifiedAiService _ai;
   final QuoteInsightStore _store;
@@ -88,7 +89,7 @@ class QuoteComparisonService {
       conditions: conditions,
     );
     try {
-      for (final version in [promptVersion, 8, 7, 6]) {
+      for (final version in [promptVersion, 9, 8, 7, 6]) {
         final cached = await _store.readComparison(version == promptVersion
             ? key
             : cacheKey(a, b,
@@ -169,6 +170,14 @@ class QuoteComparisonService {
           issues: [AnalysisIssue('semantic_map', e.message)]);
     }
     map['semantic_map'] = semantic.toJson();
+    if (cognitive) {
+      try {
+        await SemanticAnalysisArchive(database: () => _store.database).save(
+            sources, '分别分析 A、B 句内概念及跨句关系',
+            SemanticContext(purpose: purpose.question, conditions: conditions, inquiry: purpose.question),
+            analysis: semantic, raw: raw);
+      } catch (_) { /* Comparison storage below remains independently usable. */ }
+    }
     final result = parseResponse(jsonEncode(map), a, b,
         modelInfo: model,
         modelDisplayName: config.displayModel,
@@ -187,7 +196,7 @@ class QuoteComparisonService {
 
   Future<void> clearCache(QuoteReference a, QuoteReference b) async {
     final config = await _ai.resolveGlobalConfig();
-    for (final version in [promptVersion, 8, 7, 6]) {
+    for (final version in [promptVersion, 9, 8, 7, 6]) {
       await _store.deleteComparison(cacheKey(a, b,
           modelIdentity: _modelIdentity(config), promptVersion: version));
     }
@@ -203,7 +212,7 @@ class QuoteComparisonService {
       return clearCache(a, b);
     }
     final config = await _ai.resolveGlobalConfig();
-    for (final version in [promptVersion, 8, 7, 6]) {
+    for (final version in [promptVersion, 9, 8, 7, 6]) {
       await _store.deleteComparison(
         cacheKey(
           a,
@@ -230,7 +239,8 @@ ${SemanticScopeService.buildPrompt([
             ScopeSource('B', b.content)
           ], '分别分析A/B句内概念及跨句关系', context: SemanticContext(purpose: purpose.question, conditions: conditions, inquiry: purpose.question))}
 将上述语义图放入semantic_map。不另行重复生成reading_a/reading_b的概念与圈图；客户端从同一语义图派生各句阅读视图。简单定义不凑实例或反例数量。原句不宜直接套用时可使用核心意义高度一致的相关案例，明示对应与边界；再考察共同尺度，不以“不能画圈”直接结束。
-最终只返回紧凑JSON：{"semantic_map":{"schema_version":6,"analysis_purpose":"当前比较目的","selection_strategy":"核心概念选取理由","aligned_cases":[],"recommended_view":"judgment","propositions":[],"concepts":[],"hierarchy":[],"meaning_links":[],"relations":[],"grounds":[],"judgments":[]},"common":"相关共同点及对应理由","critical_difference":"目的下的决定性差异与理由","not_equivalent":"概念或论证结构不能等同之处","limitation":"适用条件、反例或未知及改判触发条件","relation_type":"contrast","relation_scope":"features","relation_direction":"unknown","relation_justification":"判断的根据与缺口","universe":"","set_a":"","set_b":"","basis_a":"A原句短摘","basis_b":"B原句短摘"}
+最终只返回紧凑JSON对象：semantic_map使用上文grounded_graph_v1字段约定（含format、reading、cases、concepts、experiences、links、circles、judgments），不要再返回旧版重复判准协议。另给common、critical_difference、not_equivalent、limitation、relation_type、relation_scope、relation_direction、relation_justification、universe、set_a、set_b、basis_a、basis_b；basis_a/b逐字对应A/B的完整相关分句。semantic_map与文字比较共享同一次分析和原材料。
+
 ''';
 
   static SemanticScope comparisonJudgment(
@@ -351,7 +361,7 @@ ${SemanticScopeService.buildPrompt([
           model: base.model,
           sourceVersion: base.sourceVersion,
           materialKind: base.materialKind,
-          analysisPurpose: base.analysisPurpose, selectionStrategy: base.selectionStrategy, alignedCases: base.alignedCases,
+          analysisPurpose: base.analysisPurpose, selectionStrategy: base.selectionStrategy, alignedCases: base.alignedCases,analysisSummary:base.analysisSummary,
           propositions: base.propositions,
           concepts: base.concepts,
           hierarchy: base.hierarchy,

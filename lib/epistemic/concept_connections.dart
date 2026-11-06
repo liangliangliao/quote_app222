@@ -18,6 +18,8 @@ String conceptConnectionLabel(String kind) => switch (kind) {
       'preference' => '偏好次序',
       'analogy' => '类比',
       'association' => '语境关联',
+      'part_of' => '组成部分',
+      'constraint' => '构成限制',
       'extension_equal' => '外延重合',
       'extension_contains' => '完全包含',
       'extension_overlap' => '外延相交',
@@ -31,7 +33,8 @@ class ConceptConnection {
   final String? criterionLabel;
   final List<ScopeReference> references;
   const ConceptConnection(this.from, this.to, this.kind, this.explanation,
-      this.status, this.references, {this.criterionLabel});
+      this.status, this.references,
+      {this.criterionLabel});
   String get label => criterionLabel ?? conceptConnectionLabel(kind);
   String get identity => '$from:$kind:$to';
   bool get symmetric => const {
@@ -131,8 +134,57 @@ class ConceptConnectionLayout {
   const ConceptConnectionLayout(this.boxes, this.size);
   static ConceptConnectionLayout build(
       List<SemanticConcept> nodes, List<ConceptConnection> connections,
-      {double scale = 1}) {
+      {double scale = 1, bool layered = false}) {
     if (nodes.isEmpty) return const ConceptConnectionLayout({}, Size(320, 240));
+    if (layered) {
+      final depths = {for (final n in nodes) n.id: 0};
+      final content = connections.where((e) => const [
+            'subtype',
+            'mediation',
+            'grounding',
+            'instance'
+          ].contains(e.kind));
+      for (var i = 0; i < nodes.length; i++) {
+        var changed = false;
+        for (final e in content) {
+          final next = (depths[e.from] ?? 0) + 1;
+          if (next > (depths[e.to] ?? 0)) {
+            depths[e.to] = next;
+            changed = true;
+          }
+        }
+        if (!changed) break;
+      }
+      final bottom = nodes
+              .where((n) => n.kind == 'concept')
+              .fold(0, (int d, n) => math.max(d, depths[n.id] ?? 0)) +
+          1;
+      for (final n in nodes.where((n) => n.kind != 'concept'))
+        depths[n.id] = math.max(bottom, depths[n.id] ?? 0);
+      final levels = <int, List<String>>{};
+      for (final n in nodes)
+        levels.putIfAbsent(depths[n.id] ?? 0, () => []).add(n.id);
+      final columns =
+          math.min(2, levels.values.map((r) => r.length).reduce(math.max));
+      final boxes = <String, Rect>{};
+      final width = columns * 245.0 * scale + 70 * scale;
+      var y = 40.0 * scale;
+      for (final level in levels.keys.toList()..sort()) {
+        final row = levels[level]!;
+        for (final e in row.indexed) {
+          final count =
+              math.min(columns, row.length - (e.$1 ~/ columns) * columns);
+          boxes[e.$2] = Rect.fromLTWH(
+              (width - count * 245 * scale) / 2 +
+                  (e.$1 % columns) * 245 * scale,
+              y + (e.$1 ~/ columns) * 230 * scale,
+              185 * scale,
+              125 * scale);
+        }
+        y += ((row.length + columns - 1) ~/ columns) * 230 * scale;
+      }
+      return ConceptConnectionLayout(boxes, Size(width, y));
+    }
     final graph = {for (final n in nodes) n.id: <String>{}};
     for (final e in connections) {
       graph[e.from]?.add(e.to);
@@ -238,16 +290,27 @@ class ConceptConnectionPainter extends CustomPainter {
       Offset? chosen;
       for (final segment in segments) {
         for (final t in [.5, .3, .7, .15, .85]) {
-          final at = Offset.lerp(segment.$1, segment.$2, t)!;
-          final rect = Rect.fromCenter(
-              center: at, width: label.width + 12, height: label.height + 8);
-          if ((Offset.zero & size).contains(rect.topLeft) &&
-              (Offset.zero & size).contains(rect.bottomRight) &&
-              !boxes.values.any((b) => b.inflate(2).overlaps(rect)) &&
-              !labels.any((b) => b.inflate(3).overlaps(rect))) {
-            chosen = at;
-            break;
+          final horizontal = (segment.$2.dx - segment.$1.dx).abs() >
+              (segment.$2.dy - segment.$1.dy).abs();
+          final clearance = horizontal
+              ? math.max(a.height, b.height) / 2 + label.height / 2 + 14
+              : math.max(a.width, b.width) / 2 + label.width / 2 + 14;
+          for (final offset in [0.0, -24.0, 24.0, -clearance, clearance]) {
+            final at = Offset.lerp(segment.$1, segment.$2, t)! +
+                (horizontal ? Offset(0, offset) : Offset(offset, 0));
+            final rect = Rect.fromCenter(
+                center: at, width: label.width + 12, height: label.height + 8);
+            if ((Offset.zero & size).contains(rect.topLeft) &&
+                (Offset.zero & size).contains(rect.bottomRight) &&
+                !rect.inflate(10).contains(from) &&
+                !rect.inflate(10).contains(to) &&
+                !boxes.values.any((b) => b.inflate(2).overlaps(rect)) &&
+                !labels.any((b) => b.inflate(3).overlaps(rect))) {
+              chosen = at;
+              break;
+            }
           }
+          if (chosen != null) break;
         }
         if (chosen != null) break;
       }

@@ -293,13 +293,13 @@ void main() {
         isTrue);
   });
   test(
-      'long circle chain uses one verified canvas and checkable member examples',
+      'long partial circle chain keeps actual local circles and checkable examples without inventing unlisted pairs',
       () {
     final value = readingIllustration(recipe)!,
         clusters = ConceptCircleLayout.build(value);
     expect(clusters, hasLength(1));
-    expect(clusters.single.verified, isTrue);
-    expect(clusters.single.circles, hasLength(6));
+    expect(clusters.single.verified, isFalse);
+    expect(clusters.single.relations, isNotEmpty);
     expect(
         value.relations.every((r) =>
             r.scope!.illustration &&
@@ -326,7 +326,7 @@ void main() {
     expect(value.concepts.last.label, isNot(contains('具体表现')));
   });
   test(
-      'generic responses require explicit retry; successful maps alone are cached',
+      'partial results are saved and read without automatic retries; explicit retry can replace them',
       () async {
     expect(readingIllustration(travel), isNull);
     final good = travelMap();
@@ -343,7 +343,10 @@ void main() {
     expect(ai.prompts.first, contains('没有固定层数'));
     await service.analyze(const [ScopeSource('A', travel)], '完整阅读验收',
         context: readingMapContext);
+    expect(ai.calls, 1);
+    final retried = await service.analyze(const [ScopeSource('A', travel)], '完整阅读验收', context: readingMapContext, force: true);
     expect(ai.calls, 2);
+    expect(retried.scopeRelations, isNotEmpty);
   });
   testWidgets(
       'actual reader has grounded chains and circle tab never substitutes a hierarchy',
@@ -360,11 +363,14 @@ void main() {
             semanticService: service));
     expect(ai.calls, 0);
     expect(find.byType(GroundingPathView), findsNothing);
-    final generate = find.text('生成概念树与适用的含义圈');
+    final generate = find.byKey(const ValueKey('semantic-analysis-action'));
     await tester.ensureVisible(generate);
     await tester.tap(generate);
     await settle(tester);
     expect(ai.calls, 1);
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '类属树'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '类属树'));
+    await settle(tester);
     await tester.ensureVisible(find.text('追踪概念的直观链路'));
     await tester.tap(find.text('追踪概念的直观链路'));
     await settle(tester);
@@ -382,12 +388,14 @@ void main() {
     expect(ai.calls, 1);
     await tester.ensureVisible(find.byType(ConceptMeaningNetwork));
     await capture(tester, 'reading-multiple-circles');
-    await tester.ensureVisible(find.text('按新版重新分析概念与连线'));
-    await tester.tap(find.text('按新版重新分析概念与连线'));
+    await tester.ensureVisible(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.tap(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试深入分析'));
     await settle(tester);
     expect(ai.calls, 2);
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '概念树'));
-    await tester.tap(find.widgetWithText(ChoiceChip, '概念树'));
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '类属树'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '类属树'));
     await settle(tester);
     expect(ai.calls, 2);
   });

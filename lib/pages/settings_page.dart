@@ -1,4 +1,3 @@
-import '../widgets/ai_budget_panel.dart';
 import '../diary/diary_settings_page.dart';
 import 'package:path/path.dart' as p;
 import '../services/sport_music_service.dart';
@@ -4320,9 +4319,6 @@ Future<String?> _saveAvatarTemp(File file) async {
         ),
       ),
       const SizedBox(height: 8),
-      const Text('输出 Token：应用不设置上限', style: TextStyle(fontWeight: FontWeight.bold)),
-      const Text('旧全局、任务与模块输出额度均不再应用。模型服务自身的容量仍由服务端决定。', style: TextStyle(fontSize: 12, color: Colors.grey)),
-      TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiUsagePage())), icon: const Icon(Icons.receipt_long_outlined), label: const Text('查看实际 Token 用量')),
       const Text(
         '统一 Temperature',
         style: TextStyle(fontWeight: FontWeight.bold),
@@ -4735,7 +4731,6 @@ Future<String?> _saveAvatarTemp(File file) async {
               ),
             ),
             const SizedBox(height: 8),
-            const Text('模型输出由服务端决定，应用不设置 Token 上限。'),
           ],
         ),
       ),

@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/ai_request_accounting.dart';
 import '../services/ai_request_audit.dart';
-import '../widgets/ai_budget_panel.dart';
 import 'philosophy_benchmark.dart';
 
 class PhilosophyBenchmarkPage extends StatefulWidget {
@@ -119,8 +117,6 @@ class _PhilosophyBenchmarkPageState extends State<PhilosophyBenchmarkPage> {
         body: ListView(padding: const EdgeInsets.all(16), children: [
           const Text(
               '使用手机当前配置的模型。每次点击只运行一组，不自动重试、不自动评分。供应商可能收费；待人工复核不算通过。本地保留最近60次结果，原始输入与输出可复制。'),
-          const AiBudgetPanel(
-              purpose: 'cognition.semantic.v4', defaultBudget: 10000),
           if (error != null)
             Text(error!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -174,13 +170,6 @@ class _PhilosophyBenchmarkPageState extends State<PhilosophyBenchmarkPage> {
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          for (final attempt in run['attempts'] is List
-                              ? run['attempts'] as List
-                              : [])
-                            if (attempt is Map)
-                              Text(AiTokenUsage.fromJson(
-                                      attempt['usage'] as Map? ?? {})
-                                  .label),
                           SelectableText(
                               (run['raw_json'] ?? run['error'] ?? '未收到正文')
                                   .toString()),

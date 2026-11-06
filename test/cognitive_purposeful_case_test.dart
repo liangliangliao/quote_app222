@@ -277,8 +277,8 @@ void main() {
     const a = QuoteReference(id: 'A', content: camusPassage),
         b = QuoteReference(id: 'B', content: '人宁愿意欲虚无，也不愿不欲。');
     final prompt = QuoteComparisonService.buildPrompt(a, b);
-    expect(prompt, contains('"schema_version":6'));
-    expect(prompt, contains('aligned_cases'));
+    expect(prompt, contains('grounded_graph_v1'));
+    expect(prompt, contains('quote_ref,case_ref'));
     expect(prompt, contains('核心意义高度一致'));
     final comparison = QuoteComparisonService.parseResponse(
         jsonEncode({

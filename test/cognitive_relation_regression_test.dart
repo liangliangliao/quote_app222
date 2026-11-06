@@ -166,7 +166,7 @@ void main() {
     final delta = await service(ai)
         .analyze(sources, '反馈回归', context: expansionContext(base));
     expect(ai.prompts.length, 1);
-    expect(ai.budget, 4000);
+    expect(ai.prompts.single, contains('grounded_graph_v1'));
     expect(ai.prompts.single, contains('existing_concepts'));
     expect(ai.prompts.single, contains('内在生命力'));
     expect(delta.issues, isEmpty);

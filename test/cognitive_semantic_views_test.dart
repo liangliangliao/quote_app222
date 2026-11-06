@@ -12,6 +12,7 @@ import 'package:quote_app/epistemic/cognitive_preferences.dart';
 import 'package:quote_app/epistemic/cognitive_store.dart';
 import 'package:quote_app/epistemic/concept_explorer.dart';
 import 'package:quote_app/epistemic/concept_hierarchy_view.dart';
+import 'package:quote_app/epistemic/concept_circle_preview.dart';
 import 'package:quote_app/epistemic/concept_meaning_network.dart';
 import 'package:quote_app/epistemic/quote_cognitive_reader.dart';
 import 'package:quote_app/epistemic/quote_concept_catalog.dart';
@@ -157,23 +158,16 @@ void main() {
     expect(partial.hierarchy.length, 2);
     expect(partial.needsRepair, isTrue);
   });
-  test('four circles satisfy nested and multiple overlap constraints together',
-      () {
-    final cluster = ConceptCircleLayout.build(networkScope()).single;
-    expect(cluster.verified, isTrue);
-    expect(cluster.circles.length, 4);
-    MeaningCircle c(String id) =>
-        cluster.circles.singleWhere((c) => c.ids.contains(id));
-    expect((c('apple').center - c('fruit').center).distance + c('apple').radius,
-        lessThan(c('fruit').radius));
-    expect(
-        (c('banana').center - c('fruit').center).distance + c('banana').radius,
-        lessThan(c('fruit').radius));
-    for (final id in ['fruit', 'apple']) {
-      final a = c('red'), b = c(id), d = (a.center - b.center).distance;
-      expect(d, lessThan(a.radius + b.radius));
-      expect(d, greaterThan((a.radius - b.radius).abs()));
-    }
+  test('uncompared circle pairs do not acquire invented spatial range relations', () {
+    final cluster=ConceptCircleLayout.build(networkScope()).single;
+    expect(cluster.verified,isFalse);
+    expect(cluster.relations.length,4);
+    final raw=networkMap();
+    (raw['concepts'] as List).removeWhere((n)=>n['id']=='banana');
+    (raw['relations'] as List).removeWhere((r)=>(r['node_ids'] as List).contains('banana'));
+    final complete=ConceptCircleLayout.build(SemanticScope.parse(raw,const [ScopeSource('A',networkText)])).single;
+    expect(complete.verified,isTrue);
+    expect(complete.circles.length,3);
   });
   test('contradictory circle constraints use local diagrams', () {
     final raw = networkMap();
@@ -238,8 +232,9 @@ void main() {
     expect(ai.calls, 1);
     expect(result.hierarchy.length, 2);
     expect(result.needsRepair, isTrue);
-    expect(await service.cached(const [ScopeSource('A', happiness)], '概念树'),
-        isNull);
+    final stored = await service.cached(const [ScopeSource('A', happiness)], '概念树');
+    expect(stored!.needsRepair, isTrue);
+    expect(stored.hierarchy.length, 2);
     await db.close();
   });
   test(
@@ -432,11 +427,11 @@ void main() {
                 valueListenable: material,
                 builder: (context, text, _) => SemanticScopePanel(
                     sources: [ScopeSource('A', text)], service: service))));
-    await tester.tap(find.text('分析概念关系并绘图'));
+    await tester.tap(find.byKey(const ValueKey('semantic-analysis-action')));
     await tester.pump();
     material.value = networkText;
     await settle(tester);
-    await tester.tap(find.text('分析概念关系并绘图'));
+    await tester.tap(find.byKey(const ValueKey('semantic-analysis-action')));
     await tester.pump();
     service.requests[1].complete(networkScope());
     await settle(tester);
@@ -497,12 +492,16 @@ void main() {
             topic: '幸福',
             authorLabel: '验收样例',
             note: ''));
+    expect(find.byType(ConceptCirclePreview), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '类属树'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '类属树'));
+    await settle(tester);
     expect(find.byType(ConceptHierarchyView), findsOneWidget);
     final indexed = await tester.runAsync(() => QuoteInsightStore()
         .readSemanticConcepts(
             [const QuoteReference(id: 'v4-happiness', content: happiness)]));
     expect(indexed!.values.single, contains('过程中的幸福'));
-    expect(find.widgetWithText(ChoiceChip, '概念树'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, '类属树'), findsOneWidget);
     await capture(tester, 'reading-tree');
     await tester.ensureVisible(find.text('追踪概念的直观链路'));
     await tester.tap(find.text('追踪概念的直观链路'));
@@ -523,10 +522,14 @@ void main() {
   });
   testWidgets('multiple circles zoom, reset and open fullscreen at large text',
       (tester) async {
+    final raw=networkMap();
+    (raw['concepts'] as List).removeWhere((n)=>n['id']=='banana');
+    (raw['relations'] as List).removeWhere((r)=>(r['node_ids'] as List).contains('banana'));
+    final known=SemanticScope.parse(raw,const [ScopeSource('A',networkText)]);
     await mount(
         tester,
         SingleChildScrollView(
-            child: ConceptMeaningNetwork(value: networkScope())),
+            child: ConceptMeaningNetwork(value: known)),
         scale: 1);
     expect(find.byType(InteractiveViewer), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -534,7 +537,7 @@ void main() {
     await mount(
         tester,
         SingleChildScrollView(
-            child: ConceptMeaningNetwork(value: networkScope())),
+            child: ConceptMeaningNetwork(value: known)),
         scale: 2);
     await tester.tap(find.byTooltip('全屏查看'));
     await settle(tester);

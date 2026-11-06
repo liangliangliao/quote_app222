@@ -9,8 +9,9 @@ class SemanticRequestException implements Exception {
   final String message;
   final Object? cause;
   final String code;
+  final String rawResponse;
   const SemanticRequestException(this.message,
-      {this.cause, this.code = 'unknown'});
+      {this.cause, this.code = 'unknown', this.rawResponse = ''});
   @override
   String toString() => message;
 }
@@ -58,7 +59,7 @@ class SemanticJsonTransport {
     });
     try {
       if (cancellation?.cancelled == true)
-        throw const SemanticRequestException('已停止接收；已发送请求的用量以服务返回为准。',
+        throw const SemanticRequestException('已停止接收，保留已有结果。',
             code: 'cancelled');
       final request = http.Request('POST', uri)
         ..headers.addAll(headers)
@@ -88,7 +89,10 @@ class SemanticJsonTransport {
       return SemanticJsonReply(status, text.finish(), wire.toString());
     } on SemanticRequestException catch (error) {
       failure = error.code;
-      rethrow;
+      throw SemanticRequestException(error.message,
+          cause: error.cause,
+          code: error.code,
+          rawResponse: text.content.isEmpty ? wire.toString() : text.content);
     } catch (error) {
       failure = cancellation?.cancelled == true
           ? 'cancelled'
@@ -96,8 +100,9 @@ class SemanticJsonTransport {
               ? 'timeout'
               : 'connection';
       if (cancellation?.cancelled == true)
-        throw const SemanticRequestException('已停止接收；已发送请求仍可能产生用量，未返回的用量未知。',
-            code: 'cancelled');
+        throw SemanticRequestException('已停止接收，保留已有结果。',
+            code: 'cancelled',
+            rawResponse: text.content.isEmpty ? wire.toString() : text.content);
       // A transport can close after the final JSON but before the trailing SSE
       // marker. Retain a complete answer; never return a partial JSON fragment.
       if (isEvents && status >= 200 && status < 300) {
@@ -110,6 +115,7 @@ class SemanticJsonTransport {
               ? '生成等待超时，尚未收到完整结果。请稍后手动重试。'
               : '连接在完整结果返回前中断。请检查网络后手动重试。',
           cause: error,
+          rawResponse: text.content.isEmpty ? wire.toString() : text.content,
           code: failure);
     } finally {
       timer.cancel();
@@ -242,8 +248,7 @@ class SemanticJsonStream {
 
   String finish() {
     if (truncated)
-      throw SemanticRequestException(
-          '服务端停止输出，结果未完整生成。应用没有设置输出 Token 上限，请核对模型服务的输出能力。',
+      throw SemanticRequestException('本次响应未完整返回，请重试或检查模型服务。',
           code: 'output_limit');
     if (rejected)
       throw const SemanticRequestException('服务未提供本次请求的完整正文，请调整内容后重试。',

@@ -199,6 +199,24 @@ class ConceptCircleLayout {
         depths.values.any((d) => d >= groups.length)) {
       return MeaningCluster(relations, const [], const Size(500, 300), false);
     }
+    // Every spatial pair in an Euler diagram implies a range judgment. Do not
+    // let an unconstrained pair accidentally look disjoint or overlapping.
+    bool within(String child, String parent, [Set<String>? seen]) {
+      if (child == parent) return true;
+      final visited = seen ?? <String>{};
+      return visited.add(child) && contains.where((e) => e.$2 == child)
+          .any((e) => within(e.$1, parent, visited));
+    }
+    final identities = groups.keys.toList();
+    for (var i=0;i<identities.length;i++) {
+      for (var j=i+1;j<identities.length;j++) {
+        final a=identities[i], b=identities[j];
+        final determined = within(a,b) || within(b,a) ||
+            overlap.contains((a,b)) || overlap.contains((b,a)) ||
+            separate.any((e) => (within(a,e.$1) && within(b,e.$2)) || (within(a,e.$2) && within(b,e.$1)));
+        if (!determined) return MeaningCluster(relations, const [], const Size(500,350), false);
+      }
+    }
     final circles = <String, MeaningCircle>{};
     bool paired(Set<(String, String)> pairs, String a, String b) =>
         pairs.contains((a, b)) || pairs.contains((b, a));
@@ -416,7 +434,7 @@ class _ConceptMeaningNetworkState extends State<ConceptMeaningNetwork> {
                           Theme.of(context).textTheme.bodyMedium?.fontFamily,
                           cluster.relations))))
         else ...[
-          const Text('按局部范围图呈现相应图式；穷尽划分用完整扇区覆盖上位范围，概念身份保持一致。',
+          const Text('按已确定的关系分别画圈，复用同一概念定义；未比较的范围不凭位置补成包含、相交或互斥。',
               style: TextStyle(fontSize: 12)),
           for (final relation in cluster.relations) _local(relation),
         ],

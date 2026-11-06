@@ -1,4 +1,3 @@
-import 'ai_budget_panel.dart';
 import 'package:flutter/material.dart';
 import '../models/quote_insight.dart';
 import '../services/quote_comparison_service.dart';
@@ -380,7 +379,6 @@ class QuoteComparisonPrototype extends StatelessWidget {
                           selected: purpose == e.$2,
                           onSelected: busy ? null : (_) => onPurpose(e.$2))
                   ]),
-                  const AiBudgetPanel(purpose: 'quote_ai.comparison.v7', defaultBudget: 10000),
                   if (busy && onStop != null) TextButton(onPressed: onStop, child: const Text('停止接收')),
                   if (revisionHistory != null) revisionHistory!,
                   if (r != null) ...[

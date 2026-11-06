@@ -193,6 +193,11 @@ void main() {
     await tester.tap(find.text('关系图'));
     await settle(tester);
     expect(nightReported, isTrue);
+    expect(find.byKey(const ValueKey('history-meaning-circles')),findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip,'分类索引'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(ChoiceChip,'幸福'));
+    await settle(tester);
     expect(find.text('(32)'), findsOneWidget);
     expect(find.byType(InteractiveViewer), findsOneWidget);
     expect(find.byTooltip('洗牌（物理重排）'), findsNothing);
@@ -259,6 +264,8 @@ void main() {
         scale: 2);
     expect(tester.takeException(), isNull);
     await capture(tester, 'history-large-text');
+    await tester.tap(find.widgetWithText(ChoiceChip,'分类索引'));
+    await settle(tester);
     await tester.tap(find.byTooltip('全部类别'));
     await settle(tester);
     await tester.enterText(

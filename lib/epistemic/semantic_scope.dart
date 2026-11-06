@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../models/quote_insight.dart';
 import 'concept_analysis.dart';
 import 'aligned_analysis_case.dart';
+import 'semantic_graph_wire.dart';
 
 class ScopeSource {
   final String id, text, title, origin;
@@ -23,7 +24,7 @@ enum EpistemicViewKind {
   grounds('四重根据'),
   abstraction('直观与抽象'),
   hierarchy('概念树'),
-  connections('语义关系'),
+  connections('关系与直观'),
   judgment('判断力');
 
   const EpistemicViewKind(this.label);
@@ -42,6 +43,8 @@ class SemanticContext {
   final List<String> requestedViews;
   final String inquiry;
   final List<AlignedAnalysisCase> existingCases;
+  final String reviewFeedback;
+  final Map<String, dynamic>? previousAnalysis;
   const SemanticContext(
       {this.purpose = '',
       this.conditions = '',
@@ -52,16 +55,25 @@ class SemanticContext {
       this.existingHierarchy = const [],
       this.existingLinks = const [],
       this.existingRelations = const [],
-      this.requestedViews = const [], this.inquiry = '', this.existingCases = const []});
+      this.requestedViews = const [], this.inquiry = '', this.existingCases = const [],
+      this.reviewFeedback = '', this.previousAnalysis});
   SemanticContext withViews(List<String> views) => SemanticContext(purpose:purpose, conditions:conditions,
       conceptId:conceptId, conceptLabel:conceptLabel, conceptDefinition:conceptDefinition,
       existingConcepts:existingConcepts, existingHierarchy:existingHierarchy, existingLinks:existingLinks,
-      existingRelations:existingRelations, requestedViews:views, inquiry:inquiry, existingCases:existingCases);
+      existingRelations:existingRelations, requestedViews:views, inquiry:inquiry, existingCases:existingCases,
+      reviewFeedback:reviewFeedback, previousAnalysis:previousAnalysis);
   SemanticContext withInquiry(String value) => SemanticContext(purpose: purpose,
       conditions: conditions, conceptId: conceptId, conceptLabel: conceptLabel,
       conceptDefinition: conceptDefinition, existingConcepts: existingConcepts,
       existingHierarchy: existingHierarchy, existingLinks: existingLinks,
-      existingRelations: existingRelations, requestedViews: requestedViews, inquiry: value, existingCases: existingCases);
+      existingRelations: existingRelations, requestedViews: requestedViews, inquiry: value, existingCases: existingCases,
+      reviewFeedback:reviewFeedback, previousAnalysis:previousAnalysis);
+  SemanticContext withReview(String feedback, Map<String,dynamic>? previous) => SemanticContext(
+      purpose:purpose,conditions:conditions,conceptId:conceptId,conceptLabel:conceptLabel,
+      conceptDefinition:conceptDefinition,existingConcepts:existingConcepts,existingHierarchy:existingHierarchy,
+      existingLinks:existingLinks,existingRelations:existingRelations,requestedViews:requestedViews,
+      inquiry:inquiry,existingCases:existingCases,reviewFeedback:feedback,previousAnalysis:previous);
+  Map<String,dynamic> cacheJson() => toJson()..remove('review_request');
   Map<String, dynamic> toJson() => {
         'purpose': purpose,
         'conditions': conditions,
@@ -70,6 +82,7 @@ class SemanticContext {
         'concept_definition': conceptDefinition,
         if (requestedViews.isNotEmpty) 'requested_views': requestedViews,
         if (inquiry.isNotEmpty) 'inquiry': inquiry,
+        if (reviewFeedback.isNotEmpty) 'review_request': {'feedback':reviewFeedback,'previous_analysis':previousAnalysis},
         if (existingCases.isNotEmpty) 'existing_cases': existingCases.map((c) => c.toJson()).toList(),
         if (existingConcepts.isNotEmpty)
           'existing_concepts': existingConcepts
@@ -196,6 +209,8 @@ class ConceptMeaningLink {
     'preference',
     'analogy',
     'association',
+    'part_of',
+    'constraint',
   };
   final String from, to, kind, explanation, status;
   final List<ScopeReference> references;
@@ -276,9 +291,10 @@ class SemanticRelation {
 class GroundDiagram {
   final String kind, from, to, link, status, position, temporalRelation;
   final List<ScopeReference> references;
+  final List<String> premises, experienceIds;
   const GroundDiagram(
       this.kind, this.from, this.to, this.link, this.status, this.references,
-      {this.position = '', this.temporalRelation = 'unspecified'});
+      {this.position = '', this.temporalRelation = 'unspecified',this.premises=const [],this.experienceIds=const []});
   bool get textualProjection => (kind == 'evidence' && RegExp(r'原句措辞|原文措辞').hasMatch(from)) ||
       (['time','space'].contains(kind) && RegExp(r'原句|句中|所给出.*背景|时间背景|向内.*发现').hasMatch('$from $to'));
   String get limitation => switch (kind) {
@@ -304,6 +320,8 @@ class GroundDiagram {
         'link': link,
         'status': status,
         'references': references.map((r) => r.toJson()).toList(),
+        if(premises.isNotEmpty)'premises':premises,
+        if(experienceIds.isNotEmpty)'experience_ids':experienceIds,
       };
 }
 
@@ -345,7 +363,7 @@ class SemanticScope {
   final String model;
   final int sourceVersion;
   final String materialKind;
-  final String analysisPurpose, selectionStrategy;
+  final String analysisPurpose, selectionStrategy, analysisSummary;
   final List<AlignedAnalysisCase> alignedCases;
   final List<SemanticProposition> propositions;
   bool get legacy => sourceVersion < version;
@@ -353,7 +371,7 @@ class SemanticScope {
       {this.model = '',
       this.sourceVersion = version,
       this.materialKind = 'unknown',
-      this.analysisPurpose = '', this.selectionStrategy = '', this.alignedCases = const [],
+      this.analysisPurpose = '', this.selectionStrategy = '', this.alignedCases = const [],this.analysisSummary='',
       this.propositions = const [],
       this.concepts = const [],
       this.hierarchy = const [],
@@ -363,6 +381,7 @@ class SemanticScope {
       this.recommendedView});
 
   bool get hasContent =>
+      analysisSummary.isNotEmpty ||
       alignedCases.isNotEmpty || propositions.isNotEmpty ||
       relations.isNotEmpty ||
       grounds.isNotEmpty ||
@@ -385,11 +404,11 @@ class SemanticScope {
   List<EpistemicViewKind> get availableViews => [
         if (scopeRelations.isNotEmpty) EpistemicViewKind.circles,
         if (meaningfulGrounds.isNotEmpty) EpistemicViewKind.grounds,
-        if (concepts.any((c) =>
+        if (alignedCases.isNotEmpty || concepts.any((c)=>c.kind!='concept') || concepts.any((c) =>
             [c.observed, c.retained, c.omitted].any((s) => s.isNotEmpty)))
           EpistemicViewKind.abstraction,
         if (classEdges.isNotEmpty || hierarchy.any((e) => ['mediation', 'grounding', 'instance'].contains(e.kind))) EpistemicViewKind.hierarchy,
-        if (meaningLinks.isNotEmpty || relations.any((r) => r.scope == null && r.nodeIds.length == 2)) EpistemicViewKind.connections,
+        if (hierarchy.isNotEmpty || meaningLinks.isNotEmpty || relations.any((r) => r.scope == null && r.nodeIds.length == 2)) EpistemicViewKind.connections,
         if (propositions.isNotEmpty ||
             judgments.isNotEmpty ||
             relations.any((r) => r.scope == null))
@@ -409,7 +428,7 @@ class SemanticScope {
   /// Malformed items are isolated; a wholly unusable reply is still an error.
   static SemanticScope parse(dynamic raw, List<ScopeSource> sources,
       {String model = '', List<SemanticConcept> knownConcepts = const [], List<ConceptHierarchyEdge> knownHierarchy = const []}) {
-    final map = insightObject(raw);
+    final map = GroundedGraphWire.normalize(insightObject(raw),known:{for(final c in knownConcepts)c.id:c.toJson()},sources:{for(final s in sources)s.id:s.text});
     final originalTexts = {for (final s in sources) s.id: s.text};
     final alignedCases = <AlignedAnalysisCase>[];
     final caseIssues = <AnalysisIssue>[];
@@ -932,6 +951,10 @@ class SemanticScope {
         if (status == 'example' && !refs(m['references']).any((r) => alignedCases.any((c) => c.id == r.source))) {
           throw const FormatException('教学案例根据须引用已明确标注的相关案例');
         }
+        final experienceIds = strings(m['experience_ids']);
+        if (experienceIds.any((id) => !nodes.containsKey(id) || !['experience','formal'].contains(nodes[id]!.kind))) {
+          throw const FormatException('认识根据的直观内容须引用已有的具体经验或形式构造');
+        }
         grounds.add(GroundDiagram(
             kind,
             insightText(m, 'from'),
@@ -939,7 +962,8 @@ class SemanticScope {
             insightText(m, 'link'),
             status,
             refs(m['references']),
-            position: position, temporalRelation: temporal.isEmpty ? 'unspecified' : temporal));
+            position: position, temporalRelation: temporal.isEmpty ? 'unspecified' : temporal,
+            premises:strings(m['premises']),experienceIds:experienceIds));
       });
     }
     for (final entry in items('judgments', 64).indexed) {
@@ -1057,6 +1081,7 @@ class SemanticScope {
         alignedCases: alignedCases,
         analysisPurpose: insightText(map, 'analysis_purpose'),
         selectionStrategy: insightText(map, 'selection_strategy'),
+        analysisSummary: insightText(map, 'analysis_summary'),
         sourceVersion:
             (map['source_schema_version'] ?? map['schema_version']) is int
                 ? (map['source_schema_version'] ?? map['schema_version']) as int
@@ -1111,6 +1136,7 @@ class SemanticScope {
         alignedCases: combine(alignedCases, other.alignedCases, (c) => c.id),
         analysisPurpose: other.analysisPurpose.isEmpty ? analysisPurpose : other.analysisPurpose,
         selectionStrategy: other.selectionStrategy.isEmpty ? selectionStrategy : other.selectionStrategy,
+        analysisSummary: other.analysisSummary.isEmpty ? analysisSummary : other.analysisSummary,
         propositions: combine(propositions, other.propositions, (p) => p.id),
         concepts: combine(concepts, other.concepts, (c) => c.id),
         hierarchy: combine(hierarchy, other.hierarchy,
@@ -1127,7 +1153,7 @@ class SemanticScope {
         'schema_version': version,
         'source_schema_version': sourceVersion,
         'material_kind': materialKind,
-        'analysis_purpose': analysisPurpose, 'selection_strategy': selectionStrategy,
+        'analysis_purpose': analysisPurpose, 'selection_strategy': selectionStrategy,'analysis_summary':analysisSummary,
         'aligned_cases': alignedCases.map((c) => c.toJson()).toList(),
         'propositions': propositions.map((p) => p.toJson()).toList(),
         'recommended_view': recommendedView?.name,

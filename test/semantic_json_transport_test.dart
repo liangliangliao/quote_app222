@@ -178,7 +178,7 @@ void main() {
     });
   });
   test(
-      'mid-JSON disconnect never becomes a paid repair or a cached partial map',
+      'mid-JSON disconnect saves raw failure for review without caching a drawable map or paid repair',
       () async {
     var calls = 0;
     await serverTest((request) async {
@@ -196,6 +196,10 @@ void main() {
           await service.cached(const [ScopeSource('A', passage)], '半截 JSON',
               context: readingMapContext),
           isNull);
+      final failed = (await service.archive.history(
+          const [ScopeSource('A', passage)], '半截 JSON', readingMapContext)).first;
+      expect(failed.status, 'failed');
+      expect(failed.raw, contains('concepts'));
     });
   });
   test(
@@ -222,7 +226,7 @@ void main() {
               purpose: 'cognition.semantic.v3',
               expectJson: true),
           throwsA(isA<SemanticRequestException>()
-              .having((e) => e.message, 'message', contains('上限'))));
+              .having((e) => e.message, 'message', contains('未完整返回'))));
       expect(calls, 1);
     });
   });

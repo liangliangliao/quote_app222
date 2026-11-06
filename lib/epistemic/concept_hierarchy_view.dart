@@ -11,11 +11,12 @@ class ConceptCanvas extends StatefulWidget {
   final Size size;
   final Widget child;
   final String title;
+  final double height;
   const ConceptCanvas(
       {super.key,
       required this.size,
       required this.child,
-      required this.title});
+      required this.title, this.height = 350});
   @override
   State<ConceptCanvas> createState() => _ConceptCanvasState();
 }
@@ -38,7 +39,7 @@ class _ConceptCanvasState extends State<ConceptCanvas> {
   @override
   void didUpdateWidget(ConceptCanvas old) {
     super.didUpdateWidget(old);
-    if (old.size != widget.size || old.child.key != widget.child.key)
+    if (old.size != widget.size || old.height != widget.height || old.child.key != widget.child.key)
       fitted = false;
   }
 
@@ -79,9 +80,11 @@ class _ConceptCanvasState extends State<ConceptCanvas> {
                                                   constraints.maxHeight))))))))
         ]),
         SizedBox(
-            height: 350,
+            height: widget.height,
             child: LayoutBuilder(builder: (context, box) {
-              viewport = Size(box.maxWidth, 350);
+              final nextViewport = Size(box.maxWidth, widget.height);
+              if (viewport != nextViewport) fitted = false;
+              viewport = nextViewport;
               if (!fitted) {
                 fitted = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {

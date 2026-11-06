@@ -106,7 +106,7 @@ void main() {
     final good=await SemanticScopeService().validateResponse(wangForms(),sources,'持志',config,context:readingMapContext);
     expect(good.needsRepair,isFalse);
     final prompt=SemanticScopeService.buildPrompt(sources,'持志',context:readingMapContext);
-    expect(prompt,contains('requested_views'));expect(prompt,contains('intersection_id'));expect(prompt,contains('A 类属投影'));
+    expect(prompt,contains('requested_views'));expect(prompt,contains('intersection_id'));expect(prompt,contains('part_of'));
   });
   test('retaining the condition cannot justify strengthening fear into necessity',() {
     final result=PropositionConsistency.check('若只死死守着，必然于工夫上发病。',

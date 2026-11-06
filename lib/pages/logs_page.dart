@@ -7,6 +7,7 @@ import 'dart:async';
 import '../data/dao.dart';
 import '../services/native_guard.dart';
 import '../utils/debug_logger.dart';
+import '../utils/ai_log_display.dart';
 
 class LogsPage extends StatefulWidget {
   const LogsPage({super.key, this.loadLogs});
@@ -204,7 +205,7 @@ class _LogsPageState extends State<LogsPage> {
 
     return _ParsedLog(
       raw: e,
-      detail: detail,
+      detail: isAi || provider.toLowerCase().contains('azure') || module.startsWith('ai.') ? aiLogDisplayDetail(detail) : detail,
       taskName: taskName,
       timestamp: ts,
       module: module,
@@ -220,6 +221,7 @@ class _LogsPageState extends State<LogsPage> {
 
   List<_ParsedLog> get _filteredLogs {
     return _items.map(_parseLog).where((e) {
+      if (e.module.startsWith('ai.usage.')) return false;
       if (_type != _LogType.all && e.type != _type) return false;
       if (_moduleFilter != '全部模块' && e.module != _moduleFilter) return false;
       if (_providerFilter != '全部提供商' && e.provider != _providerFilter) return false;
@@ -231,6 +233,7 @@ class _LogsPageState extends State<LogsPage> {
   List<String> get _moduleOptions {
     final set = <String>{'全部模块'};
     for (final item in _items.map(_parseLog)) {
+      if (item.module.startsWith('ai.usage.')) continue;
       set.add(item.module);
     }
     return set.toList()..sort((a, b) => a.compareTo(b));
@@ -466,7 +469,7 @@ class _LogsPageState extends State<LogsPage> {
         displayWidgets.add(
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
-            child: Text(currentGroup!, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            child: Text(currentGroup, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
           ),
         );
       }

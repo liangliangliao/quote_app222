@@ -1,3 +1,4 @@
+import 'history_meaning_view.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -44,6 +45,7 @@ class _QuoteKnowledgeConstellationState
   QuoteKnowledgeGraph? _graph;
   List<Map<String, dynamic>> _quotes = [];
   String? _selected, _focus, _error;
+  bool _meaning = true;
   bool _tree = false, _more = false, _loadingMore = false;
   int _generation = 0, _quoteGeneration = 0;
   StreamSubscription<void>? _changes;
@@ -85,9 +87,8 @@ class _QuoteKnowledgeConstellationState
       setState(() {
         _graph = g;
         _error = null;
-        if (!active.any((c) => c.id == _selected))
-          _selected = active.where((c) => c.name == '幸福').firstOrNull?.id ??
-              active.firstOrNull?.id;
+        if (_selected!=null && !active.any((c) => c.id == _selected))
+          _selected = null;
         if (g.category(_focus ?? '') == null) _focus = null;
       });
       await _loadQuotes();
@@ -257,7 +258,7 @@ class _QuoteKnowledgeConstellationState
                           ? Center(
                               child: TextButton(
                                   onPressed: _load,
-                                  child: Text(_error ?? '正在读取概念星图…')))
+                                  child: Text(_error ?? '正在读取已保存的概念关系…')))
                           : ListView(
                               key: const ValueKey(
                                   'history-constellation-scroll'),
@@ -290,11 +291,18 @@ class _QuoteKnowledgeConstellationState
                                             icon: const Icon(Icons.more_horiz,
                                                 color: Colors.white70))
                                       ])),
+                                  Wrap(spacing:8,children:[
+                                    ChoiceChip(label:const Text('含义圈'),selected:_meaning,onSelected:(_)=>setState(()=>_meaning=true)),
+                                    ChoiceChip(label:const Text('分类索引'),selected:!_meaning,onSelected:(_)=>setState(()=>_meaning=false)),
+                                  ]),
+                                  if(_meaning)HistoryMeaningView(repository:_repository,quotes:_quotes,
+                                    category:_selected,categoryLabel:g.category(_selected??'')?.name??'全部名言',query:widget.query)
+                                  else ...[
                                   Row(children: [
                                     Expanded(
                                         child: Text(
                                             _focus == null
-                                                ? '概念星图'
+                                                ? '主题索引 · 归类导航'
                                                 : '${g.category(_focus!)?.name ?? ''} · 下位主题',
                                             style: const TextStyle(
                                                 fontSize: 12,
@@ -324,7 +332,7 @@ class _QuoteKnowledgeConstellationState
                                                 : Icons.account_tree_outlined,
                                             size: 19)),
                                     IconButton(
-                                        tooltip: '关系依据',
+                                        tooltip: '归类依据',
                                         onPressed: _showEdges,
                                         icon: const Icon(Icons.info_outline,
                                             size: 19)),
@@ -358,6 +366,7 @@ class _QuoteKnowledgeConstellationState
                                                       context, _repository),
                                               child: const Text('整理名言分类')),
                                         ])),
+                                  ],
                                   Row(children: [
                                     Expanded(
                                         child: Text(
@@ -602,7 +611,7 @@ class _QuoteKnowledgeConstellationState
                           Positioned.fill(
                               child: CustomPaint(
                                   painter: _ConstellationPainter(
-                                      positions, g.edges, _selected))),
+                                      positions, g.edges.where((e) => e.kind == 'subtopic').toList(), _selected))),
                           for (final c in visible)
                             Positioned(
                                 left: positions[c.id]!.dx - sizes[c.id]! / 2,
@@ -613,7 +622,7 @@ class _QuoteKnowledgeConstellationState
                               left: 0,
                               right: 0,
                               bottom: 3,
-                              child: Text('双指缩放 · 双击主题展开下位类别',
+                              child: Text('双指缩放 · 双击主题展开下位类别；连线仅表示分类归属',
                                   maxLines: 2,
                                   style: TextStyle(
                                       fontSize: 10, color: Colors.white38))),

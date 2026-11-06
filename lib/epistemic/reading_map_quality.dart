@@ -167,6 +167,16 @@ class ReadingMapQuality {
       issues.add(const AnalysisIssue('reading.meaning_spheres',
           '本次回复漏掉了含义圈：应继续按当前考量寻找共同规定和可说明的比较尺度；必要时将核心概念映射到共同经验论域，明确判准与范围。尚未返回关系不表示概念之间没有联系。'));
     }
+    if (requestedViews.contains('connections') &&
+        value.hierarchy.isEmpty &&
+        value.meaningLinks.isEmpty) {
+      issues.add(const AnalysisIssue(
+          'reading.connections', '本次请求的概念关系与直观链尚未返回，需要给出具体端点、关系类型及依据。'));
+    }
+    if (requestedViews.contains('grounds') && value.grounds.isEmpty) {
+      issues.add(const AnalysisIssue(
+          'reading.grounds', '本次请求的认识根据尚未返回，需要明示支持判断的前提及其适用条件；引文定位不能替代推理。'));
+    }
     // Depth, length and number of circles are descriptive statistics only.
     // A short definition may be sufficient; a long argument must retain the
     // intermediaries it actually needs. Neither receives a numeric quality score.

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import '../epistemic/comparison_revisions.dart';
-import '../widgets/ai_budget_panel.dart';
 import '../services/ai_request_audit.dart';
 import 'quote_comparison_prototype.dart';
 import 'package:flutter/material.dart';
@@ -199,8 +198,7 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
       if (mounted && n == _generation) setState(() => _message = error.message);
     } catch (error) {
       if (mounted && n == _generation)
-        setState(() => _message = error.toString().contains('实际额度') ? error.toString()
-            : '暂时无法比较。请检查网络和全局 AI 设置后重试；原句与已有分析仍可阅读。');
+        setState(() => _message = '暂时无法比较。请检查网络和全局 AI 设置后重试；原句与已有分析仍可阅读。');
     } finally {
       if (mounted && n == _generation) setState(() => _busy = false);
     }
@@ -333,7 +331,6 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const AiBudgetPanel(purpose: 'quote_ai.comparison.v7', defaultBudget: 10000),
                       _history(),
                       Row(
                         children: [

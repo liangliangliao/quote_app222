@@ -422,9 +422,9 @@ void main() {
     expect(PhilosophyBenchmarkService.reviewStatus(run), 'passed');
     (run['review'] as Map)[philosophyReviewDimensions.first] = 'issue';
     expect(PhilosophyBenchmarkService.reviewStatus(run), 'issues');
-    expect(philosophyCases.length, 9);
-    expect(philosophyCases.last.id, 'I');
-    expect(philosophyCases.last.requiredViews, ['hierarchy','circles']);
+    expect(philosophyCases.length, 10);
+    expect(philosophyCases.last.id, 'J');
+    expect(philosophyCases.last.requiredViews, ['connections','circles','grounds']);
   });
   test('concurrent operations retain independent audit scopes', () async {
     final a = AiOperation('a'), b = AiOperation('b');

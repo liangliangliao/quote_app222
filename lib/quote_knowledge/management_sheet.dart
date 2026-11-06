@@ -231,13 +231,8 @@ class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
                         children: [
                           Text(
                               '本轮 AI ${u.used}/${u.limit} 次 · 本地初分 ${u.local} 条 · 复用 ${u.cached} 条'),
-                          const SizedBox(height: 6),
-                          Text(
-                              '本轮用量估算 ${u.estimatedUsed}；应用不设置输出 Token 上限，以供应商返回的实际用量为准。',
-                              style: const TextStyle(
-                                  fontSize: 11, color: Colors.black54)),
                           if (u.stopped || u.exhausted)
-                            const Text('本轮预算已达上限，AI已暂停；可按需开始下一轮。'),
+                            const Text('本轮请求次数已达上限，AI已暂停；可按需开始下一轮。'),
                           DropdownButtonFormField<int>(
                               initialValue: _requestLimit,
                               decoration: const InputDecoration(
@@ -251,7 +246,7 @@ class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
                                   ? null
                                   : (v) =>
                                       setState(() => _requestLimit = v ?? 3)),
-                          const Text('首次失败后最多再重试3次，成功项不重发；每次重试均计入本轮预算，用完暂停。',
+                          const Text('首次失败后最多再重试3次，成功项不重发；每次重试均计入本轮请求次数，用完暂停。',
                               style: TextStyle(fontSize: 11, height: 1.5)),
                         ])),
               Wrap(spacing: 8, children: [
@@ -262,7 +257,7 @@ class _QuoteKnowledgeManagementState extends State<QuoteKnowledgeManagement> {
                         : () => _run(
                             () => widget.repository
                                 .enqueueBackfill(requestLimit: _requestLimit),
-                            '已开始本地优先整理，AI调用受本轮预算限制。'),
+                            '已开始本地优先整理，AI调用受本轮请求次数限制。'),
                     icon: const Icon(Icons.auto_awesome),
                     label: const Text('一键分批整理旧记录')),
                 TextButton.icon(

@@ -26,6 +26,8 @@ on:
       - 'lib/data/db.dart'
       - 'lib/pages/home_page.dart'
       - 'lib/pages/history_page.dart'
+      - 'lib/pages/logs_page.dart'
+      - 'lib/utils/ai_log_display.dart'
       - 'lib/widgets/poster_pure_flutter.dart'
       - 'lib/widgets/quote_reading_insights.dart'
       - 'lib/widgets/quote_comparison_sheet.dart'
@@ -68,6 +70,8 @@ on:
       - 'lib/data/db.dart'
       - 'lib/pages/home_page.dart'
       - 'lib/pages/history_page.dart'
+      - 'lib/pages/logs_page.dart'
+      - 'lib/utils/ai_log_display.dart'
       - 'lib/widgets/poster_pure_flutter.dart'
       - 'lib/widgets/quote_reading_insights.dart'
       - 'lib/widgets/quote_comparison_sheet.dart'
@@ -116,6 +120,8 @@ jobs:
         run: >-
           flutter analyze --no-pub
           lib/epistemic lib/quote_knowledge
+          lib/pages/logs_page.dart lib/utils/ai_log_display.dart
+          test/cognitive_durable_graph_test.dart test/cognitive_durable_widgets_test.dart
           lib/services/semantic_json_transport.dart
           lib/services/ai_request_accounting.dart lib/services/ai_request_audit.dart
           lib/services/global_ai_request_settings.dart lib/services/ai_output_policy.dart lib/widgets/ai_budget_panel.dart
@@ -142,6 +148,7 @@ jobs:
       - name: Test both modes, real entries and original quote layout
         run: >-
           flutter test --no-pub --reporter expanded
+          test/cognitive_durable_graph_test.dart test/cognitive_durable_widgets_test.dart
           test/quote_knowledge_test.dart test/quote_knowledge_widgets_test.dart
           test/quote_knowledge_economy_test.dart
           test/cognitive_core_test.dart test/cognitive_extended_test.dart

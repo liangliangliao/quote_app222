@@ -20,6 +20,9 @@ class PassageScopeView extends StatelessWidget {
   final String? imagePath;
   final bool showCircles;
   final SemanticScopeService? service;
+  final GlobalKey<SemanticScopePanelState>? panelKey;
+  final bool showActions,showHeader,allowIllustration;
+  final VoidCallback? onStateChanged;
   const PassageScopeView(
       {super.key,
       required this.text,
@@ -32,7 +35,8 @@ class PassageScopeView extends StatelessWidget {
       this.onOpenConcept,
       this.imagePath,
       this.showCircles = true,
-      this.service});
+      this.service,this.panelKey,this.showActions=true,this.showHeader=true,
+      this.allowIllustration=true,this.onStateChanged});
   @override
   Widget build(BuildContext context) =>
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -48,7 +52,7 @@ class PassageScopeView extends StatelessWidget {
           const Text('已有名言配画 · 帮助理解的视觉类比', style: TextStyle(fontSize: 12)),
         ],
         SemanticScopePanel(
-            key: ValueKey(text),
+            key: panelKey ?? ValueKey(text),
             sources: [ScopeSource('A', text, origin: origin)],
             initial: legacyConceptView(text, abstractions, scopes),
             service: service,
@@ -56,10 +60,11 @@ class PassageScopeView extends StatelessWidget {
             preferredView: preferredView,
             allowCircles: showCircles,
             showViewSelector: preferredView == null,
+            showActions:showActions,showHeader:showHeader,onStateChanged:onStateChanged,
             onResult: onResult,
             onOpenConcept: onOpenConcept,
             focus: '分析整句中的概念及其关系'),
-        if (readingIllustration(text) != null)
+        if (allowIllustration && readingIllustration(text) != null)
           ExpansionTile(title: const Text('可选教学模拟 · 不作为原句根据'), children: [
             SemanticScopeView(
                 value: readingIllustration(text)!,
