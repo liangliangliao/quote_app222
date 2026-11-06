@@ -29,7 +29,7 @@ for prp_attempt in 1 2; do
   if flutter drive --no-pub --no-dds --verbose --driver=test_driver/prp_acceptance_driver.dart \
     --target=integration_test/prp_acceptance_test.dart \
     --use-application-binary=build/prp/acceptance/app-debug.apk \
-    --no-enable-impeller -d "$prp_device" --timeout=900 \
+    --no-enable-impeller --keep-app-running -d "$prp_device" --timeout=900 \
     >build/prp/device-evidence/flutter-drive.log 2>&1; then
     prp_drive_ok=true
     break
@@ -44,10 +44,43 @@ for prp_attempt in 1 2; do
   adb -s "$prp_device" wait-for-device
   adb -s "$prp_device" shell am force-stop com.example.quote_app
 done
+timeout 60 adb -s "$prp_device" wait-for-device
+# Device files are written only after every UI/database assertion has passed.
+# Keep the app installed so native instrumentation sees the same local ledger.
+prp_device_report=false
+if adb -s "$prp_device" exec-out run-as com.example.quote_app cat app_flutter/prp-ci/flutter-results.json \
+    >build/prp/device-evidence/flutter-results.json; then
+  if python3 - <<'PY'
+import json,os,pathlib
+p=pathlib.Path('build/prp/device-evidence/flutter-results.json')
+d=json.loads(p.read_text())
+assert d['source_sha']==os.environ['PRP_SOURCE_SHA']
+assert d['ui_acceptance']=='passed' and len(d['captured_screenshots'])==14
+assert all(pathlib.Path(n).name==n and n.endswith('.png') for n in d['captured_screenshots'])
+PY
+  then
+    prp_device_report=true
+    while IFS= read -r prp_name; do
+      adb -s "$prp_device" exec-out run-as com.example.quote_app cat "app_flutter/prp-ci/$prp_name" \
+        >"build/prp/device-evidence/$prp_name"
+    done < <(python3 -c "import json;print('\n'.join(json.load(open('build/prp/device-evidence/flutter-results.json'))['captured_screenshots']))")
+  fi
+fi
+# A successful device report cannot overrule any assertion/teardown failure.
+# It can recover the documented ADB disconnect after the test runner passed.
+if [ "$prp_drive_ok" != true ] && [ "$prp_device_report" = true ] && \
+    rg -q 'All tests passed' build/prp/device-evidence/flutter-drive.log && \
+    rg -q 'Service connection disposed' build/prp/device-evidence/flutter-drive.log && \
+    ! rg -q 'TestFailure|Some tests failed|Failure in method:' build/prp/device-evidence/flutter-drive.log; then
+  prp_drive_ok=true
+fi
+if [ "$prp_device_report" != true ]; then prp_drive_ok=false; fi
 if [ "$prp_drive_ok" != true ]; then
   tail -n 120 build/prp/device-evidence/flutter-drive.log
 fi
-adb -s "$prp_device" install -r build/prp/acceptance/app-debug-androidTest.apk
+adb -s "$prp_device" install -r -t build/prp/acceptance/app-debug-androidTest.apk
+adb -s "$prp_device" shell pm list instrumentation >build/prp/device-evidence/instrumentation.txt
+rg 'com.example.quote_app.PrpAcceptanceProbe' build/prp/device-evidence/instrumentation.txt
 adb -s "$prp_device" shell am instrument -w \
   com.example.quote_app.test/com.example.quote_app.PrpAcceptanceProbe \
   >build/prp/device-evidence/native-probe.log 2>&1

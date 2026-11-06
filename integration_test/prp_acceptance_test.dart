@@ -113,13 +113,23 @@ void main() {
     }
 
     var surfaceReady = false;
+    final captureDir = Directory('${fixtureDir.path}/prp-ci');
+    await captureDir.create(recursive: true);
+    final capturedScreenshots = <String>[];
     Future<void> shot(String name) async {
       if (!surfaceReady) {
         await binding.convertFlutterSurfaceToImage();
         surfaceReady = true;
       }
       await tester.pump(const Duration(milliseconds: 350));
-      await binding.takeScreenshot(name);
+      final bytes = await binding.takeScreenshot(name);
+      expect(bytes.length, greaterThan(100));
+      await File('${captureDir.path}/$name.png')
+          .writeAsBytes(bytes, flush: true);
+      capturedScreenshots.add('$name.png');
+      // Returning fourteen PNGs as JSON integer arrays can drop the emulator's
+      // ADB connection. Pull the real captures from app-private files instead.
+      binding.reportData?.remove('screenshots');
     }
 
     Future<void> back() async {
@@ -304,6 +314,7 @@ void main() {
             .where((r) => '${r['title']}'.startsWith('PRP')),
         hasLength(1));
 
+    expect(tester.takeException(), isNull);
     binding.reportData = {
       ...?binding.reportData,
       'source_sha': PrpBuildInfo.sourceSha,
@@ -316,8 +327,10 @@ void main() {
       'own_quote_sql_pollution': false,
       'off_preserved_data': true,
       'clear_removed_audio': true,
+      'captured_screenshots': capturedScreenshots,
       'physical_device': false
     };
-    expect(tester.takeException(), isNull);
+    await File('${captureDir.path}/flutter-results.json')
+        .writeAsString(jsonEncode(binding.reportData), flush: true);
   }, timeout: const Timeout(Duration(minutes: 12)));
 }

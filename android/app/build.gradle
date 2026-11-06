@@ -38,7 +38,9 @@ android {
         versionCode flutter.versionCode
         versionName flutter.versionName
         multiDexEnabled true
-        testInstrumentationRunner "com.example.quote_app.ReminderProbe"
+        testInstrumentationRunner(project.findProperty("prpAcceptance") == "true"
+            ? "com.example.quote_app.PrpAcceptanceProbe"
+            : "com.example.quote_app.ReminderProbe")
     }
 
     if (keystorePropertiesFile.exists()) {
