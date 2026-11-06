@@ -108,8 +108,12 @@ if [ "$prp_drive_ok" != true ] || [ "$prp_native_ok" != true ]; then
 fi
 adb -s "$prp_device" logcat -d >build/prp/device-evidence/logcat.txt
 python3 - <<'PY'
-import hashlib,json,os,pathlib
+import hashlib,json,os,pathlib,re
 folder=pathlib.Path('build/prp/device-evidence')
+logcat=(folder/'logcat.txt').read_text(errors='replace')
+for fatal in re.finditer(r'FATAL EXCEPTION:',logcat):
+    crash=logcat[fatal.start():fatal.start()+2000]
+    assert not re.search(r'Process: (com\.example\.quote_app|com\.android\.systemui)\b',crash),crash
 native=json.loads((folder/'native-results.json').read_text())
 flutter=json.loads((folder/'flutter-results.json').read_text())
 assert native['status']=='passed'

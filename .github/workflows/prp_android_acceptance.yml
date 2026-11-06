@@ -100,6 +100,9 @@ jobs:
           api-level: ${{ matrix.api }}
           target: google_apis
           arch: x86_64
+          # The default custom AVD has no Android 8 navigation bar fragment;
+          # its System UI crashes when the existing alarm covers keyguard.
+          profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none -camera-front none
           script: bash tool/prp_acceptance.sh
