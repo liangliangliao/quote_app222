@@ -1,0 +1,19 @@
+{
+  "source_sha": "5ce4d70dfc97a44d6a988f136b6f15ea0087a711",
+  "build_sha": "5ce4d70dfc97a44d6a988f136b6f15ea0087a711",
+  "source_tree": "62cb3166a6253205c1edc253f087597d99fb7996",
+  "build_tree": "62cb3166a6253205c1edc253f087597d99fb7996",
+  "apk": "quote-app-5ce4d70dfc97-run1688.apk",
+  "sha256": "aeb22629f43f73e323882e8107d26ea93b0f91c8febf46e99022a62cc017448d",
+  "certificate_sha256": "73982b58bb0aae7e48c20592c1e251c3a0fdbf831d5b7694d3f2f7477a04afab",
+  "package": "com.example.quote_app",
+  "min_sdk": 26,
+  "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86_64"
+  ],
+  "release": true,
+  "version_name": "1.1.0",
+  "version_code": 15
+}

@@ -1,0 +1,33 @@
+{
+  "api_level": 26,
+  "hardware": "ranchu",
+  "physical_device": false,
+  "passed": [
+    "master_off_no_exposure",
+    "native_opt_in_required",
+    "daily_budget_shared",
+    "quiet_window",
+    "crisis_ttl",
+    "enemy_mute",
+    "unrelated_context_hidden",
+    "service_overlay_form_share_one_exposure",
+    "destroyed_flutter_session_releases_native_gate",
+    "adoption_idempotent_pending",
+    "audio_owned_path_and_duration",
+    "native_form_actual_view",
+    "repeated_refresh_keeps_current_card_visible",
+    "local_audio_played",
+    "off_hides_card_and_stops_voice",
+    "existing_ringing_service_audio",
+    "native_overlay_actual_view",
+    "overlay_service_no_duplicate_exposure",
+    "explicit_result_once_no_false_failure",
+    "settled_recall_not_reoffered"
+  ],
+  "status": "passed",
+  "screenshot_methods": {
+    "native_01_on": "ui_automation",
+    "native_02_off": "ui_automation",
+    "native_03_overlay": "ui_automation"
+  }
+}

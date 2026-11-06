@@ -1,0 +1,29 @@
+{
+  "source_sha": "4f61139112ac4e68036242a8626653aa53640c13",
+  "ui_acceptance": "passed",
+  "pause_actual_seconds": 60,
+  "sealed_and_persisted": true,
+  "forecast_actual_ui": true,
+  "particle_no_failure_event": true,
+  "local_recording": true,
+  "own_quote_sql_pollution": false,
+  "off_preserved_data": true,
+  "clear_removed_audio": true,
+  "captured_screenshots": [
+    "android_01_off.png",
+    "android_02_enabled.png",
+    "android_03_pause.png",
+    "android_04_seal_preview.png",
+    "android_05_sealed.png",
+    "android_06_forecast.png",
+    "android_07_particles_pressed.png",
+    "android_08_particles_released.png",
+    "android_09_draft_quotes.png",
+    "android_10_playbook_audio.png",
+    "android_11_observations.png",
+    "android_12_own_quote.png",
+    "android_13_safety.png",
+    "android_14_off_retained.png"
+  ],
+  "physical_device": false
+}

@@ -1,0 +1,36 @@
+{
+  "source_sha": "4f61139112ac4e68036242a8626653aa53640c13",
+  "run_url": "https://github.com/liangliangliao/quote_app222/actions/runs/42220803402",
+  "job_url": "https://github.com/liangliangliao/quote_app222/actions/runs/42220803402/job/127902060555",
+  "required_tests": {
+    "plugin": 111,
+    "affected_regressions": 49,
+    "total": 160,
+    "status": "passed"
+  },
+  "core_analysis": "No issues found",
+  "integration_analysis": {
+    "errors": 0,
+    "existing_lint_notices": 249
+  },
+  "android_arm64_flutter_bundle": "passed",
+  "existing_beautiful_enemy_baseline": {
+    "passed": 179,
+    "failed": 5,
+    "required_prp_gate": false,
+    "comparison": "../baseline-comparison.txt"
+  },
+  "log_summary": [
+    "2026-11-06T12:51:53.1167961Z No issues found! (ran in 26.5s)",
+    "2026-11-06T12:52:04.8456936Z 249 issues found. (ran in 11.1s)",
+    "2026-11-06T12:53:19.5725848Z 01:05 +111: All tests passed!",
+    "2026-11-06T12:54:09.5822054Z 00:16 +49: All tests passed!",
+    "2026-11-06T12:54:20.0986777Z 00:06 +90 -1: /home/runner/work/quote_app222/quote_app222/test/beautiful_enemy/enemy_patrol_test.dart: 主动巡查 发呆：这段时间里有过新记录就不点名；会话太短也不点名；后台没有会话 [E]",
+    "2026-11-06T12:54:20.5970346Z 00:07 +98 -2: /home/runner/work/quote_app222/quote_app222/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 刚上线先记起点；之后没有新动静就是没有新动静 [E]",
+    "2026-11-06T12:54:20.7392753Z 00:07 +98 -3: /home/runner/work/quote_app222/quote_app222/test/beautiful_enemy/enemy_patrol_test.dart: 自检：它为什么没开口 静音、静默时段、间隔、上限各有各的原因 [E]",
+    "2026-11-06T12:54:21.3814393Z 00:07 +107 -4: /home/runner/work/quote_app222/quote_app222/test/beautiful_enemy/enemy_host_test.dart: 证据来源 行为记录不含预设打卡生成的和 AI 每日总结 [E]",
+    "2026-11-06T12:54:21.5473811Z 00:07 +112 -5: /home/runner/work/quote_app222/quote_app222/test/beautiful_enemy/enemy_host_test.dart: AI 判词解析 截止时间缺失或已过期：用默认两小时，不废掉整条判词 [E]",
+    "2026-11-06T12:54:23.6287043Z 00:10 +179 -5: Some tests failed.",
+    "2026-11-06T12:54:26.4862696Z Source package: /home/runner/work/quote_app222/quote_app222/build/prp/quote_app_prp_v1.1.0.zip (36523426 bytes)"
+  ]
+}

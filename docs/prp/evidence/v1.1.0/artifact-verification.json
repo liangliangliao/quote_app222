@@ -1,0 +1,38 @@
+{
+  "source_sha": "4f61139112ac4e68036242a8626653aa53640c13",
+  "device_run_url": "https://github.com/liangliangliao/quote_app222/actions/runs/42220803343",
+  "physical_device": false,
+  "device_artifacts": [
+    {
+      "name": "prp-android-api-26-evidence",
+      "id": 13503978216,
+      "bytes": 1979394,
+      "sha256": "b62751d840608b1394fc9931d25b512c5ed58de59ea3222eed1c374d0404d81f",
+      "zip_crc": "passed",
+      "screenshots": 17,
+      "screenshot_sha256": "passed",
+      "native_checks": 20,
+      "application_and_system_ui_crash_guard": "passed"
+    },
+    {
+      "name": "prp-android-api-35-evidence",
+      "id": 13503254680,
+      "bytes": 3151174,
+      "sha256": "f7bf7dd1d5d634852372afdbb4b6bc390a39072b4e1fbe43bdfeee1877a23514",
+      "zip_crc": "passed",
+      "screenshots": 17,
+      "screenshot_sha256": "passed",
+      "native_checks": 20,
+      "application_and_system_ui_crash_guard": "passed"
+    }
+  ],
+  "release_artifact": {
+    "id": 13501373626,
+    "name": "quote-app-5ce4d70dfc97-run1688",
+    "bytes": 111982038,
+    "sha256": "49b155d2c8c26101065ef29c2049a2bf52768e536d0302d985bafa7488dbb5bf",
+    "zip_crc": "passed",
+    "apk_crc": "passed",
+    "apk_sha256": "aeb22629f43f73e323882e8107d26ea93b0f91c8febf46e99022a62cc017448d"
+  }
+}

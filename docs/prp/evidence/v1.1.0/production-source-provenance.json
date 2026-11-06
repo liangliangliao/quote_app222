@@ -1,0 +1,53 @@
+{
+  "release_source_sha": "5ce4d70dfc97a44d6a988f136b6f15ea0087a711",
+  "device_test_source_sha": "4f61139112ac4e68036242a8626653aa53640c13",
+  "identical_application_source": true,
+  "compared_git_objects": [
+    {
+      "path": "lib",
+      "release_git_object": "79ffaab1a9894936d3d7c314e4b60f745b960f3d",
+      "device_test_git_object": "79ffaab1a9894936d3d7c314e4b60f745b960f3d",
+      "identical": true
+    },
+    {
+      "path": "android",
+      "release_git_object": "72847a3c26ff0a23011e64f445e9152070fa8cc3",
+      "device_test_git_object": "72847a3c26ff0a23011e64f445e9152070fa8cc3",
+      "identical": true
+    },
+    {
+      "path": "assets",
+      "release_git_object": "b56ac031a9599c99ab461b00d9aa51323675e750",
+      "device_test_git_object": "b56ac031a9599c99ab461b00d9aa51323675e750",
+      "identical": true
+    },
+    {
+      "path": "pubspec.yaml",
+      "release_git_object": "90f61a46d984d7890b2b947e91fd39f37bf0eb79",
+      "device_test_git_object": "90f61a46d984d7890b2b947e91fd39f37bf0eb79",
+      "identical": true
+    },
+    {
+      "path": "pubspec.lock",
+      "release_git_object": "3821a1ea3125166f1bdfa8b4b8eafccc04574d9c",
+      "device_test_git_object": "3821a1ea3125166f1bdfa8b4b8eafccc04574d9c",
+      "identical": true
+    },
+    {
+      "path": ".github/workflows/android_build_source_repo.yml",
+      "release_git_object": "c10a341b25a53ef8b447c920c171837ccad8cb89",
+      "device_test_git_object": "c10a341b25a53ef8b447c920c171837ccad8cb89",
+      "identical": true
+    }
+  ],
+  "ci_run_url": "https://github.com/liangliangliao/quote_app222/actions/runs/42220803402",
+  "release_run_url": "https://github.com/liangliangliao/quote_app222/actions/runs/42215899915",
+  "device_test_run_url": "https://github.com/liangliangliao/quote_app222/actions/runs/42220803343",
+  "artifact_id": 13501373626,
+  "artifact_sha256": "49b155d2c8c26101065ef29c2049a2bf52768e536d0302d985bafa7488dbb5bf",
+  "acceptance_device_apis": [
+    26,
+    35
+  ],
+  "physical_device": false
+}
