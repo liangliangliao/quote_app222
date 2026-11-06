@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Hosted Ubuntu images may omit ripgrep. Keep the CI checks portable.
+prp_find() {
+  if command -v rg >/dev/null 2>&1; then command rg "$@";
+  else command grep -E "$@"; fi
+}
+
 prp_device="${PRP_DEVICE:-emulator-5554}"
 test "$(adb -s "$prp_device" shell getprop ro.kernel.qemu | tr -d '\r')" = "1"
 mkdir -p build/prp/device-evidence
@@ -37,8 +43,8 @@ for prp_attempt in 1 2; do
   cp build/prp/device-evidence/flutter-drive.log "build/prp/device-evidence/flutter-drive-attempt-$prp_attempt.log"
   # Retry only a VM attachment failure before any test executes. Never retry
   # assertions, application crashes, or a partially completed product workflow.
-  if ! rg -q 'Failed to register service methods.*Service connection disposed' build/prp/device-evidence/flutter-drive.log || \
-      rg -q 'TestFailure|Some tests failed|Failure in method:' build/prp/device-evidence/flutter-drive.log; then
+  if ! prp_find -q 'Failed to register service methods.*Service connection disposed' build/prp/device-evidence/flutter-drive.log || \
+      prp_find -q 'TestFailure|Some tests failed|Failure in method:' build/prp/device-evidence/flutter-drive.log; then
     break
   fi
   adb -s "$prp_device" wait-for-device
@@ -69,9 +75,9 @@ fi
 # A successful device report cannot overrule any assertion/teardown failure.
 # It can recover the documented ADB disconnect after the test runner passed.
 if [ "$prp_drive_ok" != true ] && [ "$prp_device_report" = true ] && \
-    rg -q 'All tests passed' build/prp/device-evidence/flutter-drive.log && \
-    rg -q 'Service connection disposed' build/prp/device-evidence/flutter-drive.log && \
-    ! rg -q 'TestFailure|Some tests failed|Failure in method:' build/prp/device-evidence/flutter-drive.log; then
+    prp_find -q 'All tests passed' build/prp/device-evidence/flutter-drive.log && \
+    prp_find -q 'Service connection disposed' build/prp/device-evidence/flutter-drive.log && \
+    ! prp_find -q 'TestFailure|Some tests failed|Failure in method:' build/prp/device-evidence/flutter-drive.log; then
   prp_drive_ok=true
 fi
 if [ "$prp_device_report" != true ]; then prp_drive_ok=false; fi
@@ -80,12 +86,12 @@ if [ "$prp_drive_ok" != true ]; then
 fi
 adb -s "$prp_device" install -r -t build/prp/acceptance/app-debug-androidTest.apk
 adb -s "$prp_device" shell pm list instrumentation >build/prp/device-evidence/instrumentation.txt
-rg 'com.example.quote_app.PrpAcceptanceProbe' build/prp/device-evidence/instrumentation.txt
+prp_find 'com.example.quote_app.PrpAcceptanceProbe' build/prp/device-evidence/instrumentation.txt
 adb -s "$prp_device" shell am instrument -w \
   com.example.quote_app.test/com.example.quote_app.PrpAcceptanceProbe \
   >build/prp/device-evidence/native-probe.log 2>&1
 prp_native_ok=false
-if rg 'PRP_NATIVE_ACCEPTANCE_PASS' build/prp/device-evidence/native-probe.log; then
+if prp_find 'PRP_NATIVE_ACCEPTANCE_PASS' build/prp/device-evidence/native-probe.log; then
   prp_native_ok=true
   for prp_name in native_01_on.png native_02_off.png native_03_overlay.png native-results.json; do
     adb -s "$prp_device" exec-out run-as com.example.quote_app cat "files/prp-ci/$prp_name" \

@@ -58,8 +58,9 @@ jobs:
         run: |
           mkdir -p build/prp/acceptance
           cp build/app/outputs/apk/androidTest/debug/app-debug-androidTest.apk build/prp/acceptance/
-          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest print build/prp/acceptance/app-debug-androidTest.apk | rg 'com.example.quote_app.PrpAcceptanceProbe'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest print build/prp/acceptance/app-debug-androidTest.apk | grep -F 'com.example.quote_app.PrpAcceptanceProbe'
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: prp-device-test-apks
           path: build/prp/acceptance/
