@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../prp_plugin.dart';
 import '../runtime.dart';
-import 'session_card.dart';
 import 'presentation.dart';
+import 'feature_pages.dart';
 
 class PrpPlaybook extends StatefulWidget {
   const PrpPlaybook(
@@ -138,6 +138,8 @@ class _PrpPlaybookState extends State<PrpPlaybook> {
                                   '无效：${lesson.failed.isEmpty ? '待补充' : lesson.failed.join('；')}'),
                               if (lesson.earlySignal.isNotEmpty)
                                 Text('预警：${lesson.earlySignal}'),
+                              if (lesson.insight.isNotEmpty)
+                                Text('这次看见：${lesson.insight}'),
                               if (lesson.ifCue.isNotEmpty ||
                                   lesson.thenAction.isNotEmpty)
                                 Padding(
@@ -187,6 +189,48 @@ class _PrpPlaybookState extends State<PrpPlaybook> {
                                           r.setQuoteAllowed(lesson, v)),
                                 if (lesson.isSealed && r.preferences.voice)
                                   PrpVoiceControl(runtime: r, lesson: lesson),
+                                if (lesson.isSealed &&
+                                    r.enabledFor(PrpSurface.enemy))
+                                  TextButton.icon(
+                                      icon:
+                                          const Icon(Icons.assignment_outlined),
+                                      label: const Text('确认后转成字据'),
+                                      onPressed: () async {
+                                        final hours = await showDialog<int>(
+                                            context: context,
+                                            builder: (ctx) => SimpleDialog(
+                                                    title: const Text(
+                                                        '把这条教训转成字据？'),
+                                                    children: [
+                                                      const Padding(
+                                                          padding:
+                                                              EdgeInsets.all(
+                                                                  16),
+                                                          child: Text(
+                                                              '不设置赌注；由敌人沿用原有护栏检查。请选择截止时间。')),
+                                                      for (final h in [
+                                                        2,
+                                                        24,
+                                                        48
+                                                      ])
+                                                        SimpleDialogOption(
+                                                            onPressed: () =>
+                                                                Navigator.pop(
+                                                                    ctx, h),
+                                                            child:
+                                                                Text('$h 小时后'))
+                                                    ]));
+                                        if (hours == null) return;
+                                        final message =
+                                            await r.convertToCommitment(
+                                                lesson,
+                                                r.clock().add(
+                                                    Duration(hours: hours)));
+                                        if (context.mounted)
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(SnackBar(
+                                                  content: Text(message)));
+                                      }),
                               ],
                             ]))),
             ])));
@@ -264,8 +308,7 @@ class _PrpRecallChipState extends State<PrpRecallChip> {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                            '上次盖印的话 · 尚未验证 · 类似结果第 ${lesson.repeatedCount + 1} 次',
+                        Text('上次盖印的话 · 尚未验证 · 类似情况第 ${recall.similarCount} 次',
                             style:
                                 const TextStyle(fontWeight: FontWeight.w600)),
                         Text('有效：${lesson.worked.join('；')}',
@@ -276,6 +319,8 @@ class _PrpRecallChipState extends State<PrpRecallChip> {
                             style: const TextStyle(fontSize: 17, height: 1.5)),
                         const Text('这次要试一下吗？有结果再记账；没有记录就保持未验证。',
                             style: TextStyle(fontSize: 12)),
+                        PrpAdoptionButton(
+                            runtime: widget.runtime, recall: recall),
                         Wrap(spacing: 8, children: [
                           TextButton(
                               onPressed: _busy
@@ -439,7 +484,7 @@ class _PrpVoiceControlState extends State<PrpVoiceControl>
   @override
   Widget build(BuildContext context) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('录一句 15 秒以内的提醒，可以叫自己的名字。录音只保存在本机。',
+        const Text('录一句 15 秒以内的提醒，用自己的称呼开头，例如“小林，先打开书读 1 页”。录音只保存在本机。',
             style: TextStyle(fontSize: 12)),
         Wrap(spacing: 8, children: [
           OutlinedButton.icon(

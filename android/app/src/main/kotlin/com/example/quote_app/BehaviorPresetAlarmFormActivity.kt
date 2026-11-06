@@ -400,6 +400,7 @@ class BehaviorPresetAlarmFormActivity : Activity() {
     val root = baseRoot()
     root.addView(title(if (presets.length() > 1) "预设提醒（${presets.length()}项）" else "预设提醒"))
     root.addView(desc("这是提醒你查看或确认这个闹钟时刻对应的预设，不是要求你现在完成行为。实际完成情况仍可在“预设”页的每日确认清单中处理。"))
+    root.addView(PrpAlarmCard(this,payload))
 
     if (presets.length() <= 0) {
       root.addView(card("预设", payload.optString("presetName", "今天的预设行为")))

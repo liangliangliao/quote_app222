@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <instrumentation android:name="com.example.quote_app.PrpAcceptanceProbe"
+        android:targetPackage="com.example.quote_app" android:functionalTest="true" />
+</manifest>

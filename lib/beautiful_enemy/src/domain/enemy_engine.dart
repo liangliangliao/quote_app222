@@ -237,7 +237,7 @@ class EnemyEngine {
     return overdue.length;
   }
 
-  Future<void> _commitmentEvent(EnemyCommitment c, String type, int ts) async {
+  Future<void> _commitmentEvent(EnemyCommitment c, String type, int ts, {bool confirmedByUser = false}) async {
     final DateTime d = DateTime.fromMillisecondsSinceEpoch(ts);
     await dao.insertEvent(EventDraft(
       ts: ts,
@@ -249,6 +249,7 @@ class EnemyEngine {
         'subject': 'commitment:${c.id}',
         'label': c.text,
         'day': _dayKey(d),
+        if(type == 'commitment_missed' && confirmedByUser) 'confirmed_by_user': true,
       },
     ));
   }
@@ -339,7 +340,7 @@ class EnemyEngine {
     if (c == null || c.status != CommitmentStatus.open) return;
     final int now = nowMs();
     await dao.setCommitmentStatus(c.id, CommitmentStatus.missed);
-    await _commitmentEvent(c, 'commitment_missed', now);
+    await _commitmentEvent(c, 'commitment_missed', now, confirmedByUser: true);
     if (c.verdictId != null) {
       await dao.setVerdictOutcome(c.verdictId!, 'missed', now);
     }

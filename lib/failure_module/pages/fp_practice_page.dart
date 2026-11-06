@@ -70,6 +70,13 @@ class _FpPracticePageState extends State<FpPracticePage> {
 
   @override
   Widget build(BuildContext context) {
+    final content = _body(context);
+    return Scaffold.maybeOf(context) == null
+        ? Scaffold(appBar: AppBar(title: const Text('失败与完美主义 · 行动')), body: content)
+        : content;
+  }
+
+  Widget _body(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_err != null) return Center(child: Text(_err!));
 

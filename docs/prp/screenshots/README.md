@@ -4,8 +4,8 @@
 
 | 图片 | 内容 |
 | --- | --- |
-| [PRP_01_settings_off.png](PRP_01_settings_off.png) | v1.0.1 初始总开关关闭、直接开始入口及版本 |
-| [PRP_02_settings_on.png](PRP_02_settings_on.png) | v1.0.1 开启后的开始按钮、盖印数量和调用点条件 |
+| [PRP_01_settings_off.png](PRP_01_settings_off.png) | v1.1.0 初始总开关关闭、直接开始入口及版本 |
+| [PRP_02_settings_on.png](PRP_02_settings_on.png) | v1.1.0 开启后的快捷功能、开始按钮、盖印数量和调用点条件 |
 | [PRP_03_pause.png](PRP_03_pause.png) | 缓一缓，无分析控件 |
 | [PRP_04_seal_preview.png](PRP_04_seal_preview.png) | 双栏摘要、如果—那么、自己的名言同意和盖印预览 |
 | [PRP_05_playbook.png](PRP_05_playbook.png) | 已盖印手册和自己的名言同意 |

@@ -5,6 +5,8 @@ import '../../prp_plugin.dart';
 import '../build_info.dart';
 import '../runtime.dart';
 import 'presentation.dart';
+import 'feature_pages.dart';
+import 'experiments.dart';
 
 class PrpSettingsPage extends StatefulWidget {
   const PrpSettingsPage({super.key, required this.runtime});
@@ -87,7 +89,7 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
           context: context,
           builder: (ctx) => StatefulBuilder(
               builder: (ctx, update) => AlertDialog(
-                    title: const Text('先了解这 30 秒'),
+                    title: const Text('先了解一下 PRP'),
                     content: SingleChildScrollView(
                         child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -167,6 +169,51 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
     } finally {
       if (mounted) setState(() => _opening = false);
     }
+  }
+
+  Future<void> _openExtra(String feature) async {
+    final p = r.preferences;
+    if (!r.enabled) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请先开启插件。')));
+      return;
+    }
+    final selected = switch (feature) {
+      'forecast' => p.forecasts,
+      'particles' => p.particles,
+      _ => p.draftQuotes
+    };
+    if (!selected) {
+      final yes = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+                  title: Text(switch (feature) {
+                    'forecast' => '开启痛感对照？',
+                    'particles' => '开启光迹实验？',
+                    _ => '开启废稿短句？'
+                  }),
+                  content: const Text('只在本机使用，不会自动开启 AI 或发送通知。可随时在设置关闭。'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('先不开启')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('开启并进入'))
+                  ]));
+      if (yes != true || !mounted) return;
+      await _save(r.preferences.copyWith(
+          forecasts: feature == 'forecast' ? true : null,
+          particles: feature == 'particles' ? true : null,
+          draftQuotes: feature == 'quotes' ? true : null));
+    }
+    if (!mounted || !r.enabled) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => switch (feature) {
+              'forecast' => PrpForecastPage(runtime: r),
+              'particles' => PrpParticlesPage(runtime: r),
+              _ => PrpDraftQuotesPage(runtime: r)
+            }));
   }
 
   Future<void> _export() async {
@@ -250,6 +297,32 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
                     subtitle: const Text('关闭后，相关提示和界面都会消失，已保存的教训保留。'),
                     value: p.enabled,
                     onChanged: _saving ? null : _enable),
+                Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Wrap(spacing: 8, runSpacing: 8, children: [
+                      ActionChip(
+                          key: const ValueKey('prp_quick_forecast'),
+                          label: const Text('痛感对照'),
+                          onPressed:
+                              _saving ? null : () => _openExtra('forecast')),
+                      ActionChip(
+                          key: const ValueKey('prp_quick_particles'),
+                          label: const Text('光迹实验'),
+                          onPressed:
+                              _saving ? null : () => _openExtra('particles')),
+                      ActionChip(
+                          key: const ValueKey('prp_quick_quotes'),
+                          label: const Text('废稿短句'),
+                          onPressed:
+                              _saving ? null : () => _openExtra('quotes')),
+                      ActionChip(
+                          label: const Text('本地观察'),
+                          onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      PrpObservationPage(runtime: r)))),
+                    ])),
                 Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
                     child: FilledButton.icon(
@@ -371,10 +444,76 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
                         : (v) => _save(p.copyWith(manuscript: v))),
                 SwitchListTile(
                     title: const Text('自己的声音'),
-                    subtitle: const Text('手动录制、手动播放；每段最多 15 秒，仅保存在本机。'),
+                    subtitle: const Text('每段最多 15 秒，仅保存在本机；原生闹钟播放需另外开启。'),
                     value: p.voice,
                     onChanged:
                         _saving ? null : (v) => _save(p.copyWith(voice: v))),
+                _heading('对照与提醒'),
+                SwitchListTile(
+                    title: const Text('痛感对照'),
+                    subtitle: const Text('先记预测，再补实际；只作本地自我观察。'),
+                    value: p.forecasts,
+                    onChanged: _saving
+                        ? null
+                        : (v) => _save(p.copyWith(forecasts: v))),
+                ListTile(
+                    key: const ValueKey('prp_forecast_entry'),
+                    title: const Text('预测与实际记录'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                            builder: (_) => PrpForecastPage(runtime: r)))),
+                SwitchListTile(
+                    title: const Text('原生闹钟显示教训'),
+                    subtitle: const Text('行为预设闹钟中显示一条匹配的盖印教训，沿用每日回访限额。'),
+                    value: p.nativeReminders,
+                    onChanged: _saving
+                        ? null
+                        : (v) => _save(p.copyWith(nativeReminders: v))),
+                SwitchListTile(
+                    title: const Text('原生闹钟播放自己的提示'),
+                    subtitle: Text(!p.nativeReminders
+                        ? '先开启“原生闹钟显示教训”。'
+                        : p.voice
+                            ? '到点时播放已保存的本地录音，最多 15 秒；可在表单手动重播。'
+                            : '先开启“自己的声音”并保存一段录音。'),
+                    value: p.nativeVoice,
+                    onChanged: _saving || !p.voice || !p.nativeReminders
+                        ? null
+                        : (v) => _save(p.copyWith(nativeVoice: v))),
+                _heading('小实验与练习句'),
+                SwitchListTile(
+                    title: const Text('潮汐光迹'),
+                    subtitle: const Text('按住时散开，松手后回落；不计分，不记失败。'),
+                    value: p.particles,
+                    onChanged: _saving
+                        ? null
+                        : (v) => _save(p.copyWith(particles: v))),
+                ListTile(
+                    key: const ValueKey('prp_particles_entry'),
+                    title: const Text('打开光迹实验'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: r.enabled && p.particles
+                        ? () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                                builder: (_) => PrpParticlesPage(runtime: r)))
+                        : null),
+                SwitchListTile(
+                    title: const Text('废稿短句内容包'),
+                    subtitle: const Text('本地创作的练习句，非名人引言，不自动进入名言库或教训。'),
+                    value: p.draftQuotes,
+                    onChanged: _saving
+                        ? null
+                        : (v) => _save(p.copyWith(draftQuotes: v))),
+                ListTile(
+                    key: const ValueKey('prp_draft_quotes_entry'),
+                    title: const Text('浏览废稿短句'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: r.enabled && p.draftQuotes
+                        ? () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                                builder: (_) => PrpDraftQuotesPage(runtime: r)))
+                        : null),
                 _heading('AI'),
                 SwitchListTile(
                     title: const Text('允许把复盘文字发给 AI'),
@@ -385,6 +524,15 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
                         ? null
                         : (v) => _save(p.copyWith(aiConsent: v))),
                 _heading('我的数据'),
+                ListTile(
+                    key: const ValueKey('prp_observation_entry'),
+                    leading: const Icon(Icons.insights_outlined),
+                    title: const Text('我的本地观察'),
+                    subtitle: const Text('会话、盖印、采纳、验证与情绪配对评分；不上传'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                            builder: (_) => PrpObservationPage(runtime: r)))),
                 ListTile(
                     leading: const Icon(Icons.auto_stories_outlined),
                     title: const Text('我的教训手册'),
@@ -429,7 +577,7 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
                 const Padding(
                     padding: EdgeInsets.all(20),
                     child: Text(
-                        '本插件不替代心理治疗，也不承诺疗效。观察指标只存本地。原生闹钟和火种中途退出的规则保持原有行为。',
+                        '本插件不替代心理治疗，也不承诺疗效。观察指标只存本地。原生教训和录音需单独开启；收到提醒或退出火种都不算失败。',
                         style: TextStyle(fontSize: 12, color: Colors.grey))),
               ]));
   }

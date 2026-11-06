@@ -10,6 +10,8 @@ abstract class PrpHost {
   Future<PrpGovernance> governance();
   Future<void> safetyExit({bool crisis = true});
   Future<void> sessionStarted();
+  Future<void> nativeStateChanged(Map<String, dynamic> state);
+  Future<String> commitmentFromLesson(PrpLesson lesson, DateTime due);
   Future<String?> callAi(String task, Map<String, dynamic> input);
   Future<void> lessonSealed(PrpLesson lesson, int sessionId);
   Future<String> authorName();
@@ -40,6 +42,11 @@ class NoopPrpHost extends PrpHost {
   Future<void> safetyExit({bool crisis = true}) async {}
   @override
   Future<void> sessionStarted() async {}
+  @override
+  Future<void> nativeStateChanged(Map<String, dynamic> state) async {}
+  @override
+  Future<String> commitmentFromLesson(PrpLesson lesson, DateTime due) async =>
+      '当前宿主尚不支持创建字据。';
   @override
   Future<String?> callAi(String task, Map<String, dynamic> input) async => null;
   @override

@@ -21,7 +21,16 @@ class PrpBehaviorAdapter {
         whereArgs: [preset],
         orderBy: 'check_date_ms DESC',
         limit: 7);
+    final days = await recentDays(
+        signal.subjectKey, DateTime.fromMillisecondsSinceEpoch(signal.tsMs), 7);
+    final done = days.where((d) => d.status == 'done').length;
+    final missed = days.where((d) => d.status == 'missed').length;
     return [
+      PrpEvidence(
+          source: 'habit_summary',
+          id: '$preset:${signal.tsMs}',
+          label:
+              '近 7 天记录：完成 $done 天、明确未完成 $missed 天、未记录或跳过 ${7 - done - missed} 天（不算失败）'),
       for (final row in rows) ...[
         PrpEvidence(
             source: 'habit',

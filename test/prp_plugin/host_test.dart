@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:quote_app/beautiful_enemy/beautiful_enemy.dart';
@@ -127,6 +129,70 @@ void main() {
   });
 
   test(
+      'commitment history counts all explicit outcomes, excluding automatic expiry and absent days',
+      () async {
+    final dao = EnemyDao(f.db);
+    await dao.ensureSchema();
+    final engine = EnemyEngine(
+        dao: dao, oracle: const LocalFactOracle(), clock: f.clock.call);
+    final done = await engine.addCommitment('打开书读一页',
+        due: f.clock.now.add(const Duration(hours: 1)));
+    await engine.complete(done.id!);
+    final missed = await engine.addCommitment('把草稿写一页',
+        due: f.clock.now.add(const Duration(hours: 1)));
+    await engine.markMissed(missed.id!);
+    final expired = await engine.addCommitment('给窗台花浇水',
+        due: f.clock.now.subtract(const Duration(hours: 1)));
+    expect(await engine.settleOverdue(), 1);
+    expect(
+        (await dao.commitment(expired.id!))!.status, CommitmentStatus.missed);
+    final outcomes =
+        await f.db.query('be_event', where: "type='commitment_missed'");
+    expect(
+        outcomes.where((r) =>
+            (jsonDecode('${r['payload']}') as Map)['confirmed_by_user'] ==
+            true),
+        hasLength(1));
+    final days = await PrpEnemyAdapter(() async => f.db)
+        .recentDays('commitment:${done.id}', f.clock.now, 30);
+    expect(days, hasLength(30));
+    expect(days.last.status, 'mixed');
+    expect(days.last.completions, 1);
+    expect(days.last.misses, 1);
+    expect(days.where((d) => d.status == 'unknown'), hasLength(29));
+  });
+
+  test(
+      'explicit lesson conversion respects host switch and creates one unstaked commitment',
+      () async {
+    final dao = EnemyDao(f.db);
+    await dao.ensureSchema();
+    await f.enable();
+    final lesson = await f.seal();
+    final host =
+        PrpHostImpl(openDatabase: () async => f.db, clock: f.clock.call);
+    final due = f.clock.now.add(const Duration(hours: 2));
+    await dao.setBoolSetting(EnemySettings.enabled, false);
+    expect(await host.commitmentFromLesson(lesson, due), contains('停用'));
+    expect(await f.db.query('be_commitment'), isEmpty);
+    await dao.setBoolSetting(EnemySettings.enabled, true);
+    final results = await Future.wait([
+      host.commitmentFromLesson(lesson, due),
+      host.commitmentFromLesson(lesson, due)
+    ]);
+    expect(results.first, contains('已创建字据'));
+    expect(results.last, contains('已有字据'));
+    final row = (await f.db.query('be_commitment')).single;
+    expect(row['text'], lesson.rule);
+    expect(row['stake'], '');
+    expect(row['origin'], 'prp_lesson:${lesson.id}');
+    await f.runtime
+        .updatePreferences(f.runtime.preferences.copyWith(enabled: false));
+    expect(await host.commitmentFromLesson(lesson, due), contains('先开启'));
+    expect(await f.db.query('be_commitment'), hasLength(1));
+  });
+
+  test(
       'enemy reads PRP only through explicit per-source consent, and off exports nothing',
       () async {
     await f.enable();
@@ -162,15 +228,18 @@ void main() {
       'failure-module result and learning card are written together and idempotently',
       () async {
     final adapter = await failureAdapter();
-    final lesson = f
-        .lesson(source: PrpSurface.failureModule)
-        .copyWith(id: 11, state: 'sealed', sealedMs: 100);
+    final lesson = f.lesson(source: PrpSurface.failureModule, sentences: const [
+      PrpSentence('先读一页也留下了一个开始', PrpSentenceKind.interpretation,
+          purpose: 'insight')
+    ]).copyWith(id: 11, state: 'sealed', sealedMs: 100);
     await adapter.lessonSealed(lesson, 42);
     await adapter.lessonSealed(lesson, 42);
     expect(await f.db.query('fp_practice_run'), hasLength(1));
     expect(await f.db.query('fp_learning_card'), hasLength(1));
     expect((await f.db.query('fp_learning_card')).single['body'],
         contains(lesson.rule));
+    expect((await f.db.query('fp_learning_card')).single['body'],
+        contains(lesson.insight));
     await adapter.lessonSealed(f.lesson(source: PrpSurface.enemy), 43);
     expect(await f.db.query('fp_learning_card'), hasLength(1));
   });

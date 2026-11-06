@@ -46,7 +46,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - run: flutter pub get
       - name: Analyze plugin and adapters
-        run: flutter analyze --no-pub --no-fatal-infos lib/prp_plugin lib/prp_plugin_host test/prp_plugin
+        run: >-
+          flutter analyze --no-pub --no-fatal-infos lib/prp_plugin lib/prp_plugin_host
+          test/prp_plugin integration_test/prp_acceptance_test.dart test_driver/prp_acceptance_driver.dart
       - name: Analyze integration points
         run: >-
           flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
@@ -76,5 +78,5 @@ jobs:
         run: python3 tools/pack_prp.py
       - uses: actions/upload-artifact@v4
         with:
-          name: quote-app-prp-v1.0.1-source
-          path: build/prp/quote_app_prp_v1.0.1.zip
+          name: quote-app-prp-v1.1.0-source
+          path: build/prp/quote_app_prp_v1.1.0.zip

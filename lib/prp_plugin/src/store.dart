@@ -35,6 +35,21 @@ class PrpSchema {
       outcome TEXT NOT NULL DEFAULT 'pending', outcome_ms INTEGER,
       FOREIGN KEY(lesson_id) REFERENCES prp_lesson(id) ON DELETE CASCADE
     )''',
+    '''CREATE TABLE IF NOT EXISTS prp_forecast (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, subject_key TEXT NOT NULL,
+      label TEXT NOT NULL, created_ms INTEGER NOT NULL,
+      pred_intensity INTEGER NOT NULL CHECK(pred_intensity BETWEEN 0 AND 10),
+      pred_days REAL NOT NULL CHECK(pred_days >= 0 AND pred_days <= 365),
+      actual_intensity INTEGER CHECK(actual_intensity BETWEEN 0 AND 10),
+      actual_days REAL CHECK(actual_days >= 0 AND actual_days <= 365),
+      closed_ms INTEGER
+    )''',
+    '''CREATE TABLE IF NOT EXISTS prp_event (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL,
+      recall_id INTEGER NOT NULL, created_ms INTEGER NOT NULL,
+      UNIQUE(kind, recall_id),
+      FOREIGN KEY(recall_id) REFERENCES prp_recall(id) ON DELETE CASCADE
+    )''',
     'CREATE INDEX IF NOT EXISTS idx_prp_lesson_state ON prp_lesson(state, sealed_ms)',
     'CREATE INDEX IF NOT EXISTS idx_prp_lesson_subj ON prp_lesson(subject_key, state)',
     'CREATE INDEX IF NOT EXISTS idx_prp_recall_lesson ON prp_recall(lesson_id, ts)',
@@ -52,6 +67,18 @@ class PrpSchema {
 class PrpStore {
   PrpStore(this.openDatabase);
   final Future<Database> Function() openDatabase;
+  static const ownedTables = [
+    'prp_event',
+    'prp_forecast',
+    'prp_recall',
+    'prp_session',
+    'prp_lesson',
+  ];
+  Future<bool> tableExists(DatabaseExecutor db, String name) async =>
+      (await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+              [name]))
+          .isNotEmpty;
   Future<bool> exists(DatabaseExecutor db) async => (await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='prp_lesson'",
       ))

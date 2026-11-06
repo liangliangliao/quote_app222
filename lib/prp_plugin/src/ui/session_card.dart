@@ -9,10 +9,6 @@ import '../runtime.dart';
 import '../validator.dart';
 import 'presentation.dart';
 
-const prpTeal = Color(0xff327c78);
-const prpIndigo = Color(0xff56568b);
-const prpVermilion = Color(0xffb74435);
-
 class PrpSessionCard extends StatefulWidget {
   const PrpSessionCard(
       {super.key, required this.runtime, required this.offer, this.onFinished});
@@ -32,6 +28,7 @@ class _PrpSessionCardState extends State<PrpSessionCard>
   final _early = TextEditingController();
   final _cue = TextEditingController();
   final _action = TextEditingController();
+  final _insight = TextEditingController();
   late final _pauseWatch = widget.runtime.stopwatchFactory();
   late final _holdWatch = widget.runtime.stopwatchFactory();
   String _font = 'QuoteXingShu';
@@ -61,7 +58,7 @@ class _PrpSessionCardState extends State<PrpSessionCard>
   int get _remaining =>
       (r.preferences.pauseSeconds - _pauseSeconds).clamp(0, 180);
   List<TextEditingController> get _inputs =>
-      [_thought, _expected, _worked, _failed, _early, _cue, _action];
+      [_thought, _expected, _worked, _failed, _early, _cue, _action, _insight];
 
   @override
   void initState() {
@@ -100,7 +97,10 @@ class _PrpSessionCardState extends State<PrpSessionCard>
       _early.text = initial?.earlySignal ?? '';
       _cue.text = initial?.ifCue ?? '';
       _action.text = initial?.thenAction ?? '';
-      _sentences = initial?.sentences.toList() ?? [];
+      _sentences =
+          initial?.sentences.where((s) => s.purpose != 'insight').toList() ??
+              [];
+      _insight.text = initial?.insight ?? '';
       _thought.text = _sentences.map((s) => s.text).join('\n');
       _classifiedText = _thought.text;
       _quoteAllowed = initial?.quoteAllowed ?? false;
@@ -176,9 +176,12 @@ class _PrpSessionCardState extends State<PrpSessionCard>
                 kind: 'self_report'),
         ],
         // Self-blame is visible for sorting, but is never evidence or durable text.
-        sentences: _sentences
-            .where((s) => s.kind != PrpSentenceKind.selfBlame)
-            .toList(),
+        sentences: [
+          ..._sentences.where((s) => s.kind != PrpSentenceKind.selfBlame),
+          if (_insight.text.trim().isNotEmpty)
+            PrpSentence(_insight.text.trim(), PrpSentenceKind.interpretation,
+                purpose: 'insight')
+        ],
         parentId:
             _initial?.isSealed == true ? _initial!.id : _initial?.parentId,
         quoteAllowed: _quoteAllowed,
@@ -213,7 +216,9 @@ class _PrpSessionCardState extends State<PrpSessionCard>
         step: _step,
         pauseSeconds: _pauseSeconds,
         emotionBefore: _emotionBefore,
-        emotionAfter: _emotionAfter,
+        emotionAfter: _step == PrpStep.zoom || _step == PrpStep.done
+            ? _emotionAfter
+            : null,
         skipped: skipped);
     if (saved != null) _initial = saved;
     return saved != null;
@@ -244,13 +249,21 @@ class _PrpSessionCardState extends State<PrpSessionCard>
     _pauseWatch.stop();
     _pauseTimer?.cancel();
     _pauseTimer = null;
+    final previous = _step;
     setState(() {
       _busy = true;
       _error = '';
       _step = PrpStep.values[_step.index + 1];
     });
-    await _save();
-    if (mounted) setState(() => _busy = false);
+    final saved = await _save();
+    if (mounted)
+      setState(() {
+        _busy = false;
+        if (!saved) {
+          _step = previous;
+          _error = '这一步尚未保存。请只写具体经历，或暂时跳过存草稿。';
+        }
+      });
   }
 
   Future<void> _skip() async {
@@ -539,8 +552,10 @@ class _PrpSessionCardState extends State<PrpSessionCard>
 
   Widget _ledger() =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (widget.offer.signal.kind == 'manual')
-          _field(_expected, '原本希望做到什么？', hint: '写一件具体的事'),
+        _field(_expected, '原本希望做到什么？', hint: '写一件具体的事，可以把短目标补充清楚'),
+        if (widget.offer.signal.kind != 'manual')
+          Text('来源原文：${widget.offer.signal.expected}',
+              style: const TextStyle(fontSize: 12)),
         _ledgerTile('预期', _expected.text.isEmpty ? '还没有写下预期。' : _expected.text),
         _ledgerTile(
             '记录里',
@@ -614,6 +629,14 @@ class _PrpSessionCardState extends State<PrpSessionCard>
                               maxLines: 3, overflow: TextOverflow.ellipsis)))),
               childWhenDragging: Opacity(opacity: .35, child: _sentence(i)),
               child: _sentence(i)),
+        if (widget.offer.signal.kind != 'manual')
+          r.recallChip(PrpContext(
+              surface: widget.offer.signal.surface,
+              subjectKey: widget.offer.signal.subjectKey,
+              text: widget.offer.signal.expected,
+              category: widget.offer.signal.category,
+              location: 'repeat_detected',
+              reference: widget.offer.signal.dedupeKey)),
       ]);
 
   Widget _ledgerTile(String title, String text) => PrpLedgerReveal(
@@ -681,6 +704,7 @@ class _PrpSessionCardState extends State<PrpSessionCard>
         const Text('哪怕只是开始了、记下了。先留住那件有效的事。'),
         _field(_worked, '有效：这次有哪件事是对的？', hint: '例如：把书放到了桌上，读了 1 页'),
         _field(_failed, '无效：当时什么没起作用？', hint: '例如：坐下后打开短视频，原定时间被占满'),
+        _field(_insight, '这件事让我看见了什么？（可留空）', hint: '可以留空，不必勉强找一个积极解释。'),
         const Text('只谈做法和场景，不谈人格。每行一条。',
             style: TextStyle(fontSize: 12, color: Colors.grey)),
       ]);
@@ -806,8 +830,8 @@ class _PrpSessionCardState extends State<PrpSessionCard>
   }
 
   Widget _zoom() {
-    final done = _days.where((d) => d.status == 'done').length;
-    final missed = _days.where((d) => d.status == 'missed').length;
+    final done = _days.fold(0, (n, d) => n + d.completions);
+    final missed = _days.fold(0, (n, d) => n + d.misses);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       TweenAnimationBuilder<double>(
           tween: Tween(begin: 1.5, end: 1),
@@ -828,7 +852,7 @@ class _PrpSessionCardState extends State<PrpSessionCard>
           children: _days
               .map((d) => Tooltip(
                   message:
-                      '${DateTime.fromMillisecondsSinceEpoch(d.dateMs).toString().substring(0, 10)} · ${d.status}',
+                      '${DateTime.fromMillisecondsSinceEpoch(d.dateMs).toString().substring(0, 10)} · 完成 ${d.completions} · 未完成 ${d.misses} · ${d.status}',
                   child: Container(
                       width: 13,
                       height: 13,
@@ -838,7 +862,9 @@ class _PrpSessionCardState extends State<PrpSessionCard>
                               ? prpTeal
                               : d.status == 'missed'
                                   ? prpVermilion
-                                  : Colors.grey.shade300))))
+                                  : d.status == 'mixed'
+                                      ? prpIndigo
+                                      : Colors.grey.shade300))))
               .toList()),
       Text(done + missed < 3
           ? '数据还不够，先不下结论。'

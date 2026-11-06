@@ -31,6 +31,7 @@ class PrpFailureAdapter {
           'early_signal': lesson.earlySignal,
           'if_cue': lesson.ifCue,
           'then_action': lesson.thenAction,
+          if (lesson.insight.isNotEmpty) 'insight': lesson.insight,
           'quality': lesson.quality
         })
       });
@@ -38,7 +39,7 @@ class PrpFailureAdapter {
         'ts_ms': ts,
         'title': 'PRP · ${lesson.category}',
         'body':
-            '有效：${lesson.worked.join('；')}\n无效：${lesson.failed.join('；')}\n预警：${lesson.earlySignal}\n${lesson.rule}',
+            '有效：${lesson.worked.join('；')}\n无效：${lesson.failed.join('；')}\n预警：${lesson.earlySignal}\n${lesson.rule}${lesson.insight.isEmpty ? '' : '\n这次看见：${lesson.insight}'}',
         'tags_json': jsonEncode(['PRP', '失败成长', '已盖印'])
       });
     });

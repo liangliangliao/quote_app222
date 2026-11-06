@@ -1,6 +1,6 @@
 /// Supplied by the APK workflow so an installed build can be identified.
 abstract final class PrpBuildInfo {
-  static const version = '1.0.1';
+  static const version = '1.1.0';
   static const sourceSha = String.fromEnvironment('APP_SOURCE_SHA');
   static const sourceRef = String.fromEnvironment('APP_SOURCE_REF');
 

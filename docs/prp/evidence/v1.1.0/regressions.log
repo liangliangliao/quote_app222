@@ -1,0 +1,71 @@
+00:00 +0: loading /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart
+00:00 +0: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: a concrete, evidenced draft passes
+00:00 +1: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: no evidence, or evidence outside the digest, is rejected
+00:00 +2: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: a charge without a number or quote is not concrete
+00:00 +3: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: every action needs a due time inside the next seven days
+00:00 +4: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: tone may not exceed the effective intensity
+00:00 +5: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: identity attacks, threats and control language are banned
+00:00 +6: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: a harsh line aimed at behaviour is not banned
+00:00 +7: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: profanity is rejected at every intensity
+00:00 +8: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: fact-only drafts skip the concreteness rule but not the banned list
+00:00 +9: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: safety valve detects crisis wording and the truce word
+00:00 +10: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: intensity governor never exceeds the base and never rises on its own
+00:00 +11: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: intensity governor truce day forces fact-only
+00:00 +12: loading /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart
+00:00 +12: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: (setUpAll)
+00:00 +12: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: no copy carries an exclamation mark or a pep-talk word
+00:00 +13: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: the module never speaks of streaks, badges, ranking or sharing
+00:00 +14: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: no progress indicator or percentage is rendered
+00:00 +15: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: UI files hold no literal copy of their own
+00:00 +16: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: the module depends on nothing beyond flutter and sqflite
+00:00 +17: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: the probe ladder shows wording only, never a score
+00:00 +18: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: the recall questions keep their fixed wording and order
+00:00 +19: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: (tearDownAll)
+00:00 +19: loading /workspace/quote_app222/test/kindling/kindling_schema_test.dart
+00:00 +19: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: createAll builds every k_ table and is idempotent
+00:00 +20: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: migrate is idempotent and independent of host version numbers
+00:00 +21: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: no foreign key points outside the module
+00:00 +22: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: item schema carries no goal / plan / deadline / streak column
+00:00 +23: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: probe score is constrained to 0..4
+00:00 +24: loading /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart
+00:01 +24: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: an empty list offers 回溯, 十五分钟 and 直接写一个 only
+00:01 +25: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 直接写一个 immediately asks the verdict question
+00:02 +26: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: answering 不做 keeps the item and moves it to 放掉的
+00:02 +27: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: long press opens 换个说法 / 问一句 / 卡住了 / 放掉
+00:02 +28: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 痒度自评只给措辞，不给任何数字
+00:03 +29: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 换个说法可以顺手留一句备注
+00:03 +30: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 卡住了 only asks and ends with the fixed closing line
+00:04 +31: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 卡住了 进场立刻有第一问，不等追问器
+00:04 +32: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 回溯 turns raw answers into candidates the user may keep
+00:05 +33: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: the discover entry hands the tap back to the host
+00:05 +34: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: (tearDownAll)
+00:05 +34: loading /workspace/quote_app222/test/quote_home_refresh_test.dart
+00:06 +34: /workspace/quote_app222/test/quote_home_refresh_test.dart: (setUpAll)
+[DBG] AppDatabase opened at: /tmp/quote_home_refresh_FABXUR/quotes.db
+00:06 +34: /workspace/quote_app222/test/quote_home_refresh_test.dart: home keeps its poster on repeated refreshes and shows a newly notified quote
+【信息】[2026-11-06T07:32:34.119003][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:32:34.121972][HOME] 今日未检索到有效记录：显示默认名言
+【信息】[2026-11-06T07:32:34.285507][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:32:34.287550][HOME] 今日未检索到有效记录：显示默认名言
+【信息】[2026-11-06T07:32:35.044767][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 1
+【信息】[2026-11-06T07:32:35.049307][HOME] 已检索到今日最新已通知记录：准备注入
+00:07 +35: /workspace/quote_app222/test/quote_home_refresh_test.dart: an asynchronous original signature keeps the quote excerpt and spacing still
+【信息】[2026-11-06T07:32:35.290249][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 1
+【信息】[2026-11-06T07:32:35.292809][HOME] 已检索到今日最新已通知记录：准备注入
+00:08 +36: /workspace/quote_app222/test/quote_home_refresh_test.dart: (tearDownAll)
+00:08 +36: loading /workspace/quote_app222/test/quote_home_controls_test.dart
+00:08 +36: /workspace/quote_app222/test/quote_home_controls_test.dart: (setUpAll)
+[DBG] AppDatabase opened at: /tmp/quote_home_controls_MBVPPU/quotes.db
+00:08 +36: /workspace/quote_app222/test/quote_home_controls_test.dart: library identity and signature survive home payload normalization
+00:08 +37: /workspace/quote_app222/test/quote_home_controls_test.dart: bundled quotations can be collected and shared before any task exists
+【信息】[2026-11-06T07:32:36.386735][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:32:36.390155][HOME] 今日未检索到有效记录：显示默认名言
+00:09 +38: /workspace/quote_app222/test/quote_home_controls_test.dart: search and next quotation change the actual shared quotation
+【信息】[2026-11-06T07:32:36.725473][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:32:36.728113][HOME] 今日未检索到有效记录：显示默认名言
+00:10 +39: /workspace/quote_app222/test/quote_home_controls_test.dart: the collection remains available in a new library instance
+00:10 +40: /workspace/quote_app222/test/quote_home_controls_test.dart: more menu fits larger text and opens the saved collection
+【信息】[2026-11-06T07:32:37.434139][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-06T07:32:37.436362][HOME] 今日未检索到有效记录：显示默认名言
+00:10 +41: /workspace/quote_app222/test/quote_home_controls_test.dart: (tearDownAll)
+00:10 +41: All tests passed!

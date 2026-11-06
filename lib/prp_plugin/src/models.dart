@@ -100,20 +100,33 @@ class PrpEvidence {
 }
 
 class PrpDayMark {
-  const PrpDayMark({required this.dateMs, required this.status});
+  const PrpDayMark(
+      {required this.dateMs,
+      required this.status,
+      this.completedCount,
+      this.missedCount});
   final int dateMs;
+  final int? completedCount, missedCount;
+  int get completions => completedCount ?? (status == 'done' ? 1 : 0);
+  int get misses => missedCount ?? (status == 'missed' ? 1 : 0);
 
   /// done / missed / unknown. Unknown is never counted as missed.
   final String status;
 }
 
 class PrpSentence {
-  const PrpSentence(this.text, this.kind, {this.revision = ''});
+  const PrpSentence(this.text, this.kind,
+      {this.revision = '', this.purpose = ''});
   final String text;
   final PrpSentenceKind kind;
   final String revision;
-  Map<String, dynamic> toJson() =>
-      {'text': text, 'kind': kind.name, 'revision': revision};
+  final String purpose;
+  Map<String, dynamic> toJson() => {
+        'text': text,
+        'kind': kind.name,
+        'revision': revision,
+        if (purpose.isNotEmpty) 'purpose': purpose
+      };
   static PrpSentence fromJson(Map<String, dynamic> m) => PrpSentence(
         '${m['text'] ?? ''}',
         PrpSentenceKind.values.firstWhere(
@@ -121,6 +134,7 @@ class PrpSentence {
           orElse: () => PrpSentenceKind.interpretation,
         ),
         revision: '${m['revision'] ?? ''}',
+        purpose: '${m['purpose'] ?? ''}',
       );
 }
 
@@ -172,6 +186,8 @@ class PrpLesson {
 
   String get rule => '如果$ifCue，我就$thenAction';
   bool get isSealed => state == 'sealed';
+  String get insight =>
+      sentences.where((s) => s.purpose == 'insight').firstOrNull?.text ?? '';
 
   PrpLesson copyWith({
     int? id,
@@ -263,10 +279,14 @@ class PrpLesson {
 
 class PrpRecall {
   const PrpRecall(
-      {required this.id, required this.lesson, required this.surface});
+      {required this.id,
+      required this.lesson,
+      required this.surface,
+      this.similarCount = 1});
   final int id;
   final PrpLesson lesson;
   final PrpSurface surface;
+  final int similarCount;
 }
 
 class PrpQuote {

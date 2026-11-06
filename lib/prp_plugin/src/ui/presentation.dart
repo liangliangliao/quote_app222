@@ -2,6 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+const prpTeal = Color(0xff327c78);
+const prpIndigo = Color(0xff56568b);
+const prpVermilion = Color(0xffb74435);
+
 /// Keep the neutral paper readable inside the enemy's dark theme.
 ThemeData prpPaperTheme(BuildContext context,
         {Color seed = const Color(0xff56568b)}) =>

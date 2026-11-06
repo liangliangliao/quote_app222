@@ -22,6 +22,11 @@ class PrpPreferences {
     this.quoteStream = false,
     this.manuscript = true,
     this.voice = false,
+    this.forecasts = false,
+    this.nativeReminders = false,
+    this.nativeVoice = false,
+    this.particles = false,
+    this.draftQuotes = false,
   });
   final bool enabled;
   final Map<PrpSurface, bool> surfaces;
@@ -35,6 +40,11 @@ class PrpPreferences {
   final bool quoteStream;
   final bool manuscript;
   final bool voice;
+  final bool forecasts;
+  final bool nativeReminders;
+  final bool nativeVoice;
+  final bool particles;
+  final bool draftQuotes;
 
   PrpPreferences copyWith({
     bool? enabled,
@@ -49,6 +59,11 @@ class PrpPreferences {
     bool? quoteStream,
     bool? manuscript,
     bool? voice,
+    bool? forecasts,
+    bool? nativeReminders,
+    bool? nativeVoice,
+    bool? particles,
+    bool? draftQuotes,
   }) =>
       PrpPreferences(
         enabled: enabled ?? this.enabled,
@@ -63,6 +78,11 @@ class PrpPreferences {
         quoteStream: quoteStream ?? this.quoteStream,
         manuscript: manuscript ?? this.manuscript,
         voice: voice ?? this.voice,
+        forecasts: forecasts ?? this.forecasts,
+        nativeReminders: nativeReminders ?? this.nativeReminders,
+        nativeVoice: nativeVoice ?? this.nativeVoice,
+        particles: particles ?? this.particles,
+        draftQuotes: draftQuotes ?? this.draftQuotes,
       );
 
   Map<String, dynamic> toJson() => {
@@ -80,6 +100,11 @@ class PrpPreferences {
         'quote_stream': quoteStream,
         'manuscript': manuscript,
         'voice': voice,
+        'forecasts': forecasts,
+        'native_reminders': nativeReminders,
+        'native_voice': nativeVoice,
+        'particles': particles,
+        'draft_quotes': draftQuotes,
       };
 
   static PrpPreferences fromJson(Map<String, dynamic> m) {
@@ -103,6 +128,11 @@ class PrpPreferences {
       quoteStream: m['quote_stream'] == true,
       manuscript: m['manuscript'] != false,
       voice: m['voice'] == true,
+      forecasts: m['forecasts'] == true,
+      nativeReminders: m['native_reminders'] == true,
+      nativeVoice: m['native_voice'] == true,
+      particles: m['particles'] == true,
+      draftQuotes: m['draft_quotes'] == true,
     );
   }
 }

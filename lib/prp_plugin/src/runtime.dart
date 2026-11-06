@@ -9,6 +9,9 @@ import 'settings.dart';
 import 'store.dart';
 import 'validator.dart';
 import 'ui.dart';
+import 'enhancement_models.dart';
+
+part 'enhancements.dart';
 
 class _Cancelled implements Exception {}
 
@@ -32,6 +35,7 @@ class PrpRuntime extends PrpPlugin {
   PrpPreferences preferences = const PrpPreferences();
   Future<void>? _initializing;
   Future<void> _tail = Future.value();
+  Database? _schemaReadyDb;
   int _epoch = 0;
   int consecutiveErrors = 0;
   bool circuitOpen = false;
@@ -64,6 +68,7 @@ class PrpRuntime extends PrpPlugin {
   int sessionShown(PrpOffer offer) {
     if (!offerActive(offer)) return -1;
     _presented.update(offer.sessionId, (count) => count + 1, ifAbsent: () => 1);
+    _notifyNative();
     return _epoch;
   }
 
@@ -74,6 +79,7 @@ class PrpRuntime extends PrpPlugin {
       _presented.remove(offer.sessionId);
     else
       _presented[offer.sessionId] = count - 1;
+    _notifyNative();
   }
 
   @override
@@ -93,7 +99,7 @@ class PrpRuntime extends PrpPlugin {
       _offers.clear();
       _note('circuit_open', detail: '本次启动静默；下次启动自动恢复');
       unawaited(host.stopAudio().catchError((Object _) {}));
-      PrpPlugin.changed();
+      _publish();
     }
   }
 
@@ -106,7 +112,7 @@ class PrpRuntime extends PrpPlugin {
         } catch (e) {
           _error('settings_load', e);
         }
-        PrpPlugin.changed();
+        _publish();
       }();
 
   Future<T> _serial<T>(String name, T fallback, Future<T> Function() action) {
@@ -126,8 +132,23 @@ class PrpRuntime extends PrpPlugin {
     return result.future;
   }
 
-  void _check(int epoch, PrpSurface surface) {
-    if (epoch != _epoch || !enabledFor(surface)) throw _Cancelled();
+  void _check(int epoch, PrpSurface? surface) {
+    if (epoch != _epoch || !(surface == null ? enabled : enabledFor(surface)))
+      throw _Cancelled();
+  }
+
+  void _publish() {
+    PrpPlugin.changed();
+    _notifyNative();
+  }
+
+  void _notifyNative() {
+    unawaited(host.nativeStateChanged({
+      ...preferences.toJson(),
+      'crisis_until_ms': crisisUntilMs,
+      'circuit_open': circuitOpen,
+      'session_active': hasActiveSession,
+    }).catchError((Object _) {}));
   }
 
   Future<void> updatePreferences(PrpPreferences next) async {
@@ -139,7 +160,7 @@ class PrpRuntime extends PrpPlugin {
     _offerValues.clear();
     _evidence.clear();
     _presented.clear();
-    PrpPlugin.changed();
+    _publish();
     await _tail;
     if (!next.enabled || !next.voice) {
       try {
@@ -151,11 +172,12 @@ class PrpRuntime extends PrpPlugin {
     try {
       await settings.save(preferences);
       _note('settings_saved', detail: next.enabled ? '开' : '关');
+      _notifyNative();
     } catch (e) {
       // Fail closed if disabling could not be persisted; never re-enable a slot.
       if (next.enabled) preferences = before.copyWith(enabled: false);
       _error('settings_save', e);
-      PrpPlugin.changed();
+      _publish();
       rethrow;
     }
   }
@@ -167,16 +189,17 @@ class PrpRuntime extends PrpPlugin {
     return governance.allows;
   }
 
-  Future<Database> _db(int epoch, PrpSurface surface) async {
+  Future<Database> _db(int epoch, PrpSurface? surface) async {
     final db = await store.openDatabase();
     _check(epoch, surface);
-    if (!await store.exists(db)) {
+    if (!identical(_schemaReadyDb, db)) {
       _check(epoch, surface);
       await db.transaction((txn) async {
         _check(epoch, surface);
         await PrpSchema.createAll(txn);
         _check(epoch, surface);
       });
+      _schemaReadyDb = db;
     }
     return db;
   }
@@ -474,7 +497,7 @@ class PrpRuntime extends PrpPlugin {
         _offers.remove(offer.sessionId);
         _offerValues.remove(offer.sessionId);
       }
-      PrpPlugin.changed();
+      _publish();
       return result;
     });
   }
@@ -548,7 +571,7 @@ class PrpRuntime extends PrpPlugin {
         } catch (e) {
           _error('host_lesson_sealed', e);
         }
-        PrpPlugin.changed();
+        _publish();
       }
       return result;
     });
@@ -582,7 +605,7 @@ class PrpRuntime extends PrpPlugin {
       });
       _offers.remove(offer.sessionId);
       _offerValues.remove(offer.sessionId);
-      PrpPlugin.changed();
+      _publish();
     });
   }
 
@@ -595,7 +618,7 @@ class PrpRuntime extends PrpPlugin {
     _offers.clear();
     _offerValues.clear();
     _epoch++;
-    PrpPlugin.changed();
+    _publish();
     try {
       await host.safetyExit(crisis: crisis);
     } catch (e) {
@@ -631,7 +654,7 @@ class PrpRuntime extends PrpPlugin {
       await host.stopAudio();
     } catch (_) {}
     _note('safety_exit', detail: '暂停提议与回访 24 小时；未保存输入文字');
-    PrpPlugin.changed();
+    _publish();
   }
 
   static double similarity(String a, String b) {
@@ -729,7 +752,13 @@ class PrpRuntime extends PrpPlugin {
       if (id == null) return const [];
       _check(epoch, context.surface);
       _note('recall', detail: '${context.surface.key}: lesson ${lesson.id}');
-      return [PrpRecall(id: id, lesson: lesson, surface: context.surface)];
+      return [
+        PrpRecall(
+            id: id,
+            lesson: lesson,
+            surface: context.surface,
+            similarCount: await confirmedOccurrences(lesson, context))
+      ];
     });
   }
 
@@ -767,7 +796,7 @@ class PrpRuntime extends PrpPlugin {
             enabledFor(PrpSurface.parse('${rows.first['surface']}')))
           await _outcome(txn, rows.first, outcome, epoch);
       });
-      PrpPlugin.changed();
+      _publish();
     });
   }
 
@@ -795,7 +824,7 @@ class PrpRuntime extends PrpPlugin {
             limit: 1);
         if (rows.isNotEmpty) await _outcome(txn, rows.first, outcome, epoch);
       });
-      PrpPlugin.changed();
+      _publish();
     });
   }
 
@@ -1044,7 +1073,7 @@ class PrpRuntime extends PrpPlugin {
         }
         _check(epoch, PrpSurface.behavior);
       });
-      PrpPlugin.changed();
+      _publish();
     });
   }
 
@@ -1103,7 +1132,7 @@ class PrpRuntime extends PrpPlugin {
             where: "id = ? AND state = 'sealed'", whereArgs: [lesson.id]);
         _check(epoch, lesson.source);
       });
-      PrpPlugin.changed();
+      _publish();
     });
   }
 
@@ -1126,7 +1155,7 @@ class PrpRuntime extends PrpPlugin {
           _note('audio_cleanup_pending');
         }
       }
-      PrpPlugin.changed();
+      _publish();
       return saved;
     });
   }
@@ -1137,8 +1166,9 @@ class PrpRuntime extends PrpPlugin {
     final db = await store.openDatabase();
     final tables = <String, dynamic>{};
     if (await store.exists(db)) {
-      for (final name in ['prp_lesson', 'prp_session', 'prp_recall']) {
-        tables[name] = await db.query(name);
+      for (final name in PrpStore.ownedTables) {
+        if (await store.tableExists(db, name))
+          tables[name] = await db.query(name);
       }
     }
     return const JsonEncoder.withIndent('  ').convert({
@@ -1166,13 +1196,13 @@ class PrpRuntime extends PrpPlugin {
         .where((p) => p.isNotEmpty)
         .toList();
     await db.transaction((txn) async {
-      for (final name in ['prp_recall', 'prp_session', 'prp_lesson']) {
-        await txn.delete(name);
+      for (final name in PrpStore.ownedTables) {
+        if (await store.tableExists(txn, name)) await txn.delete(name);
       }
     });
     await host.deleteRecordings(paths, all: true);
     _note('data_cleared');
-    PrpPlugin.changed();
+    _publish();
   }
 
   Widget _slot(PrpSurface surface, Widget Function() build) {

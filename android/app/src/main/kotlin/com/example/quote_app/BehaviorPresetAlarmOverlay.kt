@@ -144,6 +144,7 @@ object BehaviorPresetAlarmOverlay {
     })
 
     val list = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+    if (!dailyReview && !setupRequired) list.addView(PrpAlarmCard(ctx,payload))
     if (presets.length() <= 0) {
       val fallbackTitle = if (dailyReview) "今天暂无预设行为" else if (setupRequired) "尚未设置当天预设" else "今天的预设行为"
       val fallbackBody = if (dailyReview) "可打开复盘页，直接进入明天预设行为设置。" else payload.optString("category", "请打开完整表单继续处理")

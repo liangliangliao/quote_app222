@@ -121,6 +121,46 @@ void main() {
   });
 
   testWidgets(
+      'a short preset goal can be clarified without losing its original source',
+      (tester) async {
+    final o = (await tester.runAsync(() async {
+      await f.enable();
+      final result = (await f.runtime.signal(PrpSignal(
+          surface: PrpSurface.behavior,
+          kind: 'habit_missed',
+          subjectKey: 'habit:preset:5',
+          expected: '运动',
+          tsMs: f.runtime.nowMs,
+          reference: 'short-goal',
+          confirmed: true)))!;
+      final draft = PrpLesson.fromMap(
+          {...f.lesson().toMap(), 'id': 0, 'trigger_text': '运动'});
+      await f.runtime
+          .saveDraft(result, draft, step: PrpStep.ledger, pauseSeconds: 30);
+      return result;
+    }))!;
+    await mount(tester, o);
+    final next = find.byKey(const ValueKey('prp_next'));
+    await tester.ensureVisible(next);
+    await tester.tap(next);
+    await settlePrp(tester);
+    expect(find.textContaining('先写下原本希望做到的具体事情'), findsOneWidget);
+    final field = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == '原本希望做到什么？');
+    await tester.ensureVisible(field);
+    await tester.enterText(field, '下楼走路十分钟');
+    expect(find.text('来源原文：运动'), findsOneWidget);
+    await tester.ensureVisible(next);
+    await tester.tap(next);
+    await settlePrp(tester, until: find.text('先看有效，再看无效'));
+    final row = await prpIo(
+        tester, () async => (await f.runtime.store.lessons()).single);
+    expect(row.triggerText, '下楼走路十分钟');
+    await tester.pumpWidget(const SizedBox());
+    await settlePrp(tester);
+  });
+
+  testWidgets(
       'a short hold never seals; a full three-second hold seals once with a visible stamp',
       (tester) async {
     final o = await offer(tester, step: PrpStep.seal);
@@ -151,6 +191,7 @@ void main() {
     (PrpStep.ledger, '你的话'),
     (PrpStep.columns, '有效：这次有哪件事是对的？'),
     (PrpStep.columns, '无效：当时什么没起作用？'),
+    (PrpStep.columns, '这件事让我看见了什么？（可留空）'),
     (PrpStep.signal, '最早出现的信号是什么？'),
     (PrpStep.signal, '如果：一个能认出来的线索'),
     (PrpStep.signal, '那么：一个可检验的小动作'),

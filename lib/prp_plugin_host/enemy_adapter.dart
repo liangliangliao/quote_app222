@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 
 import '../beautiful_enemy/beautiful_enemy.dart'
@@ -84,21 +85,83 @@ class PrpEnemyAdapter {
     if ((await db.rawQuery(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='be_commitment'"))
         .isEmpty) return [];
-    final rows = await db.query('be_commitment',
-        columns: ['created_ms', 'status'], where: 'id = ?', whereArgs: [id]);
-    if (rows.isEmpty) return [];
-    final row = rows.first;
-    final created =
-        DateTime.fromMillisecondsSinceEpoch((row['created_ms'] as num).toInt());
-    final day = DateTime(created.year, created.month, created.day)
+    final commitments =
+        await db.query('be_commitment', columns: ['id', 'status']);
+    if (!commitments.any((r) => r['id'] == id)) return [];
+    final statuses = {
+      for (final r in commitments) (r['id'] as num).toInt(): '${r['status']}'
+    };
+    final start = DateTime(now.year, now.month, now.day - days + 1)
         .millisecondsSinceEpoch;
+    final end =
+        DateTime(now.year, now.month, now.day + 1).millisecondsSinceEpoch;
+    final counts = <int, List<int>>{};
+    final seen = <int>{};
+    void record(int key, int time, bool done) {
+      if (!seen.add(key)) return;
+      final date = DateTime.fromMillisecondsSinceEpoch(time);
+      final day =
+          DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
+      counts.putIfAbsent(day, () => [0, 0])[done ? 0 : 1]++;
+    }
+
+    final eventsExist = (await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='be_event'"))
+        .isNotEmpty;
+    if (eventsExist) {
+      final rows = await db.query('be_event',
+          columns: ['type', 'payload', 'ts'],
+          where:
+              "source='commitment' AND type IN ('commitment_done','commitment_missed') AND ts>=? AND ts<?",
+          whereArgs: [start, end],
+          orderBy: 'ts DESC');
+      for (final r in rows) {
+        try {
+          final payload = jsonDecode('${r['payload']}') as Map;
+          final key = (payload['commitment_id'] as num).toInt();
+          final done =
+              r['type'] == 'commitment_done' && statuses[key] == 'done';
+          final missed = r['type'] == 'commitment_missed' &&
+              statuses[key] == 'missed' &&
+              payload['confirmed_by_user'] == true;
+          if (done || missed) record(key, (r['ts'] as num).toInt(), done);
+        } catch (_) {
+          /* Malformed/legacy automatic events provide no reliable outcome. */
+        }
+      }
+    }
+    final sessionsExist = (await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='prp_session'"))
+        .isNotEmpty;
+    if (sessionsExist) {
+      final rows = await db.query('prp_session',
+          columns: ['subject_key', 'started_ms'],
+          where:
+              "trigger_kind='commitment_missed' AND started_ms>=? AND started_ms<?",
+          whereArgs: [start, end]);
+      for (final r in rows) {
+        final key =
+            int.tryParse('${r['subject_key']}'.replaceFirst('commitment:', ''));
+        if (key != null && statuses[key] == 'missed')
+          record(key, (r['started_ms'] as num).toInt(), false);
+      }
+    }
     return List.generate(days, (i) {
       final date = DateTime(now.year, now.month, now.day - days + 1 + i)
           .millisecondsSinceEpoch;
-      final status = date == day && ['done', 'missed'].contains(row['status'])
-          ? '${row['status']}'
-          : 'unknown';
-      return PrpDayMark(dateMs: date, status: status);
+      final value = counts[date] ?? [0, 0];
+      final status = value[0] > 0 && value[1] > 0
+          ? 'mixed'
+          : value[0] > 0
+              ? 'done'
+              : value[1] > 0
+                  ? 'missed'
+                  : 'unknown';
+      return PrpDayMark(
+          dateMs: date,
+          status: status,
+          completedCount: value[0],
+          missedCount: value[1]);
     });
   }
 }

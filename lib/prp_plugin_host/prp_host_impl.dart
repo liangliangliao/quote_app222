@@ -12,6 +12,8 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../beautiful_enemy_host/enemy_persona_prompt.dart';
+import '../beautiful_enemy/beautiful_enemy.dart'
+    show EnemyDao, EnemyEngine, LocalFactOracle;
 import '../data/db.dart';
 import '../data/kv_dao.dart';
 import '../failure_module/fp_dao.dart';
@@ -28,6 +30,9 @@ import 'failure_adapter.dart';
 /// Synchronous registration does not open a database or initialize platform
 /// plugins. Initialization is scheduled after the app's first frame.
 void configurePrpPlugin() {
+  const MethodChannel('prp.native').setMethodCallHandler((call) async {
+    if (call.method == 'ledger_changed') PrpPlugin.changed();
+  });
   final kv = KeyValueDao();
   PrpPlugin.instance = PrpRuntime(
     settings: PrpSettings(read: kv.getString, write: kv.setString),
@@ -56,6 +61,46 @@ class PrpHostImpl extends NoopPrpHost {
   SpeechToText? _speech;
   Completer<String?>? _dictation;
   String? _activeRecording;
+  Timer? _recordingLimit;
+  Future<void> _commitmentTail = Future.value();
+
+  @override
+  Future<String> commitmentFromLesson(PrpLesson lesson, DateTime due) {
+    final result = Completer<String>();
+    _commitmentTail = _commitmentTail.then((_) async {
+      try {
+        if (!PrpPlugin.instance.enabledFor(PrpSurface.enemy) ||
+            !lesson.isSealed) {
+          result.complete('请先开启插件中的敌人调用点。');
+          return;
+        }
+        final db = await openDatabase();
+        if ((await db.rawQuery(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='be_commitment'"))
+            .isEmpty) {
+          result.complete('请先进入并开启“美丽的敌人”。');
+          return;
+        }
+        final origin = 'prp_lesson:${lesson.id}';
+        final prior = await db.query('be_commitment',
+            columns: ['id'], where: 'origin=?', whereArgs: [origin], limit: 1);
+        if (prior.isNotEmpty) {
+          result.complete('这条教训已有字据 #${prior.first['id']}。');
+          return;
+        }
+        final engine = EnemyEngine(
+            dao: EnemyDao(db), oracle: const LocalFactOracle(), clock: clock);
+        final created = await engine.addCommitment(lesson.rule,
+            due: due, origin: origin, stake: '');
+        result.complete(created.id == null
+            ? (created.error ?? '未创建字据，请检查敌人开关或安全状态。')
+            : '已创建字据 #${created.id}。');
+      } catch (_) {
+        result.complete('暂时无法创建字据，请稍后重试。');
+      }
+    });
+    return result.future;
+  }
 
   @override
   PrpGuardResult guardText(String text) => _enemy.guardText(text);
@@ -69,6 +114,14 @@ class PrpHostImpl extends NoopPrpHost {
 
   @override
   Future<void> sessionStarted() => _stopEnemyVoice();
+  @override
+  Future<void> nativeStateChanged(Map<String, dynamic> state) async {
+    try {
+      await const MethodChannel('prp.native')
+          .invokeMethod<void>('state_changed', state);
+    } catch (_) {/* Optional native host; desktop/iOS retain Flutter slots. */}
+  }
+
   @override
   Future<void> safetyExit({bool crisis = true}) async {
     await Future.wait([
@@ -177,6 +230,9 @@ class PrpHostImpl extends NoopPrpHost {
     final path = p.join(
         dir.path, 'prp_${lessonId}_${clock().millisecondsSinceEpoch}.m4a');
     _activeRecording = path;
+    _recordingLimit?.cancel();
+    _recordingLimit = Timer(const Duration(seconds: 15),
+        () => unawaited(stopRecording().catchError((Object _) {})));
     await recorder.start(
         const RecordConfig(
             encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 22050),
@@ -186,6 +242,8 @@ class PrpHostImpl extends NoopPrpHost {
 
   @override
   Future<void> stopRecording() async {
+    _recordingLimit?.cancel();
+    _recordingLimit = null;
     await _recorder?.stop();
     _activeRecording = null;
   }
@@ -202,6 +260,11 @@ class PrpHostImpl extends NoopPrpHost {
 
   @override
   Future<void> stopAudio() async {
+    _recordingLimit?.cancel();
+    _recordingLimit = null;
+    try {
+      await const MethodChannel('prp.native').invokeMethod<void>('stop_audio');
+    } catch (_) {}
     final unfinished = _activeRecording;
     await _recorder?.stop();
     _activeRecording = null;

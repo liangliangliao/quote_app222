@@ -67,6 +67,8 @@ class BehaviorPresetAlarmRingingService : Service() {
   private var originalAlarmStreamVolume: Int? = null
   private val handler = Handler(Looper.getMainLooper())
   private val autoStop = Runnable { stopSelfSafely("auto timeout") }
+  private var prpSignalActive = false
+  private var prpPayload = "{}"
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -79,6 +81,14 @@ class BehaviorPresetAlarmRingingService : Service() {
     val id = intent?.getIntExtra(EXTRA_ID, 0)?.takeIf { it != 0 } ?: 97199999
     var payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: "{}"
     try { payload = BehaviorPresetAlarmScheduler.normalizePayloadForFire(applicationContext, payload) } catch (_: Throwable) {}
+    prpPayload=payload
+    prpSignalActive=true
+    PrpAlarmAudio.attach(this, {
+      try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (_: Throwable) {}
+      mediaPlayer=null
+      try { ringtone?.stop() } catch (_: Throwable) {}
+      ringtone=null
+    }, { if(prpSignalActive) try { startSignal(prpPayload) } catch (_: Throwable) {} })
 
     try { startAsForeground(id, payload) } catch (t: Throwable) {
       try { com.example.quote_app.data.DbRepo.log(this, null, "[BehaviorPresetAlarm] startForeground failed: ${t.javaClass.simpleName} ${t.message}") } catch (_: Throwable) {}
@@ -88,12 +98,20 @@ class BehaviorPresetAlarmRingingService : Service() {
     try { startSignal(payload) } catch (t: Throwable) {
       try { com.example.quote_app.data.DbRepo.log(this, null, "[BehaviorPresetAlarm] service signal failed: ${t.javaClass.simpleName} ${t.message}") } catch (_: Throwable) {}
     }
+    if(PrpAlarmBridge.autoVoiceEnabled(applicationContext)) {
+      try { PrpAlarmBridge.hint(applicationContext,JSONObject(payload),requireVoice=true)?.let {
+        PrpAlarmAudio.play(applicationContext,it,auto=true)
+      } } catch (_: Throwable) {}
+    }
     handler.removeCallbacks(autoStop)
     handler.postDelayed(autoStop, MAX_RING_MS)
     return START_STICKY
   }
 
   override fun onDestroy() {
+    prpSignalActive=false
+    PrpAlarmAudio.detach(this)
+    PrpAlarmAudio.stop()
     stopSignal()
     releaseWakeLock()
     releaseScreenWakeLock()
@@ -374,6 +392,9 @@ class BehaviorPresetAlarmRingingService : Service() {
   }
 
   private fun stopSelfSafely(reason: String) {
+    prpSignalActive=false
+    PrpAlarmAudio.detach(this)
+    PrpAlarmAudio.stop()
     try { com.example.quote_app.data.DbRepo.log(this, null, "[BehaviorPresetAlarm] ringing service stop: $reason") } catch (_: Throwable) {}
     try { BehaviorPresetAlarmOverlay.dismiss(applicationContext) } catch (_: Throwable) {}
     stopSignal()
