@@ -1,3 +1,4 @@
+import 'semantic_contract.dart';
 import '../models/quote_insight.dart';
 
 /// Optional additions. Legacy notes remain readable without these fields.
@@ -22,7 +23,7 @@ class ConceptAbstraction {
   });
 
   static List<ConceptAbstraction> parse(dynamic raw) => [
-        for (final value in raw is List ? raw.take(6) : const [])
+        for (final value in raw is List ? raw.take(60) : const [])
           if (insightText(insightObject(value), 'term').isNotEmpty &&
               insightText(insightObject(value), 'definition').isNotEmpty)
             ConceptAbstraction(
@@ -74,6 +75,7 @@ class ConceptScope {
       onlyB,
       otherMember;
   final bool illustration;
+  final String basisKind;
   final List<ScopePart> parts;
   const ConceptScope({
     required this.relation,
@@ -89,11 +91,13 @@ class ConceptScope {
     this.onlyB = '',
     this.otherMember = '',
     this.illustration = false,
+    this.basisKind = 'source_assertion',
     this.parts = const [],
   });
 
   static ConceptScope? parse(dynamic raw, String original) {
     final m = insightObject(raw);
+    if (MeaningCircleContract.gaps(m).isNotEmpty) return null;
     final type = insightText(m, 'relation_type');
     final relation =
         QuoteRelation.values.where((r) => r.name == type).firstOrNull;
@@ -141,6 +145,7 @@ class ConceptScope {
       onlyB: insightText(m, 'only_b'),
       otherMember: insightText(m, 'other_member'),
       illustration: simulated,
+      basisKind: insightText(m, 'basis_kind').isNotEmpty ? insightText(m, 'basis_kind') : simulated ? 'teaching_example' : 'source_assertion',
     );
   }
 
@@ -160,5 +165,6 @@ class ConceptScope {
         'only_b': onlyB,
         if (otherMember.isNotEmpty) 'other_member': otherMember,
         'illustration': illustration,
+        'basis_kind': basisKind,
       };
 }

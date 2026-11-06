@@ -3462,20 +3462,17 @@ class VoiceAlarmActivity : Activity() {
     val model = cfg.optString("model", "")
     val provider = cfg.optString("provider", "")
     if (endpoint.isBlank() || apiKey.isBlank() || model.isBlank()) return text
-    val correctionTokenBudget = (text.length * 2 + 120).coerceIn(220, 1800)
     val messages = JSONArray().apply {
       put(JSONObject().put("role", "system").put("content", "你是语音识别转文字纠错器。只根据输入文本纠正明显的错别字、同音字、断句和标点；不要改写含义，不要添加信息，不要解释。必须保留原文全部信息，长文本也完整输出，不能摘要、不能截断、不能只输出前半段。只输出纠正后的完整文本。"))
       put(JSONObject().put("role", "user").put("content", text))
     }
-    val maxTokensField = cfg.optString("maxTokensField", "max_tokens").ifBlank { "max_tokens" }
     val allowSamplingParams = cfg.optBoolean("allowSamplingParams", true)
     val body = if (provider == "openai" && endpoint.contains("/responses")) {
-      JSONObject().put("model", model).put("input", messages).put("max_output_tokens", correctionTokenBudget).put("temperature", 0.0)
+      JSONObject().put("model", model).put("input", messages).put("temperature", 0.0)
     } else {
       JSONObject()
         .put("model", model)
         .put("messages", messages)
-        .put(maxTokensField, correctionTokenBudget)
         .apply { if (allowSamplingParams) put("temperature", 0.0) }
         .put("stream", false)
     }
@@ -5289,11 +5286,7 @@ class VoiceAlarmActivity : Activity() {
       for ((role, content) in conversation.takeLast(10)) put(JSONObject().put("role", role).put("content", content))
       put(JSONObject().put("role", "user").put("content", userText))
     }
-    // 推理型模型（如 deepseek-v4-flash）会先产出 reasoning_content 再产出正式回答。
-    // 之前 max_tokens=220 经常在“思考”阶段就被截断（finish_reason=length），
-    // 于是 content 为空、界面反复提示“AI 没有返回内容”。这里给足初始预算；
-    // 若仍因长度截断且没有正文，再翻倍预算重试一次，直到拿到回答或用尽重试。
-    var maxTokens = 1024
+    // Let the configured service determine output length; no app quota or length-escalation retry.
     var attempt = 0
     while (true) {
       attempt += 1
@@ -5301,17 +5294,13 @@ class VoiceAlarmActivity : Activity() {
         JSONObject()
           .put("model", model)
           .put("input", messages)
-          .put("max_output_tokens", maxTokens)
           .put("temperature", 0.7)
       } else {
-        // Azure OpenAI 的 gpt-5 / o 系列只接受 max_completion_tokens，
-        // 并且不允许自定义 temperature；由 Dart 侧按所选部署下发这两个开关。
-        val maxTokensField = cfg.optString("maxTokensField", "max_tokens").ifBlank { "max_tokens" }
+        // Dart reports whether the selected Azure deployment accepts sampling parameters.
         val allowSamplingParams = cfg.optBoolean("allowSamplingParams", true)
         JSONObject()
           .put("model", model)
           .put("messages", messages)
-          .put(maxTokensField, maxTokens)
           .apply { if (allowSamplingParams) put("temperature", 0.7) }
           .put("stream", false)
       }
@@ -5325,7 +5314,7 @@ class VoiceAlarmActivity : Activity() {
         if (provider == "openrouter") setRequestProperty("X-OpenRouter-Title", "Quote App Voice Alarm")
         if (provider == "edenai") setRequestProperty("Accept", "application/json")
       }
-      logVoice("ai.call.http.start", "calling AI endpoint", mapOf("provider" to provider, "model" to model, "endpoint" to endpoint.take(120), "bodyChars" to body.toString().length, "attempt" to attempt, "maxTokens" to maxTokens))
+      logVoice("ai.call.http.start", "calling AI endpoint", mapOf("provider" to provider, "model" to model, "endpoint" to endpoint.take(120), "bodyChars" to body.toString().length, "attempt" to attempt))
       OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
       val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
       val resp = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
@@ -5335,14 +5324,7 @@ class VoiceAlarmActivity : Activity() {
       val text = extractAiText(parsed)
       if (text.isNotBlank()) return text
       val finish = aiFinishReason(parsed)
-      val truncatedByLength = finish == "length" || finish == "max_output_tokens" || finish == "max_tokens"
-      if (truncatedByLength && attempt < 3 && maxTokens < 4096) {
-        val next = (maxTokens * 2).coerceAtMost(4096)
-        logVoice("ai.call.retryLength", "empty content truncated by token budget; retry with larger budget", mapOf("provider" to provider, "finish" to finish, "prevMaxTokens" to maxTokens, "nextMaxTokens" to next, "attempt" to attempt))
-        maxTokens = next
-        continue
-      }
-      logVoice("ai.call.emptyContent", "AI returned empty content", mapOf("provider" to provider, "finish" to finish, "attempt" to attempt, "maxTokens" to maxTokens))
+      logVoice("ai.call.emptyContent", "AI returned empty content", mapOf("provider" to provider, "finish" to finish, "attempt" to attempt))
       return ""
     }
   }

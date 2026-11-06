@@ -116,8 +116,8 @@ class _MovieRoleLabRolePageState extends State<MovieRoleLabRolePage> {
     final ok = await _confirm(
       _episodes.isEmpty ? '调用 AI 配角色并分集？' : '重新调用 AI 配角色并分集？',
       _episodes.isEmpty
-          ? '本操作会把完整字幕和演员表发送给已配置的 AI 模型处理，可能消耗较多 token。普通 SRT 没有说话人字段，建议优先使用非深度思考、稳定输出 JSON 的模型；如果使用 OpenRouter 深度推理模型，可能出现长时间推理后正文为空。'
-          : '本电影当前已有 ${_episodes.length} 集分集剧本。继续后会先自动清空已有分集，再重新调用 AI 配角色并分集。此操作不可撤销，并可能消耗较多 token。普通 SRT 没有说话人字段，建议优先使用非深度思考、稳定输出 JSON 的模型。',
+          ? '本操作会把完整字幕和演员表发送给已配置的 AI 模型处理。普通 SRT 没有说话人字段，建议优先使用非深度思考、稳定输出 JSON 的模型；如果使用 OpenRouter 深度推理模型，可能出现长时间推理后正文为空。'
+          : '本电影当前已有 ${_episodes.length} 集分集剧本。继续后会先自动清空已有分集，再重新调用 AI 配角色并分集。此操作不可撤销。普通 SRT 没有说话人字段，建议优先使用非深度思考、稳定输出 JSON 的模型。',
     );
     if (!ok) return;
     setState(() {

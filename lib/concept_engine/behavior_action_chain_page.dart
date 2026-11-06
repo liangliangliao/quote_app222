@@ -245,7 +245,7 @@ class _BehaviorActionChainPageState extends State<BehaviorActionChainPage> {
                         Text(
                           _runtimeConfig == null
                               ? '未加载设置页配置。'
-                              : '当前提供商：${_runtimeConfig!.providerLabel} · 模型：${_runtimeConfig!.model} · 行动链节点 ${_runtimeConfig!.behaviorChainMinNodes}-${_runtimeConfig!.behaviorChainMaxNodes} · max tokens ${_runtimeConfig!.behaviorChainMaxTokens}',
+                              : '当前提供商：${_runtimeConfig!.providerLabel} · 模型：${_runtimeConfig!.model} · 行动链节点 ${_runtimeConfig!.behaviorChainMinNodes}-${_runtimeConfig!.behaviorChainMaxNodes}',
                           style: const TextStyle(color: Color(0xFF4B5563), height: 1.45),
                         ),
                         const SizedBox(height: 8),

@@ -1,3 +1,4 @@
+import 'reading_illustration.dart';
 import 'reading_map_quality.dart';
 import 'semantic_scope_service.dart';
 import 'dart:io';
@@ -9,6 +10,7 @@ import 'semantic_scope_view.dart';
 
 class PassageScopeView extends StatelessWidget {
   final String text;
+  final String origin;
   final List<ConceptScope> scopes;
   final List<ConceptAbstraction> abstractions;
   final VoidCallback? onAnalyze;
@@ -18,9 +20,13 @@ class PassageScopeView extends StatelessWidget {
   final String? imagePath;
   final bool showCircles;
   final SemanticScopeService? service;
+  final GlobalKey<SemanticScopePanelState>? panelKey;
+  final bool showActions,showHeader,allowIllustration;
+  final VoidCallback? onStateChanged;
   const PassageScopeView(
       {super.key,
       required this.text,
+      this.origin = 'quote',
       this.scopes = const [],
       this.abstractions = const [],
       this.onAnalyze,
@@ -29,7 +35,8 @@ class PassageScopeView extends StatelessWidget {
       this.onOpenConcept,
       this.imagePath,
       this.showCircles = true,
-      this.service});
+      this.service,this.panelKey,this.showActions=true,this.showHeader=true,
+      this.allowIllustration=true,this.onStateChanged});
   @override
   Widget build(BuildContext context) =>
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -45,16 +52,25 @@ class PassageScopeView extends StatelessWidget {
           const Text('已有名言配画 · 帮助理解的视觉类比', style: TextStyle(fontSize: 12)),
         ],
         SemanticScopePanel(
-            key: ValueKey(text),
-            sources: [ScopeSource('A', text)],
+            key: panelKey ?? ValueKey(text),
+            sources: [ScopeSource('A', text, origin: origin)],
             initial: legacyConceptView(text, abstractions, scopes),
             service: service,
             analysisContext: readingMapContext,
             preferredView: preferredView,
             allowCircles: showCircles,
             showViewSelector: preferredView == null,
+            showActions:showActions,showHeader:showHeader,onStateChanged:onStateChanged,
             onResult: onResult,
             onOpenConcept: onOpenConcept,
             focus: '分析整句中的概念及其关系'),
+        if (allowIllustration && readingIllustration(text) != null)
+          ExpansionTile(title: const Text('可选教学模拟 · 不作为原句根据'), children: [
+            SemanticScopeView(
+                value: readingIllustration(text)!,
+                sources: [ScopeSource('A', text, origin: origin)],
+                preferredView: preferredView,
+                allowCircles: showCircles)
+          ]),
       ]);
 }

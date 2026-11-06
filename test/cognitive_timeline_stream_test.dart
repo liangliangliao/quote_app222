@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/data/db.dart';
 import 'package:quote_app/epistemic/cognitive_preferences.dart';
-import 'package:quote_app/epistemic/grounding_path_view.dart';
+import 'package:quote_app/epistemic/concept_hierarchy_view.dart';
 import 'package:quote_app/epistemic/history_timeline.dart';
 import 'package:quote_app/epistemic/quote_cognitive_reader.dart';
 import 'package:quote_app/epistemic/reading_illustration.dart';
@@ -169,13 +169,13 @@ void main() {
               onLoadMore: onLoadMore ?? () {}));
 
   test(
-      'shuffled history groups recent days first and preserves actual within-day chronology',
+      'shuffled history uses earliest days first with the same direction within each day',
       () {
     final rows = timelineRows(),
         before = rows.map((r) => r['quote_uid']).toList();
     final groups = groupTimelineRows(rows);
-    expect(groups.map((g) => g.label), ['2026年11月2日', '2026年11月1日']);
-    expect(groups.first.entries.map((e) => e.row['quote_uid']),
+    expect(groups.map((g) => g.label), ['2026年11月1日', '2026年11月2日']);
+    expect(groups.last.entries.map((e) => e.row['quote_uid']),
         ['early', 'now', 'later']);
     expect(rows.map((r) => r['quote_uid']), before);
   });
@@ -213,16 +213,20 @@ void main() {
             onOpen: (r) => opened = r['quote_uid'],
             onSelect: (r) => selected = r['quote_uid'],
             onLoadMore: () => loads++));
-    expect(find.text('① 前一刻'), findsOneWidget);
-    expect(find.text('② 此刻'), findsOneWidget);
+    expect(find.text('② 前一刻'), findsOneWidget);
+    expect(find.text('③ 此刻'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('timeline-node-early')));
     await tester.pump();
-    expect(find.text('① 此刻'), findsOneWidget);
-    await tester.tap(find.byTooltip('加入比较').first);
+    expect(find.text('② 此刻'), findsOneWidget);
+    final quote = find.byKey(const ValueKey('timeline-quote-early'));
+    await tester
+        .tap(find.descendant(of: quote, matching: find.byTooltip('加入比较')));
     expect(selected, 'early');
     await tester.tap(find.text(recipeQuote));
     expect(opened, 'early');
     await tester.scrollUntilVisible(find.text('加载更多名言'), 350);
+    await tester.ensureVisible(find.text('加载更多名言'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('加载更多名言'));
     expect(loads, 1);
   });
@@ -296,17 +300,22 @@ void main() {
                     analysisContext: readingMapContext,
                     preferredView: EpistemicViewKind.hierarchy))));
     expect(service.calls, 0);
-    await tester.ensureVisible(find.text('完善概念链与含义圈'));
-    await tester.tap(find.text('完善概念链与含义圈'));
+    await tester.ensureVisible(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.tap(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试深入分析'));
     await settle(tester);
     expect(service.calls, 1);
     expect(find.textContaining('连接在完整结果返回前中断'), findsOneWidget);
-    expect(find.byType(GroundingPathView), findsOneWidget);
+    expect(find.byType(ConceptHierarchyView), findsOneWidget);
     await capture(tester, 'reading-stream-retry');
-    await tester.tap(find.text('完善概念链与含义圈'));
+    await tester.ensureVisible(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.tap(find.byKey(const ValueKey('semantic-analysis-action')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试深入分析'));
     await settle(tester);
     expect(service.calls, 2);
     expect(find.textContaining('连接在完整结果返回前中断'), findsNothing);
-    expect(find.byType(GroundingPathView), findsOneWidget);
+    expect(find.byType(ConceptHierarchyView), findsOneWidget);
   });
 }

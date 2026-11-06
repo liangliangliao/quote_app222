@@ -1,3 +1,4 @@
+import 'philosophy_benchmark_page.dart';
 import 'package:flutter/material.dart';
 import 'cognitive_preferences.dart';
 import 'cognitive_usage_view.dart';
@@ -45,6 +46,8 @@ class _CognitiveSettingsSectionState extends State<CognitiveSettingsSection> {
                     const Text('阅读与认知风格',
                         style: TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 18)),
+                    TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhilosophyBenchmarkPage())),
+                        icon: const Icon(Icons.fact_check_outlined), label: const Text('哲学材料真实模型验收（手动）')),
                     const SizedBox(height: 8),
                     SwitchListTile.adaptive(
                         key: const ValueKey('schopenhauer-style-toggle'),

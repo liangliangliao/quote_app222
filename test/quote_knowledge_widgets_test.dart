@@ -1,3 +1,4 @@
+import 'support/circle_fixture.dart';
 import 'package:quote_app/quote_knowledge/hierarchy_statistics_view.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -32,11 +33,12 @@ class PrototypeComparison extends QuoteComparisonService {
   Future<QuoteComparison> compareForPurpose(QuoteReference a, QuoteReference b,
       ComparisonPurpose purpose, String conditions) async {
     calls++;
-    return const QuoteComparison(
+    return QuoteComparison(
         common: '有方向地成长',
         difference: 'A关注承受挑战后的力量，B关注朝向目标时的体验价值。',
         notEquivalent: '承受挑战不一定感到愉悦；愉悦体验也不一定包含挑战。',
         limitation: '圆圈只描述构造的学习经历示例，不能概括所有苦难或幸福。',
+        semanticMap: teachingCircleFixture(a.content, b.content),
         relation: QuoteRelation.overlap,
         relationScope: 'extension',
         setA: '经历挑战',
@@ -191,6 +193,11 @@ void main() {
     await tester.tap(find.text('关系图'));
     await settle(tester);
     expect(nightReported, isTrue);
+    expect(find.byKey(const ValueKey('history-meaning-circles')),findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip,'分类索引'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(ChoiceChip,'幸福'));
+    await settle(tester);
     expect(find.text('(32)'), findsOneWidget);
     expect(find.byType(InteractiveViewer), findsOneWidget);
     expect(find.byTooltip('洗牌（物理重排）'), findsNothing);
@@ -257,6 +264,8 @@ void main() {
         scale: 2);
     expect(tester.takeException(), isNull);
     await capture(tester, 'history-large-text');
+    await tester.tap(find.widgetWithText(ChoiceChip,'分类索引'));
+    await settle(tester);
     await tester.tap(find.byTooltip('全部类别'));
     await settle(tester);
     await tester.enterText(

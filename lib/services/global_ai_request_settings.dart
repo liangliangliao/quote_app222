@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../data/kv_dao.dart';
 
 class GlobalAiRequestConfig {
@@ -10,17 +11,16 @@ class GlobalAiRequestConfig {
 
   const GlobalAiRequestConfig({
     required this.timeoutSeconds,
-    required this.maxOutputTokens,
+    int? maxOutputTokens,
     required this.temperature,
     required this.topP,
     required this.retryCount,
     required this.retryDelayMs,
-  });
+  }) : maxOutputTokens = null;
 
   int resolveMaxTokens(int fallback) {
-    final value = maxOutputTokens;
-    if (value == null || value <= 0) return fallback;
-    return value.clamp(64, 64000).toInt();
+    // Compatibility with existing adapters: 0 means no application quota.
+    return 0;
   }
 
   Duration resolveTimeout(Duration fallback) {
@@ -55,8 +55,11 @@ class GlobalAiRequestConfig {
 }
 
 class GlobalAiRequestSettings {
+  static GlobalAiRequestConfig? cached;
+  static final changes = StreamController<GlobalAiRequestConfig>.broadcast();
   static const String timeoutSecondsKey = 'global_ai_request_timeout_seconds';
-  static const String maxOutputTokensKey = 'global_ai_request_max_output_tokens';
+  static const String maxOutputTokensKey =
+      'global_ai_request_max_output_tokens';
   static const String temperatureKey = 'global_ai_request_temperature';
   static const String topPKey = 'global_ai_request_top_p';
   static const String retryCountKey = 'global_ai_request_retry_count';
@@ -65,14 +68,20 @@ class GlobalAiRequestSettings {
   final KeyValueDao _kvDao = KeyValueDao();
 
   Future<GlobalAiRequestConfig> getConfig() async {
-    return GlobalAiRequestConfig(
-      timeoutSeconds: _parseInt(await _kvDao.getString(timeoutSecondsKey)),
-      maxOutputTokens: _parseInt(await _kvDao.getString(maxOutputTokensKey)),
-      temperature: _parseDouble(await _kvDao.getString(temperatureKey)),
-      topP: _parseDouble(await _kvDao.getString(topPKey)),
-      retryCount: _parseInt(await _kvDao.getString(retryCountKey)),
-      retryDelayMs: _parseInt(await _kvDao.getString(retryDelayMsKey)),
-    );
+    final values = {
+      for (final row in await _kvDao.keyValuesWithPrefix('global_ai_request_'))
+        row['key']: row['value']
+    };
+    final config = GlobalAiRequestConfig(
+        timeoutSeconds: _parseInt(values[timeoutSecondsKey]),
+        maxOutputTokens: null,
+        temperature: _parseDouble(values[temperatureKey]),
+        topP: _parseDouble(values[topPKey]),
+        retryCount: _parseInt(values[retryCountKey]),
+        retryDelayMs: _parseInt(values[retryDelayMsKey]));
+    cached = config;
+    changes.add(config);
+    return config;
   }
 
   Future<void> saveRaw({
@@ -84,11 +93,12 @@ class GlobalAiRequestSettings {
     required String retryDelayMs,
   }) async {
     await _kvDao.setString(timeoutSecondsKey, timeoutSeconds.trim());
-    await _kvDao.setString(maxOutputTokensKey, maxOutputTokens.trim());
+    await _kvDao.setString(maxOutputTokensKey, '');
     await _kvDao.setString(temperatureKey, temperature.trim());
     await _kvDao.setString(topPKey, topP.trim());
     await _kvDao.setString(retryCountKey, retryCount.trim());
     await _kvDao.setString(retryDelayMsKey, retryDelayMs.trim());
+    await getConfig();
   }
 
   int? _parseInt(String? raw) {

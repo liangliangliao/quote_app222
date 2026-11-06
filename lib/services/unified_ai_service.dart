@@ -1,4 +1,8 @@
-import '../quote_knowledge/cost_policy.dart';
+import 'ai_output_policy.dart';
+import 'dart:async';
+import 'ai_request_audit.dart';
+import 'ai_request_accounting.dart';
+import '../epistemic/cognitive_preferences.dart';
 import 'semantic_json_transport.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -581,19 +585,27 @@ class UnifiedAiService {
     String? forcedProvider,
     String? forcedModel,
     double? temperature,
+  }) => AiRequestAudit.run(purpose, () => _generateText(prompt: prompt, purpose: purpose, systemPrompt: systemPrompt, maxTokens: maxTokens, expectJson: expectJson, forcedProvider: forcedProvider, forcedModel: forcedModel, temperature: temperature));
+
+  Future<String> _generateText({
+    required String prompt,
+    required String purpose,
+    String? systemPrompt,
+    int maxTokens = 1800,
+    bool expectJson = false,
+    String? forcedProvider,
+    String? forcedModel,
+    double? temperature,
   }) async {
-    if (!prompt.contains(SchopenhauerGuidance.core)) {
-      systemPrompt = SchopenhauerGuidance.forPurpose(purpose, systemPrompt);
-    }
+    await CognitivePreferenceStore.instance.load();
+    systemPrompt = SchopenhauerGuidance.forPurpose(purpose, systemPrompt,
+        deep: CognitivePreferenceStore.active || purpose.startsWith('cognition.semantic.'));
     final cfg = await resolveGlobalConfig(forcedProvider: forcedProvider, forcedModel: forcedModel);
     final requestCfg = await _requestSettings.getConfig();
     final classificationBatch = purpose == 'quote_knowledge.batch.v2';
     final semanticMap = SemanticJsonTransport.handles(purpose);
-    final effectiveMaxTokens = semanticMap
-        ? SemanticJsonTransport.outputLimit(maxTokens, requestCfg.resolveMaxTokens(maxTokens))
-        : classificationBatch
-        ? ClassificationCostPolicy.capOutput(maxTokens, requestCfg.resolveMaxTokens(maxTokens))
-        : requestCfg.resolveMaxTokens(maxTokens);
+    final budget = await AiRequestAudit.resolve(purpose, maxTokens, requestCfg);
+    final effectiveMaxTokens = budget.effective;
     final effectiveTemperature = requestCfg.resolveTemperature(temperature);
     final effectiveTopP = requestCfg.resolveTopP();
     var effectiveTimeout = requestCfg.resolveTimeout(const Duration(seconds: 90));
@@ -785,6 +797,16 @@ class UnifiedAiService {
     String? forcedModel,
     bool expectJson = false,
     double? temperature,
+  }) => AiRequestAudit.run(purpose, () => _generateChatMessages(messages: messages, purpose: purpose, maxTokens: maxTokens, forcedProvider: forcedProvider, forcedModel: forcedModel, expectJson: expectJson, temperature: temperature));
+
+  Future<String> _generateChatMessages({
+    required List<UnifiedAiChatMessage> messages,
+    String purpose = 'ai_assistant.chat',
+    int maxTokens = 2200,
+    String? forcedProvider,
+    String? forcedModel,
+    bool expectJson = false,
+    double? temperature,
   }) async {
     final cleaned = <UnifiedAiChatMessage>[];
     for (final message in messages) {
@@ -797,19 +819,25 @@ class UnifiedAiService {
       }
     }
     if (cleaned.isEmpty) return '';
-    if (SchopenhauerGuidance.appliesTo(purpose) &&
-        !cleaned.any((message) => message.content.contains(SchopenhauerGuidance.core))) {
-      cleaned.insert(0, const UnifiedAiChatMessage(role: 'system', content: SchopenhauerGuidance.core));
+    await CognitivePreferenceStore.instance.load();
+    final system = cleaned.where((m) => m.role == 'system').map((m) => m.content).join('\n');
+    final guided = SchopenhauerGuidance.forPurpose(purpose, system,
+        deep: CognitivePreferenceStore.active || purpose.startsWith('cognition.semantic.'));
+    if (guided != null && guided.isNotEmpty) {
+      cleaned.removeWhere((m) => m.role == 'system');
+      cleaned.insert(0, UnifiedAiChatMessage(role: 'system', content: guided));
     }
 
     final cfg = await resolveGlobalConfig(forcedProvider: forcedProvider, forcedModel: forcedModel);
     if (!cfg.available) return '';
     final requestCfg = await _requestSettings.getConfig();
-    final effectiveMaxTokens = requestCfg.resolveMaxTokens(maxTokens);
+    final budget = await AiRequestAudit.resolve(purpose, maxTokens, requestCfg);
+    final effectiveMaxTokens = budget.effective;
     final effectiveTemperature = requestCfg.resolveTemperature(temperature);
     final effectiveTopP = requestCfg.resolveTopP();
     final effectiveTimeout = requestCfg.resolveTimeout(const Duration(seconds: 120));
-    final effectiveRetryCount = requestCfg.resolveRetryCount();
+    final effectiveRetryCount = SemanticJsonTransport.handles(purpose) || purpose == 'quote_knowledge.batch.v2'
+        ? 0 : requestCfg.resolveRetryCount();
     final effectiveRetryDelayMs = requestCfg.resolveRetryDelayMs();
 
     switch (cfg.provider) {
@@ -819,6 +847,7 @@ class UnifiedAiService {
           messages: cleaned,
           purpose: purpose,
           maxTokens: effectiveMaxTokens,
+          expectJson: expectJson,
           temperature: effectiveTemperature,
           topP: effectiveTopP,
           timeout: effectiveTimeout,
@@ -890,7 +919,6 @@ class UnifiedAiService {
         ? <String, dynamic>{
             'model': model,
             'messages': messages.map((e) => e.toJson(supportsVision: true, supportsFiles: true, openAiResponses: false)).toList(),
-            'max_tokens': maxTokens,
             if (expectJson)
               'response_format': <String, dynamic>{'type': 'json_object'},
             if (temperature != null) 'temperature': temperature,
@@ -900,7 +928,6 @@ class UnifiedAiService {
         : <String, dynamic>{
             'model': model,
             'input': messages.map((e) => e.toJson(supportsVision: true, supportsFiles: true, openAiResponses: true)).toList(),
-            'max_output_tokens': maxTokens,
             if (expectJson)
               'text': <String, dynamic>{
                 'format': <String, dynamic>{'type': 'json_object'},
@@ -951,7 +978,6 @@ class UnifiedAiService {
         supportsVision: _supportsVisionInput(provider, model),
         supportsFiles: _supportsFileInput(provider, model),
       )).toList(),
-      'max_tokens': maxTokens,
       if (expectJson &&
           _shouldUseJsonResponseFormat(provider, model, expectJson))
         'response_format': <String, dynamic>{'type': 'json_object'},
@@ -1019,7 +1045,6 @@ class UnifiedAiService {
               if ((systemPrompt ?? '').trim().isNotEmpty) <String, String>{'role': 'system', 'content': systemPrompt!.trim()},
               <String, String>{'role': 'user', 'content': prompt},
             ],
-            'max_tokens': maxTokens,
             if (temperature != null) 'temperature': temperature,
             if (topP != null) 'top_p': topP,
             if (expectJson) 'response_format': <String, dynamic>{'type': 'json_object'},
@@ -1031,7 +1056,6 @@ class UnifiedAiService {
               if ((systemPrompt ?? '').trim().isNotEmpty) <String, String>{'role': 'system', 'content': systemPrompt!.trim()},
               <String, String>{'role': 'user', 'content': prompt},
             ],
-            'max_output_tokens': maxTokens,
             if (temperature != null) 'temperature': temperature,
             if (topP != null) 'top_p': topP,
             if (expectJson)
@@ -1088,7 +1112,6 @@ class UnifiedAiService {
         if ((systemPrompt ?? '').trim().isNotEmpty) <String, String>{'role': 'system', 'content': systemPrompt!.trim()},
         <String, String>{'role': 'user', 'content': prompt},
       ],
-      'max_tokens': maxTokens,
       if (_isDeepseekV4(provider, model)) 'thinking': <String, dynamic>{'type': 'enabled'},
       if (_isDeepseekV4(provider, model)) 'reasoning_effort': 'high',
       if (temperature != null && !_isDeepseekV4(provider, model)) 'temperature': temperature,
@@ -1225,7 +1248,6 @@ class UnifiedAiService {
 
     return <String, dynamic>{
       'model': cfg.deployment,
-      'max_tokens': maxTokens,
       if (systemParts.isNotEmpty) 'system': systemParts.join('\n\n'),
       'messages': anthropicMessages,
       // Non-streaming keeps response parsing deterministic across ordinary chat
@@ -1250,8 +1272,6 @@ class UnifiedAiService {
       // 请求体里带 model，所以统一带上，对部署路径无害。
       'model': deployment,
       'messages': messages,
-      if (reasoning) 'max_completion_tokens': maxTokens,
-      if (!reasoning) 'max_tokens': maxTokens,
       if (!reasoning && temperature != null) 'temperature': temperature,
       if (!reasoning && topP != null) 'top_p': topP,
       if (expectJson && azureSupportsJsonResponseFormat(deployment))
@@ -1393,6 +1413,7 @@ class UnifiedAiService {
     required List<UnifiedAiChatMessage> messages,
     required String purpose,
     required int maxTokens,
+    bool expectJson = false,
     double? temperature,
     double? topP,
     required Duration timeout,
@@ -1412,7 +1433,7 @@ class UnifiedAiService {
     return _postAzureWithFallback(
       cfg: cfg,
       purpose: purpose,
-      stream: false,
+      stream: SemanticJsonTransport.handles(purpose) && !anthropic,
       timeout: timeout,
       retryCount: retryCount,
       retryDelayMs: retryDelayMs,
@@ -1426,10 +1447,10 @@ class UnifiedAiService {
               cfg: cfg,
               messages: payload,
               maxTokens: maxTokens,
-              expectJson: false,
+              expectJson: expectJson,
               temperature: temperature,
               topP: topP,
-              stream: false,
+              stream: SemanticJsonTransport.handles(purpose) && !anthropic,
             ),
     );
   }
@@ -1697,6 +1718,9 @@ class UnifiedAiService {
     }
   }
 
+  static int? maxOutputFromBody(Map<String, dynamic> body) =>
+      (body['max_output_tokens'] ?? body['max_completion_tokens'] ?? body['max_tokens']) as int?;
+
   bool _isRetryableStatusCode(int statusCode) {
     return statusCode == 408 || statusCode == 409 || statusCode == 429 || statusCode >= 500;
   }
@@ -1729,7 +1753,17 @@ class UnifiedAiService {
     required int retryCount,
     required int retryDelayMs,
   }) async {
+    if (RegExp(r'/messages/?$').hasMatch(Uri.parse(endpoint).path)) {
+      body = {...body, 'max_tokens': await AiOutputPolicy.anthropicCapacity(Uri.parse(endpoint), headers, model),
+        if (SemanticJsonTransport.handles(purpose)) 'stream': true};
+      if (body['stream'] == true) headers = {...headers, 'Accept': 'text/event-stream'};
+    }
     final module = 'unified_ai.$purpose';
+    if (body['stream'] == true && endpoint.contains('/chat/completions') &&
+        (const ['openai', 'deepseek', 'openrouter'].contains(provider) ||
+            (provider == 'azure' && endpoint.contains('/openai/')))) {
+      body = {...body, 'stream_options': {'include_usage': true}};
+    }
     await DeepSeekLogger.logRequest(
       provider: _providerLabel(provider),
       module: module,
@@ -1740,8 +1774,12 @@ class UnifiedAiService {
     );
     if (SemanticJsonTransport.handles(purpose)) {
       try {
-        final reply = await SemanticJsonTransport().post(
-          uri: Uri.parse(endpoint), headers: headers, body: body, idleTimeout: timeout);
+        final reply = await SemanticJsonTransport(totalTimeout:
+            timeout > const Duration(minutes: 5) ? timeout : const Duration(minutes: 5)).post(
+          uri: Uri.parse(endpoint), headers: headers, body: body, idleTimeout: timeout,
+          cancellation: AiRequestAudit.current?.cancellation,
+          onResponse: (status, wire, failure) => AiRequestAudit.record(provider: provider, model: model,
+              purpose: purpose, body: body, response: wire, status: status, failure: failure));
         await DeepSeekLogger.logResponse(
           provider: _providerLabel(provider), module: module, endpoint: endpoint,
           statusCode: reply.statusCode, body: reply.wireBody, model: model);
@@ -1782,7 +1820,12 @@ class UnifiedAiService {
           body: resp.body,
           model: model,
         );
+        await AiRequestAudit.record(provider: provider, model: model, purpose: purpose,
+            body: body, response: resp.body, status: resp.statusCode);
         if (resp.statusCode >= 200 && resp.statusCode < 300) {
+          final reason = aiFinishReason(resp.body);
+          if (aiOutputTruncated(reason)) throw SemanticRequestException(
+              '服务端停止了本次输出（$reason），结果未完整返回。应用没有设置输出 Token 上限，请核对模型服务的输出能力。');
           final text = extractText(resp.body).trim();
           if (text.isNotEmpty) return text;
           lastError = Exception('HTTP ${resp.statusCode}: provider returned empty assistant content. Body: ${resp.body}');
@@ -1807,8 +1850,13 @@ class UnifiedAiService {
         }
         break;
       } catch (e, st) {
+        if (e is SemanticRequestException) rethrow;
         lastError = e;
         lastStack = st;
+        if (e is http.ClientException || e is SocketException || e is TimeoutException) {
+          await AiRequestAudit.record(provider: provider, model: model, purpose: purpose,
+              body: body, failure: e.runtimeType.toString());
+        }
         if (attempt + 1 < attempts) {
           await Future<void>.delayed(_retryDelay(attempt: attempt, retryDelayMs: retryDelayMs));
           continue;
@@ -1868,6 +1916,11 @@ class UnifiedAiService {
           }
         }
         final rawBody = rawStream.toString();
+        await AiRequestAudit.record(provider: provider, model: model, purpose: purpose,
+            body: body, response: rawBody, status: streamed.statusCode);
+        final reason = aiFinishReason(rawBody);
+        if (aiOutputTruncated(reason)) throw SemanticRequestException(
+            '服务端停止了本次输出（$reason），结果未完整返回。应用没有设置输出 Token 上限，请核对模型服务的输出能力。');
         await DeepSeekLogger.logResponse(
           provider: _providerLabel(provider),
           module: module,
@@ -1907,6 +1960,9 @@ class UnifiedAiService {
         }
         break;
       } catch (e, st) {
+        if (e is SemanticRequestException) rethrow;
+        await AiRequestAudit.record(provider: provider, model: model, purpose: purpose,
+            body: body, response: rawStream.toString(), failure: e.runtimeType.toString());
         lastError = rawStream.isEmpty ? e : Exception('$e\nPartial stream:\n$rawStream');
         lastStack = st;
         final partialText = textBuffer.toString().trim();

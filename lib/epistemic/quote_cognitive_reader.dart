@@ -19,6 +19,7 @@ import 'concept_meaning_diagram.dart';
 import 'quote_intuitive_gallery.dart';
 import 'passage_scope_view.dart';
 import 'semantic_scope.dart';
+import 'semantic_scope_view.dart';
 
 class QuoteCognitiveReader extends StatefulWidget {
   final QuoteReference quote;
@@ -46,6 +47,9 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
   int _artRevision = 0;
   int _conceptTab = 0;
   SemanticScope? _semanticConcepts;
+  final _semanticKey = GlobalKey<SemanticScopePanelState>();
+  int _loadRevision = 0;
+  String _indexedHash = '';
   String get _recordId =>
       widget.quote.id.isEmpty ? widget.quote.contentKey : widget.quote.id;
   CognitiveSelection get _selection => CognitiveSelection.fromText(
@@ -60,12 +64,32 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(QuoteCognitiveReader old) {
+    super.didUpdateWidget(old);
+    if (old.quote.contentKey != widget.quote.contentKey ||
+        old.quote.id != widget.quote.id) {
+      _addon = const QuoteAnalysisAddon();
+      _conceptNote = null;
+      _semanticConcepts = null;
+      _indexedHash = '';
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadRevision++;
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    final revision = ++_loadRevision;
     await CognitivePreferenceStore.instance.load();
     try {
       final addon = await QuoteInsightStore().readAddon(widget.quote);
       final notes = await CognitiveStore().forRecord('quote', _recordId);
-      if (!mounted) return;
+      if (!mounted || revision != _loadRevision) return;
       setState(() {
         _addon = addon;
         _conceptNote = notes
@@ -92,13 +116,14 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
 
   Future<void> _indexConcepts(SemanticScope value) async {
     try {
+      final hash = insightHash([
+        widget.quote.contentKey,
+        value.conceptsForSource('A').map((n) => n.label).toList()
+      ]);
+      if (hash == _indexedHash) return;
       await QuoteInsightStore().saveSemanticConcepts(
-          widget.quote,
-          value.concepts
-              .where((n) =>
-                  n.kind == 'concept' &&
-                  n.references.any((r) => r.source == 'A'))
-              .map((n) => n.label));
+          widget.quote, value.conceptsForSource('A').map((n) => n.label));
+      _indexedHash = hash;
     } catch (_) {/* Related quotes can still fall back to literal matches. */}
   }
 
@@ -187,16 +212,6 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
           final detail = _conceptNote?.analysis ??
               CognitiveAnalysis.fromJson(
                   _addon.cognition, widget.quote.content);
-          final saved = CognitiveAnalysis.fromJson(
-              _addon.cognition, widget.quote.content);
-          final scopePanel = PassageScopeView(
-              text: widget.quote.content,
-              service: widget.semanticService,
-              scopes: detail.scopes.isNotEmpty ? detail.scopes : saved.scopes,
-              abstractions: detail.abstractions.isNotEmpty
-                  ? detail.abstractions
-                  : saved.abstractions,
-              onAnalyze: _expandConcept);
           final concepts = _conceptNote?.analysis.concepts.isNotEmpty == true
               ? _conceptNote!.analysis.concepts
               : _addon.concepts;
@@ -262,6 +277,21 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                             style: TextStyle(fontSize: 13)),
                         children: [SelectableText(widget.quote.source)]),
                   const SizedBox(height: 6),
+                  if (_tab != 2 && _tab != 4)
+                    SemanticAnalysisActions(
+                        busy: _semanticKey.currentState?.busy == true ||
+                            _semanticKey.currentState?.readingCache == true,
+                        canRetry: _semanticKey.currentState?.canRetry ??
+                            (_semanticConcepts != null),
+                        savePending:
+                            _semanticKey.currentState?.savePending ?? false,
+                        onGenerate: () => _semanticKey.currentState?.generate(),
+                        onRetry: () =>
+                            _semanticKey.currentState?.retryAnalysis(),
+                        onHistory: () =>
+                            _semanticKey.currentState?.showSavedAnalyses(),
+                        onSave: () => _semanticKey.currentState?.retrySave(),
+                        onStop: () => _semanticKey.currentState?.stop()),
                   Wrap(
                     spacing: 8,
                     runSpacing: 4,
@@ -292,7 +322,51 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                         ),
                     ],
                   ),
-                  if (prefs.relations && _tab == 0) scopePanel,
+                  if (_tab == 1)
+                    Wrap(spacing: 8, runSpacing: 4, children: [
+                      for (final item in ['概念关系', '含义圈', '相关名言', '类属树'].indexed)
+                        if (item.$1 != 1 || prefs.relations)
+                          ChoiceChip(
+                              label: Text(item.$2),
+                              selected: _conceptTab == item.$1,
+                              onSelected: (_) =>
+                                  setState(() => _conceptTab = item.$1)),
+                    ]),
+                  Offstage(
+                      offstage: _tab == 2 ||
+                          _tab == 4 ||
+                          (_tab == 1 && _conceptTab == 2),
+                      child: PassageScopeView(
+                        key: ValueKey(
+                            'reading-analysis-${widget.quote.contentKey}'),
+                        panelKey: _semanticKey,
+                        text: widget.quote.content,
+                        service: widget.semanticService,
+                        showActions: false,
+                        showHeader: false,
+                        allowIllustration: false,
+                        showCircles: prefs.relations,
+                        preferredView: _tab == 0
+                            ? EpistemicViewKind.abstraction
+                            : _tab == 3
+                                ? EpistemicViewKind.grounds
+                                : _conceptTab == 1
+                                    ? EpistemicViewKind.circles
+                                    : _conceptTab == 3
+                                        ? EpistemicViewKind.hierarchy
+                                        : EpistemicViewKind.connections,
+                        onStateChanged: () {
+                          if (mounted) setState(() {});
+                        },
+                        onResult: (value) {
+                          if (mounted) {
+                            setState(() => _semanticConcepts = value);
+                            _indexConcepts(value);
+                          }
+                        },
+                        onOpenConcept: (id, value) =>
+                            _openContextConcept(id, value),
+                      )),
                   if (_tab == 0) ...[
                     QuoteIntuitiveGallery(
                       topic: widget.topic,
@@ -340,41 +414,6 @@ class _QuoteCognitiveReaderState extends State<QuoteCognitiveReader> {
                     ),
                   ],
                   if (_tab == 1) ...[
-                    Wrap(spacing: 8, runSpacing: 4, children: [
-                      for (final entry in ['概念树', '含义圈', '相关名言'].indexed)
-                        if (entry.$1 != 1 || prefs.relations)
-                          ChoiceChip(
-                              label: Text(entry.$2),
-                              selected: _conceptTab == entry.$1,
-                              onSelected: (_) =>
-                                  setState(() => _conceptTab = entry.$1)),
-                    ]),
-                    if (_conceptTab != 2)
-                      PassageScopeView(
-                        key: ValueKey(
-                            'reading-concepts-${widget.quote.contentKey}'),
-                        text: widget.quote.content,
-                        service: widget.semanticService,
-                        imagePath: widget.imagePath,
-                        showCircles: prefs.relations,
-                        scopes: detail.scopes.isNotEmpty
-                            ? detail.scopes
-                            : saved.scopes,
-                        abstractions: detail.abstractions.isNotEmpty
-                            ? detail.abstractions
-                            : saved.abstractions,
-                        preferredView: _conceptTab == 1 && prefs.relations
-                            ? EpistemicViewKind.circles
-                            : EpistemicViewKind.hierarchy,
-                        onResult: (value) {
-                          if (mounted) {
-                            setState(() => _semanticConcepts = value);
-                            _indexConcepts(value);
-                          }
-                        },
-                        onOpenConcept: (id, value) =>
-                            _openContextConcept(id, value),
-                      ),
                     if (_conceptTab != 2 &&
                         concepts.isNotEmpty &&
                         (_semanticConcepts?.concepts.isEmpty ?? true))

@@ -445,10 +445,6 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         // Azure 用 api-key 头鉴权，OpenAI 系用 Authorization: Bearer。
         // 原生侧按这里下发的头来构造请求，避免再各自硬编码一套鉴权规则。
         'authHeaders': cfg.effectiveAuthHeaders,
-        // Azure OpenAI 的 gpt-5 / o 系列只认 max_completion_tokens，并且不接受自定义采样参数。
-        'maxTokensField': cfg.provider == 'azure' && UnifiedAiService.isAzureReasoningDeployment(cfg.deployment)
-            ? 'max_completion_tokens'
-            : 'max_tokens',
         'allowSamplingParams':
             !(cfg.provider == 'azure' && UnifiedAiService.isAzureReasoningDeployment(cfg.deployment)),
         'available': cfg.available,

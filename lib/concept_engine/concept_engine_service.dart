@@ -235,11 +235,6 @@ class ConceptEngineService {
     final behaviorChainMinNodes = await _readIntSetting('ce_behavior_chain_min_nodes', 4);
     final behaviorChainMaxNodesRaw = await _readIntSetting('ce_behavior_chain_max_nodes', 8);
     final behaviorChainMaxNodes = behaviorChainMaxNodesRaw < behaviorChainMinNodes ? behaviorChainMinNodes : behaviorChainMaxNodesRaw;
-    final parseMaxTokens = await _readIntSetting('ce_parse_max_tokens', 3200);
-    final sceneMaxTokens = await _readIntSetting('ce_scene_max_tokens', 4000);
-    final turnMaxTokens = await _readIntSetting('ce_turn_max_tokens', 2500);
-    final replayMaxTokens = await _readIntSetting('ce_replay_max_tokens', 3500);
-    final behaviorChainMaxTokens = await _readIntSetting('ce_behavior_chain_max_tokens', 2200);
 
     final promptExtra = ((await _kvDao.getString(_promptKey('extra', provider))) ??
             (await _kvDao.getString('ce_prompt_extra')) ??
@@ -272,11 +267,12 @@ class ConceptEngineService {
       parseRetryCount: parseRetryCount.clamp(1, 4).toInt(),
       behaviorChainMinNodes: behaviorChainMinNodes.clamp(2, 12).toInt(),
       behaviorChainMaxNodes: behaviorChainMaxNodes.clamp(2, 16).toInt(),
-      parseMaxTokens: parseMaxTokens.clamp(500, 12000).toInt(),
-      sceneMaxTokens: sceneMaxTokens.clamp(500, 12000).toInt(),
-      turnMaxTokens: turnMaxTokens.clamp(500, 12000).toInt(),
-      replayMaxTokens: replayMaxTokens.clamp(500, 12000).toInt(),
-      behaviorChainMaxTokens: behaviorChainMaxTokens.clamp(500, 12000).toInt(),
+      // Compatibility fields: 0 means omitted, never a legacy module quota.
+      parseMaxTokens: 0,
+      sceneMaxTokens: 0,
+      turnMaxTokens: 0,
+      replayMaxTokens: 0,
+      behaviorChainMaxTokens: 0,
       globalMaxOutputTokens: requestConfig.maxOutputTokens,
       globalTemperature: requestConfig.temperature,
       globalTopP: requestConfig.topP,
@@ -1336,9 +1332,6 @@ class ConceptEngineService {
     // 设置页展示用的“资源名/部署名”限定写法。
     final defaultModel = cfg.provider == 'azure' ? cfg.deployment : cfg.model;
     final effectiveModel = (modelOverride?.trim().isNotEmpty == true) ? modelOverride!.trim() : defaultModel;
-    final effectiveMaxTokens = cfg.globalMaxOutputTokens == null || cfg.globalMaxOutputTokens! <= 0
-        ? maxTokens
-        : cfg.globalMaxOutputTokens!.clamp(64, 64000).toInt();
     // Azure OpenAI 的 gpt-5 / o 系列只认 max_completion_tokens，且不接受自定义
     // temperature / top_p；Foundry 上的 Claude / Grok 则不支持 json_object。
     final azureReasoning = cfg.provider == 'azure' && UnifiedAiService.isAzureReasoningDeployment(effectiveModel);
@@ -1353,7 +1346,6 @@ class ConceptEngineService {
               {'role': 'system', 'content': systemPrompt},
               {'role': 'user', 'content': jsonEncode(userPayload)},
             ],
-            'max_output_tokens': effectiveMaxTokens,
             if (cfg.globalTemperature != null) 'temperature': cfg.globalTemperature,
             if (cfg.globalTopP != null) 'top_p': cfg.globalTopP,
           }
@@ -1366,8 +1358,6 @@ class ConceptEngineService {
             if (allowSamplingParams && cfg.globalTemperature != null) 'temperature': cfg.globalTemperature,
             if (allowSamplingParams && cfg.globalTopP != null) 'top_p': cfg.globalTopP,
             if (allowJsonResponseFormat) 'response_format': {'type': 'json_object'},
-            if (azureReasoning) 'max_completion_tokens': effectiveMaxTokens,
-            if (!azureReasoning) 'max_tokens': effectiveMaxTokens,
           };
 
     final headers = {
@@ -1442,16 +1432,12 @@ class ConceptEngineService {
     final effectiveTimeoutSeconds = timeoutOverrideSeconds ?? cfg.timeoutSeconds;
     final uri = Uri.parse(cfg.proxyEndpoint);
     final effectiveModel = (modelOverride?.trim().isNotEmpty == true) ? modelOverride!.trim() : cfg.model;
-    final effectiveMaxTokens = cfg.globalMaxOutputTokens == null || cfg.globalMaxOutputTokens! <= 0
-        ? maxTokens
-        : cfg.globalMaxOutputTokens!.clamp(64, 64000).toInt();
     final body = {
       'route': 'concept_engine_json_task',
       'provider': cfg.provider,
       'target_endpoint': cfg.endpoint,
       'model': effectiveModel,
       if (useJsonResponseFormat) 'response_format': 'json_object',
-      'max_tokens': effectiveMaxTokens,
       'system_prompt': systemPrompt,
       if (cfg.globalTemperature != null) 'temperature': cfg.globalTemperature,
       if (cfg.globalTopP != null) 'top_p': cfg.globalTopP,

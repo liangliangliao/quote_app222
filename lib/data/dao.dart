@@ -1214,6 +1214,18 @@ Future<List<Map<String,dynamic>>> all({int limit=100, int offset=0, String q=''}
   }
 
 
+  /// Chronology is independent of shuffled physical row order. SQL ordering
+  /// happens before pagination, so records in later pages cannot jump backwards.
+  Future<List<Map<String, dynamic>>> chronological({int limit = 100, int offset = 0, String? q}) async {
+    final db = await AppDatabase.instance();
+    // Offset-free app timestamps are local time; epoch values are UTC.
+    String parsed(String column) => "CASE WHEN substr(trim($column),-1) IN ('Z','z') OR (substr(trim($column),-6,1) IN ('+','-') AND substr(trim($column),-3,1)=':') THEN julianday($column) ELSE julianday($column,'utc') END";
+    final time = "COALESCE(${parsed("NULLIF(inserted_at,'')")}, CASE WHEN typeof(created_at) IN ('integer','real') AND created_at>0 THEN 2440587.5 + created_at/86400000.0 WHEN created_at=0 THEN NULL ELSE ${parsed('created_at')} END)";
+    return db.rawQuery('SELECT * FROM quotes ${q == null || q.isEmpty ? '' : 'WHERE content LIKE ?'} '
+        "ORDER BY ($time IS NULL), $time ASC, COALESCE(quote_uid,'') ASC, id ASC LIMIT ? OFFSET ?",
+        [if (q != null && q.isNotEmpty) '%$q%', limit, offset]);
+  }
+
   Future<Map<String,dynamic>?> latestOne() async {
     final rows = await all(limit: 1, offset: 0);
     return rows.isNotEmpty ? rows.first : null;

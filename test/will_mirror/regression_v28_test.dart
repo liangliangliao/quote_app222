@@ -365,7 +365,9 @@ void main() {
               expect(request.headers['api-key'], 'fixture');
               final body = jsonMap(jsonDecode(request.body));
               expect(body['model'], 'gpt-6-luna');
-              expect(body['max_completion_tokens'], 16000);
+              expect(body.containsKey('max_completion_tokens'), false);
+              expect(body.containsKey('max_tokens'), false);
+              expect(body.containsKey('max_output_tokens'), false);
               if (calls == 1) return http.Response('private ignored', 404);
               return http.Response(
                   jsonEncode({
@@ -388,6 +390,7 @@ void main() {
     expect(calls, 2);
   });
   test('Azure Claude uses Messages body and parses text blocks', () async {
+    var reads = 0, posts = 0;
     final model = HostPrivateModel(
         host: ConfigHost(const UnifiedAiResolvedConfig(
             provider: 'azure',
@@ -399,8 +402,15 @@ void main() {
             available: true)),
         clientFactory: () => MockClient((request) async {
               expect(request.headers['x-api-key'], 'fixture');
+              if (request.method == 'GET') {
+                reads++;
+                expect(request.url.path, '/anthropic/v1/models/claude');
+                return http.Response('{"max_tokens":128000}', 200);
+              }
+              posts++;
               final body = jsonMap(jsonDecode(request.body));
               expect(body['system'], 'system');
+              expect(body['max_tokens'], 128000);
               expect(body.containsKey('response_format'), false);
               return http.Response(
                   jsonEncode({
@@ -419,5 +429,35 @@ void main() {
             schema: {},
             cancel: CancelToken()))['summary'],
         'ok');
+    expect(reads, 1);
+    expect(posts, 1);
+  });
+  test(
+      'unknown Claude capacity reports the configuration gap without a paid probe',
+      () async {
+    var posts = 0;
+    final model = HostPrivateModel(
+        host: ConfigHost(const UnifiedAiResolvedConfig(
+            provider: 'azure',
+            apiKey: 'fixture',
+            model: 'unknown-capacity',
+            endpoint: 'https://example.test/anthropic/v1/messages',
+            label: 'fixture',
+            displayModel: 'fixture',
+            available: true)),
+        clientFactory: () => MockClient((request) async {
+              if (request.method == 'POST') posts++;
+              return http.Response('{}', 404);
+            }));
+    await expectLater(
+        model.complete(
+            stage: AnalysisStage.understand,
+            system: '',
+            prompt: '',
+            schema: {},
+            cancel: CancelToken()),
+        throwsA(isA<MirrorProblem>().having(
+            (p) => p.message, 'specific safe reason', contains('最大输出能力'))));
+    expect(posts, 0);
   });
 }

@@ -1,3 +1,4 @@
+import '../../services/ai_output_policy.dart';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -58,15 +59,12 @@ class HostPrivateModel implements StructuredModel {
         isResponses = endpoint.path.endsWith('/responses');
         isAnthropic =
             config.provider == 'azure' && endpoint.path.contains('/anthropic/');
-        final reasoning = config.provider == 'azure' &&
-            UnifiedAiService.isAzureReasoningDeployment(config.deployment);
         final body = <String, dynamic>{
           'model': config.deployment,
           if (isResponses) ...{
             'store': false,
             'instructions': system,
             'input': prompt,
-            'max_output_tokens': 16000,
             'text': {
               'format': {
                 'type': 'json_schema',
@@ -80,21 +78,31 @@ class HostPrivateModel implements StructuredModel {
             'messages': [
               {'role': 'user', 'content': prompt}
             ],
-            'max_tokens': 16000,
             'stream': false,
           } else ...{
             'messages': [
               {'role': 'system', 'content': system},
               {'role': 'user', 'content': prompt}
             ],
-            if (reasoning) 'max_completion_tokens': 16000,
-            if (!reasoning) 'max_tokens': 16000,
             if (config.provider != 'azure' ||
                 UnifiedAiService.azureSupportsJsonResponseFormat(
                     config.deployment))
               'response_format': {'type': 'json_object'},
           },
         };
+        if (isAnthropic) {
+          try {
+            body['max_tokens'] = await AiOutputPolicy.anthropicCapacity(
+                endpoint,
+                {'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01'},
+                config.deployment,
+                client: client);
+          } on StateError catch (error) {
+            // This policy error is safe and specific; do not misreport missing
+            // deployment metadata as a network interruption.
+            throw MirrorProblem(error.message);
+          }
+        }
         response = await client
             .post(endpoint,
                 headers: {

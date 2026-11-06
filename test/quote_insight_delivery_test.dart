@@ -1,3 +1,4 @@
+import 'package:quote_app/epistemic/cognitive_preferences.dart';
 import 'dart:convert';
 import 'package:quote_app/epistemic/semantic_scope.dart';
 import 'semantic_scope_test.dart' show unresolvedMap;
@@ -101,6 +102,7 @@ void main() {
     binding.defaultBinaryMessenger
         .setMockMethodCallHandler(native, (_) async => null);
     db = await AppDatabase.instance();
+    await CognitivePreferenceStore.instance.load();
     final taskId = await TaskDao().create(name: '阅读与比较验收', type: 'auto');
     generated = QuoteAiService.parseResponse(
         jsonEncode({

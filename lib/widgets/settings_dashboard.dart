@@ -131,7 +131,7 @@ class SettingsDashboard extends StatelessWidget {
                         section: SettingsSection.parameters,
                         icon: Icons.tune_rounded,
                         subtitle:
-                            '请求超时、最大输出 Tokens、Temperature、\nTop P 与重试等通用参数',
+                            '请求超时、Temperature、Top P 与重试等通用参数',
                         art: _SettingsArt.gears,
                         onOpen: onOpen,
                       ),

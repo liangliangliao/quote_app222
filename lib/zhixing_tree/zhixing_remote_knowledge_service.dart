@@ -1,3 +1,4 @@
+import '../services/ai_output_policy.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1108,7 +1109,6 @@ class ZxRemoteKnowledgeService {
             'vector_store_ids': stores,
           },
         ],
-        'max_output_tokens': maxTokens,
       },
       operation: '基于远端书库回答',
     );
@@ -1164,7 +1164,6 @@ class ZxRemoteKnowledgeService {
         'input': <Object?>[
           <String, Object?>{'role': 'user', 'content': content},
         ],
-        'max_output_tokens': maxTokens,
       },
       operation: operation,
     );
@@ -1202,7 +1201,6 @@ class ZxRemoteKnowledgeService {
             ],
           },
         ],
-        'max_tokens': maxTokens,
       },
       operation: '基于 Eden AI 临时文件 ID 回答',
     );
@@ -1265,7 +1263,6 @@ class ZxRemoteKnowledgeService {
       _claudeHeaders(config.apiKey),
       <String, Object?>{
         'model': config.model,
-        'max_tokens': maxTokens,
         'system': systemPrompt,
         'messages': <Object?>[
           <String, Object?>{
@@ -1326,6 +1323,9 @@ class ZxRemoteKnowledgeService {
     Map<String, Object?> body, {
     required String operation,
   }) async {
+    if (uri.path.endsWith('/messages')) {
+      body['max_tokens'] = await AiOutputPolicy.anthropicCapacity(uri, headers, '${body['model']}', client: _client);
+    }
     final response = await _client
         .post(
           uri,

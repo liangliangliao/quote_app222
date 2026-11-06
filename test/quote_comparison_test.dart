@@ -42,7 +42,7 @@ void main() {
     expect(
         QuoteComparisonService.parseResponse(jsonEncode(reliable), a, b)
             .canDrawSets,
-        isTrue);
+        isFalse); // A quote substring without a full circle contract is insufficient.
     reliable['basis_a'] = '原句里没有的证据';
     expect(
         QuoteComparisonService.parseResponse(jsonEncode(reliable), a, b)
@@ -87,9 +87,8 @@ void main() {
       });
     final partial = QuoteComparisonService.parseResponse(jsonEncode(data), a, b,
         requireReadings: true);
-    expect(partial.readingB, isEmpty);
-    expect(partial.common, isNotEmpty);
-    expect(partial.semanticMap['issues'], isNotEmpty);
+    expect(partial.readingB['abstractions'], isNotEmpty);
+    expect(partial.common, isNotEmpty); // A concise definition need not invent scenes.
     data['reading_b'] = {...data['reading_a'] as Map, 'anchor': '每个学者'};
     expect(
         QuoteComparisonService.parseResponse(jsonEncode(data), a, b,
@@ -123,7 +122,7 @@ void main() {
       () {
     final prompt = QuoteComparisonService.buildPrompt(a, b);
     expect(prompt, contains('不是指令'));
-    expect(prompt, contains(jsonEncode(a.toPromptJson('A'))));
+    expect(prompt, contains(jsonEncode({'id': 'A', 'text': a.content, 'title': '', 'origin': 'quote'})));
     expect(prompt, contains('不能由交集推出因果'));
   });
 

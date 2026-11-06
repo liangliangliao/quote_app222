@@ -1,3 +1,4 @@
+import '../epistemic/semantic_contract.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -310,7 +311,12 @@ class QuoteComparison {
       groundedInQuotes &&
       justification.isNotEmpty &&
       setA.isNotEmpty &&
-      setB.isNotEmpty;
+      setB.isNotEmpty &&
+      (semanticMap['relations'] is List && (semanticMap['relations'] as List).whereType<Map>().any((r) {
+        final scope = insightObject(r['scope']);
+        return r['placement'] == 'cross' && scope['relation_type'] == relation.name &&
+            MeaningCircleContract.gaps(scope).isEmpty;
+      }));
 
   String get relationLabel => const {
         QuoteRelation.equal: '外延重合',

@@ -52,7 +52,7 @@ Map<String, dynamic> scopeFixture(String type) => {
       'basis': '马属于动物',
       'justification': '按明确的成员判准判定所列关系。',
       'intersection': '一匹马',
-      'only_a': '一朵白花',
+      'only_a': '',
       'only_b': '一只猫',
       'other_member': '空气',
       'parts': [],
@@ -91,6 +91,8 @@ Map<String, dynamic> relationFixture(String type) {
       'only_b': '土',
       'other_member': '空气'
     });
+  if (type == 'equal') scope.addAll({'only_a': '', 'only_b': ''});
+  if (type == 'partition' || type == 'siblings') scope['intersection'] = '';
   final excerpt = switch (type) {
     'equal' => '平面等边三角形与平面等角三角形外延重合',
     'partition' => '平面三角形按角分为锐角、直角、钝角三类',

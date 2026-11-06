@@ -1351,14 +1351,11 @@ class MovieRoleLabService {
       final json = await _postViaProxy(cfg: cfg, logModule: logModule, systemPrompt: systemPrompt, userPayload: userPayload, maxTokens: maxTokens);
       return _encodePretty(json);
     }
-    final effectiveMaxTokens = cfg.globalMaxOutputTokens == null || cfg.globalMaxOutputTokens! <= 0
-        ? maxTokens
-        : cfg.globalMaxOutputTokens!.clamp(64, 64000).toInt();
     final raw = await _unifiedAiService.generateText(
       purpose: logModule,
       systemPrompt: systemPrompt,
       prompt: jsonEncode(userPayload),
-      maxTokens: effectiveMaxTokens,
+      maxTokens: 0,
       expectJson: expectJson,
       forcedProvider: cfg.provider,
       forcedModel: cfg.model,
@@ -1377,15 +1374,12 @@ class MovieRoleLabService {
     required Map<String, dynamic> userPayload,
     required int maxTokens,
   }) async {
-    final effectiveMaxTokens = cfg.globalMaxOutputTokens == null || cfg.globalMaxOutputTokens! <= 0
-        ? maxTokens
-        : cfg.globalMaxOutputTokens!.clamp(64, 64000).toInt();
 
     final raw = await _unifiedAiService.generateText(
       purpose: logModule,
       systemPrompt: systemPrompt,
       prompt: jsonEncode(userPayload),
-      maxTokens: effectiveMaxTokens,
+      maxTokens: 0,
       expectJson: true,
       forcedProvider: cfg.provider,
       forcedModel: cfg.model,
@@ -1405,16 +1399,12 @@ class MovieRoleLabService {
     required int maxTokens,
   }) async {
     final uri = Uri.parse(cfg.proxyEndpoint);
-    final effectiveMaxTokens = cfg.globalMaxOutputTokens == null || cfg.globalMaxOutputTokens! <= 0
-        ? maxTokens
-        : cfg.globalMaxOutputTokens!.clamp(64, 64000).toInt();
     final body = {
       'route': 'concept_engine_json_task',
       'provider': cfg.provider,
       'target_endpoint': cfg.endpoint,
       'model': cfg.model,
       'response_format': 'json_object',
-      'max_tokens': effectiveMaxTokens,
       'system_prompt': systemPrompt,
       if (cfg.globalTemperature != null) 'temperature': cfg.globalTemperature,
       if (cfg.globalTopP != null) 'top_p': cfg.globalTopP,

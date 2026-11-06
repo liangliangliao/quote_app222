@@ -12,6 +12,7 @@ import 'package:quote_app/epistemic/cognitive_preferences.dart';
 import 'package:quote_app/epistemic/cognitive_store.dart';
 import 'package:quote_app/epistemic/concept_explorer.dart';
 import 'package:quote_app/epistemic/concept_hierarchy_view.dart';
+import 'package:quote_app/epistemic/concept_circle_preview.dart';
 import 'package:quote_app/epistemic/concept_meaning_network.dart';
 import 'package:quote_app/epistemic/quote_cognitive_reader.dart';
 import 'package:quote_app/epistemic/quote_concept_catalog.dart';
@@ -157,23 +158,16 @@ void main() {
     expect(partial.hierarchy.length, 2);
     expect(partial.needsRepair, isTrue);
   });
-  test('four circles satisfy nested and multiple overlap constraints together',
-      () {
-    final cluster = ConceptCircleLayout.build(networkScope()).single;
-    expect(cluster.verified, isTrue);
-    expect(cluster.circles.length, 4);
-    MeaningCircle c(String id) =>
-        cluster.circles.singleWhere((c) => c.ids.contains(id));
-    expect((c('apple').center - c('fruit').center).distance + c('apple').radius,
-        lessThan(c('fruit').radius));
-    expect(
-        (c('banana').center - c('fruit').center).distance + c('banana').radius,
-        lessThan(c('fruit').radius));
-    for (final id in ['fruit', 'apple']) {
-      final a = c('red'), b = c(id), d = (a.center - b.center).distance;
-      expect(d, lessThan(a.radius + b.radius));
-      expect(d, greaterThan((a.radius - b.radius).abs()));
-    }
+  test('uncompared circle pairs do not acquire invented spatial range relations', () {
+    final cluster=ConceptCircleLayout.build(networkScope()).single;
+    expect(cluster.verified,isFalse);
+    expect(cluster.relations.length,4);
+    final raw=networkMap();
+    (raw['concepts'] as List).removeWhere((n)=>n['id']=='banana');
+    (raw['relations'] as List).removeWhere((r)=>(r['node_ids'] as List).contains('banana'));
+    final complete=ConceptCircleLayout.build(SemanticScope.parse(raw,const [ScopeSource('A',networkText)])).single;
+    expect(complete.verified,isTrue);
+    expect(complete.circles.length,3);
   });
   test('contradictory circle constraints use local diagrams', () {
     final raw = networkMap();
@@ -187,12 +181,12 @@ void main() {
       'criterion_b': '属于苹果的果实'
     });
     (raw['relations'] as List).add(inverse);
+    final value =
+        SemanticScope.parse(raw, const [ScopeSource('A', networkText)]);
     expect(
-        ConceptCircleLayout.build(
-                SemanticScope.parse(raw, const [ScopeSource('A', networkText)]))
-            .single
-            .verified,
-        isFalse);
+        value.issues.any((issue) => issue.message.contains('不能同时成立')), isTrue);
+    expect(value.relations.where((r) => r.scope != null).length,
+        lessThan((raw['relations'] as List).length));
   });
   test('non-set philosophical questions recommend grounded alternate views',
       () {
@@ -217,7 +211,7 @@ void main() {
         'Azure / gpt-6-luna');
   });
   test(
-      'a bad relation cannot discard a good hierarchy; one structural repair only',
+      'a bad relation preserves visible hierarchy without an automatic paid repair',
       () async {
     final raw = happinessMap();
     raw['relations'] = [
@@ -235,14 +229,12 @@ void main() {
         ai: ai, store: CognitiveStore(database: () async => db));
     final result =
         await service.analyze(const [ScopeSource('A', happiness)], '概念树');
-    expect(ai.calls, 2);
+    expect(ai.calls, 1);
     expect(result.hierarchy.length, 2);
     expect(result.needsRepair, isTrue);
-    expect(
-        (await service.cached(const [ScopeSource('A', happiness)], '概念树'))!
-            .hierarchy
-            .length,
-        2);
+    final stored = await service.cached(const [ScopeSource('A', happiness)], '概念树');
+    expect(stored!.needsRepair, isTrue);
+    expect(stored.hierarchy.length, 2);
     await db.close();
   });
   test(
@@ -287,7 +279,7 @@ void main() {
         const [ScopeSource('A', frankl), ScopeSource('B', willing)], '展开',
         context:
             const SemanticContext(conceptId: 'meaning', conceptLabel: '生命的意义'));
-    expect(ai.calls, 2);
+    expect(ai.calls, 1);
     expect(result.concepts.map((n) => n.id), ['meaning']);
     expect(result.issues.any((e) => e.message.contains('概念身份')), isTrue);
     await db.close();
@@ -312,7 +304,7 @@ void main() {
       'grounds': []
     };
     final key = 'cognition.semantic.1.${insightHash([
-          sources.map((s) => s.toJson()).toList(),
+          sources.map((s) => {...s.toJson()}..remove('origin')).toList(),
           '旧阅读',
           'last'
         ])}';
@@ -330,7 +322,8 @@ void main() {
     await db.close();
   });
 
-  test('a comparison repairs only its diagram and preserves useful prose',
+  test(
+      'a comparison preserves useful prose without silently repairing its diagram',
       () async {
     final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     final raw = {
@@ -347,12 +340,13 @@ void main() {
     const a = QuoteReference(id: 'a', content: frankl),
         b = QuoteReference(id: 'b', content: willing);
     final result = await service.compare(a, b);
-    expect(ai.calls, 2);
+    expect(ai.calls, 1);
     expect(result.difference, raw['critical_difference']);
-    expect(result.semanticMap['judgments'], hasLength(3));
+    expect(result.semanticMap['judgments'], hasLength(1));
+    expect(result.semanticMap['issues'], isNotEmpty);
     expect(result.modelDisplayName, '验收样例 · 模拟模型');
     await service.compare(a, b);
-    expect(ai.calls, 2);
+    expect(ai.calls, 1);
     await db.close();
   });
 
@@ -433,11 +427,11 @@ void main() {
                 valueListenable: material,
                 builder: (context, text, _) => SemanticScopePanel(
                     sources: [ScopeSource('A', text)], service: service))));
-    await tester.tap(find.text('分析概念关系并绘图'));
+    await tester.tap(find.byKey(const ValueKey('semantic-analysis-action')));
     await tester.pump();
     material.value = networkText;
     await settle(tester);
-    await tester.tap(find.text('分析概念关系并绘图'));
+    await tester.tap(find.byKey(const ValueKey('semantic-analysis-action')));
     await tester.pump();
     service.requests[1].complete(networkScope());
     await settle(tester);
@@ -448,7 +442,7 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
   testWidgets(
-      'disabled circle preference preserves the concept tree without circle controls',
+      'disabled circles do not fabricate a class tree from a scope-only response',
       (tester) async {
     await mount(
         tester,
@@ -458,7 +452,8 @@ void main() {
                 sources: const [ScopeSource('A', networkText)],
                 allowCircles: false)));
     expect(find.byType(ConceptMeaningNetwork), findsNothing);
-    expect(find.byType(ConceptHierarchyView), findsOneWidget);
+    expect(find.byType(ConceptHierarchyView), findsNothing);
+    expect(find.text('当前分析未形成可展示的视图，可保留原文后重新分析。'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, '含义圈'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -474,7 +469,7 @@ void main() {
     await settle(tester);
     expect(find.byType(BottomSheet), findsOneWidget);
     final parent = find.descendant(
-        of: find.byType(BottomSheet), matching: find.text('返回上位概念：过程中的幸福'));
+        of: find.byType(BottomSheet), matching: find.text('具体实例：过程中的幸福'));
     await tester.ensureVisible(parent);
     await tester.tap(parent);
     await settle(tester);
@@ -497,13 +492,20 @@ void main() {
             topic: '幸福',
             authorLabel: '验收样例',
             note: ''));
+    expect(find.byType(ConceptCirclePreview), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '类属树'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '类属树'));
+    await settle(tester);
     expect(find.byType(ConceptHierarchyView), findsOneWidget);
     final indexed = await tester.runAsync(() => QuoteInsightStore()
         .readSemanticConcepts(
             [const QuoteReference(id: 'v4-happiness', content: happiness)]));
     expect(indexed!.values.single, contains('过程中的幸福'));
-    expect(find.widgetWithText(ChoiceChip, '概念树'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, '类属树'), findsOneWidget);
     await capture(tester, 'reading-tree');
+    await tester.ensureVisible(find.text('追踪概念的直观链路'));
+    await tester.tap(find.text('追踪概念的直观链路'));
+    await settle(tester);
     await tester
         .ensureVisible(find.byKey(const ValueKey('grounding-node-walk')));
     await tester.tap(find.byKey(const ValueKey('grounding-node-walk')));
@@ -520,10 +522,14 @@ void main() {
   });
   testWidgets('multiple circles zoom, reset and open fullscreen at large text',
       (tester) async {
+    final raw=networkMap();
+    (raw['concepts'] as List).removeWhere((n)=>n['id']=='banana');
+    (raw['relations'] as List).removeWhere((r)=>(r['node_ids'] as List).contains('banana'));
+    final known=SemanticScope.parse(raw,const [ScopeSource('A',networkText)]);
     await mount(
         tester,
         SingleChildScrollView(
-            child: ConceptMeaningNetwork(value: networkScope())),
+            child: ConceptMeaningNetwork(value: known)),
         scale: 1);
     expect(find.byType(InteractiveViewer), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -531,7 +537,7 @@ void main() {
     await mount(
         tester,
         SingleChildScrollView(
-            child: ConceptMeaningNetwork(value: networkScope())),
+            child: ConceptMeaningNetwork(value: known)),
         scale: 2);
     await tester.tap(find.byTooltip('全屏查看'));
     await settle(tester);

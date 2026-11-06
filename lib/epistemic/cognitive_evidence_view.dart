@@ -48,6 +48,7 @@ class CognitiveEvidenceView extends StatelessWidget {
             if (note.revisions.isNotEmpty) ...[
               const Text('最新修订引用的材料 · 用户报告'),
               SelectableText(note.revisions.last.evidence),
+              if (note.revisions.last.counterEvidence.isNotEmpty) Text('反对材料或替代解释：${note.revisions.last.counterEvidence}'),
               if (note.revisions.last.reason.isNotEmpty)
                 Text('改判理由：${note.revisions.last.reason}'),
             ],

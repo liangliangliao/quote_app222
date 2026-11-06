@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'ai_request_accounting.dart';
 
 /// Long concept maps remain JSON tasks, but need not wait for the whole JSON
 /// before receiving HTTP headers. Used only by an explicit semantic-map request.
 class SemanticRequestException implements Exception {
   final String message;
   final Object? cause;
-  const SemanticRequestException(this.message, {this.cause});
+  final String code;
+  final String rawResponse;
+  const SemanticRequestException(this.message,
+      {this.cause, this.code = 'unknown', this.rawResponse = ''});
   @override
   String toString() => message;
 }
@@ -19,10 +23,11 @@ class SemanticJsonReply {
 }
 
 class SemanticJsonTransport {
-  static bool handles(String purpose) =>
-      RegExp(r'^cognition\.semantic\.v\d+$').hasMatch(purpose);
+  static bool handles(String purpose) => RegExp(
+          r'^(?:cognition\.semantic(?:\.(?:expand|repair|verify))?|quote_ai\.comparison)\.v\d+$')
+      .hasMatch(purpose);
   static int outputLimit(int requested, int configured) =>
-      [requested, configured, 10000].reduce((a, b) => a < b ? a : b);
+      [requested, configured].reduce((a, b) => a < b ? a : b);
   final http.Client Function() clientFactory;
   final Duration totalTimeout;
   SemanticJsonTransport(
@@ -35,18 +40,31 @@ class SemanticJsonTransport {
       {required Uri uri,
       required Map<String, String> headers,
       required Map<String, dynamic> body,
-      required Duration idleTimeout}) async {
-    final client = clientFactory(), text = SemanticJsonStream();
+      required Duration idleTimeout,
+      AiCancellation? cancellation,
+      Future<void> Function(int status, String wire, String? failure)?
+          onResponse}) async {
+    final client = clientFactory(),
+        text = SemanticJsonStream(
+            outputLimit: (body['max_output_tokens'] ??
+                body['max_completion_tokens'] ??
+                body['max_tokens']) as int?);
     final wire = StringBuffer();
-    var deadline = false, status = 0, isEvents = false;
+    String? failure;
+    var deadline = false, status = 0, isEvents = false, sent = false;
+    final stopListening = cancellation?.listen(client.close);
     final timer = Timer(totalTimeout, () {
       deadline = true;
       client.close();
     });
     try {
+      if (cancellation?.cancelled == true)
+        throw const SemanticRequestException('已停止接收，保留已有结果。',
+            code: 'cancelled');
       final request = http.Request('POST', uri)
         ..headers.addAll(headers)
         ..body = jsonEncode(body);
+      sent = true;
       final response = await client.send(request).timeout(idleTimeout);
       status = response.statusCode;
       isEvents = (response.headers['content-type'] ?? '')
@@ -57,8 +75,6 @@ class SemanticJsonTransport {
           .transform(const LineSplitter())
           .timeout(idleTimeout)) {
         wire.writeln(line);
-        if (wire.length > 4 * 1024 * 1024)
-          throw const SemanticRequestException('本次响应过长，已停止接收，请减少展开范围后重试。');
         if (isEvents && status >= 200 && status < 300) text.addLine(line);
       }
       if (deadline) throw TimeoutException('semantic request deadline');
@@ -71,9 +87,22 @@ class SemanticJsonTransport {
         text.addEnvelope(jsonDecode(wire.toString()));
       }
       return SemanticJsonReply(status, text.finish(), wire.toString());
-    } on SemanticRequestException {
-      rethrow;
+    } on SemanticRequestException catch (error) {
+      failure = error.code;
+      throw SemanticRequestException(error.message,
+          cause: error.cause,
+          code: error.code,
+          rawResponse: text.content.isEmpty ? wire.toString() : text.content);
     } catch (error) {
+      failure = cancellation?.cancelled == true
+          ? 'cancelled'
+          : deadline || error is TimeoutException
+              ? 'timeout'
+              : 'connection';
+      if (cancellation?.cancelled == true)
+        throw SemanticRequestException('已停止接收，保留已有结果。',
+            code: 'cancelled',
+            rawResponse: text.content.isEmpty ? wire.toString() : text.content);
       // A transport can close after the final JSON but before the trailing SSE
       // marker. Retain a complete answer; never return a partial JSON fragment.
       if (isEvents && status >= 200 && status < 300) {
@@ -85,10 +114,16 @@ class SemanticJsonTransport {
           deadline || error is TimeoutException
               ? '生成等待超时，尚未收到完整结果。请稍后手动重试。'
               : '连接在完整结果返回前中断。请检查网络后手动重试。',
-          cause: error);
+          cause: error,
+          rawResponse: text.content.isEmpty ? wire.toString() : text.content,
+          code: failure);
     } finally {
       timer.cancel();
+      stopListening?.call();
       client.close();
+      if (sent)
+        await onResponse?.call(status, wire.toString(),
+            failure ?? (status < 200 || status >= 300 ? 'http_error' : null));
     }
   }
 }
@@ -96,10 +131,15 @@ class SemanticJsonTransport {
 /// Assembles answer deltas, never reasoning deltas. Multi-line SSE data fields,
 /// keep-alives and terminal events do not become part of the JSON document.
 class SemanticJsonStream {
+  final int? outputLimit;
+  SemanticJsonStream({this.outputLimit});
   final _pieces = StringBuffer(), _event = <String>[];
   String _fallback = '';
   bool terminal = false, truncated = false, rejected = false;
-  String get content => _pieces.isNotEmpty ? _pieces.toString() : _fallback;
+  String get content => (_pieces.isNotEmpty ? _pieces.toString() : _fallback)
+      .trim()
+      .replaceFirst(RegExp(r'^```(?:json)?\s*', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'\s*```$'), '');
   bool get hasCompleteObject {
     try {
       return jsonDecode(content) is Map;
@@ -208,12 +248,13 @@ class SemanticJsonStream {
 
   String finish() {
     if (truncated)
-      throw const SemanticRequestException(
-          '本次输出达到上限，概念图尚未完整生成。可提高较低的输出设置或减少展开范围后重试。');
+      throw SemanticRequestException('本次响应未完整返回，请重试或检查模型服务。',
+          code: 'output_limit');
     if (rejected)
-      throw const SemanticRequestException('服务未提供本次请求的完整正文，请调整内容后重试。');
-    if (hasCompleteObject || (terminal && content.trim().isNotEmpty))
-      return content;
-    throw const SemanticRequestException('尚未收到完整的概念图结果，请稍后手动重试。');
+      throw const SemanticRequestException('服务未提供本次请求的完整正文，请调整内容后重试。',
+          code: 'refused');
+    if (hasCompleteObject) return content;
+    throw const SemanticRequestException('尚未收到完整的概念图结果，请稍后手动重试。',
+        code: 'incomplete');
   }
 }

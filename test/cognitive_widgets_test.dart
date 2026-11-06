@@ -438,7 +438,9 @@ void main() {
             hasMore: false,
             loading: false));
     await mount(tester, view(1));
-    await waitFor(tester, find.text('概念星图'));
+    await waitFor(tester, find.byKey(const ValueKey('history-meaning-circles')));
+    await tester.tap(find.widgetWithText(ChoiceChip,'分类索引'));
+    await waitFor(tester, find.text('主题索引 · 归类导航'));
     expect(find.text('(3)'), findsOneWidget);
     expect(find.byType(InteractiveViewer), findsOneWidget);
     await capture(tester, '03-history-constellation');
@@ -509,7 +511,7 @@ void main() {
         const Scaffold(
             body: QuoteCognitiveReader(
                 quote: ref, topic: '评审', authorLabel: '案例', note: '')));
-    await waitFor(tester, find.text('生成完整概念树与含义圈'));
+    await waitFor(tester, find.text('深入分析这句名言'));
     expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
     expect(find.text('概念含义圈 · 单一范围'), findsNothing);
   });
@@ -653,11 +655,13 @@ void main() {
         height: 800);
     await waitFor(tester, find.text('关系图'));
     await tester.tap(find.text('关系图'));
-    await waitFor(tester, find.text('概念星图'));
+    await waitFor(tester, find.byKey(const ValueKey('history-meaning-circles')));
+    await tester.tap(find.widgetWithText(ChoiceChip,'分类索引'));
+    await waitFor(tester, find.text('主题索引 · 归类导航'));
     expect(find.text('(2)'), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-set-diagram')), findsNothing);
     expect(find.text('概念含义圈 · A 包含 B'), findsNothing);
-    await tester.tap(find.byTooltip('关系依据'));
+    await tester.tap(find.byTooltip('归类依据'));
     await settle(tester);
     expect(find.textContaining('共同收录'), findsWidgets);
     await capture(tester, 'history-awaits-semantic-analysis');
@@ -1021,7 +1025,9 @@ void main() {
                 onLoadMore: () {},
                 hasMore: false,
                 loading: false)));
-    await waitFor(tester, find.text('概念星图'));
+    await waitFor(tester, find.byKey(const ValueKey('history-meaning-circles')));
+    await tester.tap(find.widgetWithText(ChoiceChip,'分类索引'));
+    await waitFor(tester, find.text('主题索引 · 归类导航'));
     await tester.tap(find.byTooltip('全部类别'));
     await settle(tester);
     await tester.enterText(
@@ -1504,6 +1510,7 @@ void main() {
         find.widgetWithText(TextField, '具体的新材料或反例'), '调整方法后完成了下一次尝试。');
     await tester.enterText(
         find.widgetWithText(TextField, '修订后的判断'), '一次失败不能决定以后的每次尝试。');
+    await tester.enterText(find.widgetWithText(TextField, '新材料为什么改变判断'), '新尝试构成原来普遍判断的反例。');
     await tester.tap(find.text('保存修订'));
     await waitFor(tester, find.text('判断修订记录'));
     expect(tester.takeException(), isNull);

@@ -92,7 +92,6 @@ class ReferenceWebResearch {
             body: jsonEncode({
               'model': config.model,
               'store': false,
-              'max_output_tokens': 2200,
               'tools': [
                 {'type': 'web_search'}
               ],

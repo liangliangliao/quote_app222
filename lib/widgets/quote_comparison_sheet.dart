@@ -1,3 +1,6 @@
+import 'dart:convert';
+import '../epistemic/comparison_revisions.dart';
+import '../services/ai_request_audit.dart';
 import 'quote_comparison_prototype.dart';
 import 'package:flutter/material.dart';
 
@@ -56,6 +59,9 @@ class QuoteComparisonSheet extends StatefulWidget {
 class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
   late final _service = widget.service ?? QuoteComparisonService();
   QuoteComparison? _result;
+  final _revisionStore = ComparisonRevisionStore();
+  List<Map<String, dynamic>> _revisions = [];
+  AiOperation? _operation;
   SemanticScope? _semanticOverride;
   bool _busy = true;
   String? _message;
@@ -143,6 +149,7 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
 
   @override
   void dispose() {
+    _operation?.cancellation.cancel();
     _conditions.dispose();
     super.dispose();
   }
@@ -152,7 +159,9 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
     super.didUpdateWidget(old);
     if (old.a.contentKey != widget.a.contentKey ||
         old.b.contentKey != widget.b.contentKey) {
+      _operation?.cancellation.cancel();
       _generation++;
+      _revisions = [];
       _result = null;
       _semanticOverride = null;
       _message = null;
@@ -173,8 +182,13 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
       _appliedConditions = conditions;
     });
     try {
-      final result = await _service.compareForPurpose(
-          widget.a, widget.b, purpose, conditions);
+      _operation = AiOperation('quote_ai.comparison.v7');
+      final result = await AiRequestAudit.runOperation(_operation!, () => _service.compareForPurpose(
+          widget.a, widget.b, purpose, conditions));
+      if (mounted && n == _generation && CognitivePreferenceStore.active) {
+        // Showing a valid comparison must not wait for a history write.
+        _saveRevision(result, purpose, conditions, n);
+      }
       if (mounted && n == _generation)
         setState(() {
           _result = result;
@@ -182,13 +196,36 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
         });
     } on FormatException catch (error) {
       if (mounted && n == _generation) setState(() => _message = error.message);
-    } catch (_) {
+    } catch (error) {
       if (mounted && n == _generation)
         setState(() => _message = '暂时无法比较。请检查网络和全局 AI 设置后重试；原句与已有分析仍可阅读。');
     } finally {
       if (mounted && n == _generation) setState(() => _busy = false);
     }
   }
+
+  Future<void> _saveRevision(QuoteComparison result, ComparisonPurpose purpose, String conditions, int generation) async {
+    try {
+      await _revisionStore.append(widget.a, widget.b, result, purpose.label, conditions);
+      final rows = await _revisionStore.read(widget.a, widget.b);
+      if (mounted && generation == _generation) setState(() => _revisions = rows);
+    } catch (_) { if (mounted && generation == _generation) setState(() => _message = '比较结果已返回，修订历史暂未保存。'); }
+  }
+
+  Future<void> _restore(Map<String, dynamic> row) async {
+    if (_busy) return;
+    try {
+      final value = QuoteComparisonService.parseResponse(jsonEncode(row['result']), widget.a, widget.b);
+      final purpose = ComparisonPurpose.values.where((p) => p.label == row['purpose']).firstOrNull ?? ComparisonPurpose.distinction;
+      await _revisionStore.append(widget.a, widget.b, value, purpose.label, '${row['conditions'] ?? ''}', restoredFrom: '${row['id']}');
+      final rows = await _revisionStore.read(widget.a, widget.b);
+      if (mounted) setState(() { _result = value; _purpose = purpose;
+        _conditions.text = '${row['conditions'] ?? ''}'; _appliedConditions = _conditions.text;
+        _completedContext = _contextKey; _revisions = rows; _semanticOverride = null; });
+    } catch (_) { if (mounted) setState(() => _message = '旧判断暂未恢复，原修订记录已保留。'); }
+  }
+
+  Widget _history() => ComparisonRevisionView(history: _revisions, onRestore: _busy ? null : _restore);
 
   Future<void> _clear() async {
     _generation++;
@@ -283,7 +320,10 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
                 conditions: _conditions,
                 semanticPanel: _semanticPanel(),
                 semanticOverride: _semanticOverride,
-                quoteCard: _quoteCard)
+                quoteCard: _quoteCard,
+                revisionHistory: _history(),
+                onStop: () { _operation?.cancellation.cancel(); _generation++;
+                  setState(() { _busy = false; _message = '已停止接收；未返回的用量未知。'; }); })
             : SingleChildScrollView(
                 key: const ValueKey('quote-comparison-scroll'),
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
@@ -291,6 +331,7 @@ class _QuoteComparisonSheetState extends State<QuoteComparisonSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      _history(),
                       Row(
                         children: [
                           Expanded(

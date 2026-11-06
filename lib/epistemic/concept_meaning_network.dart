@@ -1,4 +1,3 @@
-import 'concept_circle_preview.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/quote_insight.dart';
@@ -17,8 +16,80 @@ class MeaningCluster {
   final List<SemanticRelation> relations;
   final List<MeaningCircle> circles;
   final Size size;
+
+  /// Geometry consistency only; never source or philosophical verification.
   final bool verified;
+  bool get geometryConsistent => verified;
   const MeaningCluster(this.relations, this.circles, this.size, this.verified);
+}
+
+class MeaningCircleLabel {
+  final MeaningCircle circle;
+  final TextPainter painter;
+  final Rect rect;
+  const MeaningCircleLabel(this.circle, this.painter, this.rect);
+}
+
+/// Keep labels inside their own regions and seek unoccupied readable space.
+/// This changes typography only, never the set geometry or asserted relations.
+List<MeaningCircleLabel> meaningCircleLabels(
+    List<MeaningCircle> circles, Map<String, SemanticConcept> nodes,
+    {String? font}) {
+  final result = <MeaningCircleLabel>[];
+  for (final c in circles) {
+    final label = TextPainter(
+        text: TextSpan(
+            text: c.ids.map((id) => nodes[id]?.label ?? '').join(' ≡ '),
+            style: TextStyle(
+                fontFamily: font,
+                fontSize: math.max(12, math.min(18, c.radius * .2)),
+                color: const Color(0xff3d352a),
+                fontWeight: FontWeight.w600)),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+        maxLines: 3,
+        ellipsis: '…')
+      ..layout(maxWidth: math.min(150, c.radius * 1.2));
+    var best = double.infinity;
+    var rect = Rect.fromCenter(
+        center: c.center, width: label.width + 8, height: label.height + 6);
+    final nested = circles.any(
+        (o) => o != c && (o.center - c.center).distance + o.radius < c.radius);
+    final preferred = nested ? c.center - Offset(0, c.radius * .65) : c.center;
+    for (var y = 0; y <= 20; y++) {
+      for (var x = 0; x <= 20; x++) {
+        final at =
+            c.center + Offset((x / 10 - 1) * c.radius, (y / 10 - 1) * c.radius);
+        final candidate = Rect.fromCenter(
+            center: at, width: label.width + 8, height: label.height + 6);
+        final corners = [
+          candidate.topLeft,
+          candidate.topRight,
+          candidate.bottomLeft,
+          candidate.bottomRight
+        ];
+        if (corners.any((p) => (p - c.center).distance > c.radius - 3))
+          continue;
+        final collisions =
+            result.where((l) => l.rect.inflate(5).overlaps(candidate)).length;
+        final inOther = circles
+            .where((o) =>
+                o != c &&
+                (o.center - c.center).distance + c.radius > o.radius &&
+                corners.any((p) => (p - o.center).distance < o.radius + 3))
+            .length;
+        final score = collisions * 100000000 +
+            inOther * 10000 +
+            (at - preferred).distance;
+        if (score < best) {
+          best = score;
+          rect = candidate;
+        }
+      }
+    }
+    result.add(MeaningCircleLabel(c, label, rect));
+  }
+  return result;
 }
 
 /// Deterministic bounded constraint layout. A failed constraint produces local
@@ -60,6 +131,10 @@ class ConceptCircleLayout {
   }
 
   static MeaningCluster _solve(List<SemanticRelation> relations) {
+    if (relations.any((r) => r.scope!.relation == QuoteRelation.partition)) {
+      // Exhaustive parts must fill the parent; separated circles leave a false remainder.
+      return MeaningCluster(relations, const [], const Size(500, 350), false);
+    }
     final ids = <String>{for (final r in relations) ..._members(r)};
     final aliases = {for (final id in ids) id: id};
     String root(String id) {
@@ -124,29 +199,56 @@ class ConceptCircleLayout {
         depths.values.any((d) => d >= groups.length)) {
       return MeaningCluster(relations, const [], const Size(500, 300), false);
     }
+    // Every spatial pair in an Euler diagram implies a range judgment. Do not
+    // let an unconstrained pair accidentally look disjoint or overlapping.
+    bool within(String child, String parent, [Set<String>? seen]) {
+      if (child == parent) return true;
+      final visited = seen ?? <String>{};
+      return visited.add(child) && contains.where((e) => e.$2 == child)
+          .any((e) => within(e.$1, parent, visited));
+    }
+    final identities = groups.keys.toList();
+    for (var i=0;i<identities.length;i++) {
+      for (var j=i+1;j<identities.length;j++) {
+        final a=identities[i], b=identities[j];
+        final determined = within(a,b) || within(b,a) ||
+            overlap.contains((a,b)) || overlap.contains((b,a)) ||
+            separate.any((e) => (within(a,e.$1) && within(b,e.$2)) || (within(a,e.$2) && within(b,e.$1)));
+        if (!determined) return MeaningCluster(relations, const [], const Size(500,350), false);
+      }
+    }
     final circles = <String, MeaningCircle>{};
+    bool paired(Set<(String, String)> pairs, String a, String b) =>
+        pairs.contains((a, b)) || pairs.contains((b, a));
     final ordered = groups.keys.toList()
       ..sort((a, b) => depths[a]!.compareTo(depths[b]!));
     var top = 0;
     for (final id in ordered) {
-      final parents =
-          contains.where((e) => e.$2 == id).map((e) => e.$1).toList();
+      final parents = contains
+          .where((e) => e.$2 == id)
+          .map((e) => e.$1)
+          .toList()
+        ..sort((a, b) => depths[b]!.compareTo(depths[a]!));
       if (parents.isEmpty) {
-        circles[id] = MeaningCircle(groups[id]!, Offset(top * 210.0, 0), 120);
+        final radius = contains.isEmpty ? 120.0 : 360.0;
+        circles[id] =
+            MeaningCircle(groups[id]!, Offset(top * radius * 1.75, 0), radius);
         top++;
       } else {
         final parent = parents.first,
             peers =
                 contains.where((e) => e.$1 == parent).map((e) => e.$2).toList();
         final p = circles[parent]!, index = peers.indexOf(id);
-        final radius = p.radius /
-            (peers.length == 1 ? 1.8 : 1.5 + math.sqrt(peers.length));
+        final hasDisjointPeer =
+            peers.any((other) => paired(separate, id, other));
+        final radius = p.radius *
+            (hasDisjointPeer ? 1 / (1.8 + math.sqrt(peers.length)) : .64);
         final angle = 2 * math.pi * index / peers.length;
         circles[id] = MeaningCircle(
             groups[id]!,
             p.center +
                 Offset(math.cos(angle), math.sin(angle)) *
-                    (peers.length == 1 ? p.radius * .22 : p.radius * .48),
+                    (peers.length == 1 ? p.radius * .18 : p.radius * .36),
             radius);
       }
     }
@@ -182,23 +284,7 @@ class ConceptCircleLayout {
           }
       }
     }
-    bool inside(String parent, String child, Set<String> seen) =>
-        contains.contains((parent, child)) ||
-        (seen.add(parent) &&
-            contains
-                .where((e) => e.$1 == parent)
-                .any((e) => inside(e.$2, child, seen)));
-    bool paired(Set<(String, String)> pairs, String a, String b) =>
-        pairs.contains((a, b)) || pairs.contains((b, a));
-    // Unspecified pairs have no shaded accidental intersection. Their absence
-    // remains explicitly unjudged, rather than being asserted as a sixth type.
-    for (var i = 0; i < ordered.length; i++) {
-      for (var j = i + 1; j < ordered.length; j++) {
-        final a = ordered[i], b = ordered[j];
-        if (!inside(a, b, {}) && !inside(b, a, {}) && !paired(overlap, a, b))
-          separate.add((a, b));
-      }
-    }
+    // An unspecified pair is unknown, not a disjointness constraint.
     void distance(String a, String b, double target, {bool oneSided = false}) {
       final x = circles[a]!, y = circles[b]!;
       final delta = y.center - x.center, d = delta.distance;
@@ -286,14 +372,23 @@ class _ConceptMeaningNetworkState extends State<ConceptMeaningNetwork> {
     final clusters = ConceptCircleLayout.build(widget.value);
     final nodes = {for (final n in widget.value.concepts) n.id: n};
     final picked = nodes[selected];
+    if (clusters.isEmpty)
+      return const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('本次回复漏掉了含义圈', style: TextStyle(fontWeight: FontWeight.w700)),
+            Text('这不表示概念之间没有联系。还需按本次目的考察共同规定与差异，明确比较尺度，再呈现包含、重合、划分或交叠的范围。'),
+          ]);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (clusters.isEmpty)
-        ConceptCirclePreview(
-            value: widget.value,
-            onOpen: widget.onOpen,
-            onExpand: widget.onExpand),
+      if (clusters.isNotEmpty)
+        const Text('外延圈图 · 按所列论域与成员判准绘制',
+            style: TextStyle(fontWeight: FontWeight.w600)),
+      if (clusters.any((g) =>
+          g.relations.any((r) => r.scope!.basisKind == 'analytic_definition')))
+        const Text('分析性重构 · 依本次明示的定义；可能情形用于解释范围，不表示原文记述过这些事实。',
+            style: TextStyle(fontSize: 12)),
       for (final cluster in clusters) ...[
-        if (cluster.verified)
+        if (cluster.geometryConsistent)
           ConceptCanvas(
               title:
                   '${cluster.relations.any((r) => r.scope!.illustration) ? '模拟练习 · ' : ''}多概念含义圈 · ${cluster.relations.first.scope!.universe}',
@@ -302,6 +397,22 @@ class _ConceptMeaningNetworkState extends State<ConceptMeaningNetwork> {
                   key: ValueKey(
                       cluster.relations.map((r) => r.toJson()).toString()),
                   onTapUp: (tap) {
+                    for (final r in cluster.relations
+                        .where((r) => r.intersectionId.isNotEmpty)) {
+                      final sets = r.nodeIds
+                          .map((id) => cluster.circles
+                              .where((c) => c.ids.contains(id))
+                              .firstOrNull)
+                          .toList();
+                      if (sets.every((c) =>
+                          c != null &&
+                          (tap.localPosition - c.center).distance <=
+                              c.radius)) {
+                        inspectConcept(context, r.intersectionId, widget.value,
+                            onExpand: widget.onExpand, onOpen: widget.onOpen);
+                        return;
+                      }
+                    }
                     final found = cluster.circles
                         .where((c) =>
                             (tap.localPosition - c.center).distance <= c.radius)
@@ -316,10 +427,14 @@ class _ConceptMeaningNetworkState extends State<ConceptMeaningNetwork> {
                   },
                   child: CustomPaint(
                       size: cluster.size,
-                      painter: _NetworkCircles(cluster.circles, nodes, selected,
-                          Theme.of(context).textTheme.bodyMedium?.fontFamily))))
+                      painter: _NetworkCircles(
+                          cluster.circles,
+                          nodes,
+                          selected,
+                          Theme.of(context).textTheme.bodyMedium?.fontFamily,
+                          cluster.relations))))
         else ...[
-          const Text('这些关系无法在同一组圆中准确排布，以下局部图保留相同的概念身份。',
+          const Text('按已确定的关系分别画圈，复用同一概念定义；未比较的范围不凭位置补成包含、相交或互斥。',
               style: TextStyle(fontSize: 12)),
           for (final relation in cluster.relations) _local(relation),
         ],
@@ -332,13 +447,14 @@ class _ConceptMeaningNetworkState extends State<ConceptMeaningNetwork> {
                     ?.call(widget.value.relations.indexOf(entry.$2)))
         ]),
       ],
-      const Text('只解释已标注关系；未标注的概念关系尚未判断。圈大小不表示数量，交集不证明因果。',
+      const Text('本图呈现已列范围判断的一种排布，未列关系不据位置补推。圈大小不表示数量，交集不证明因果。',
           style: TextStyle(fontSize: 12, color: Color(0xff70675b))),
       Wrap(spacing: 6, children: [
         for (final n in nodes.values.where((n) => clusters.any((g) =>
             g.relations.any((r) =>
                 r.nodeIds.contains(n.id) ||
                 r.partIds.contains(n.id) ||
+                r.intersectionId == n.id ||
                 r.universeId == n.id))))
           ActionChip(
               label: Text(n.label),
@@ -347,6 +463,9 @@ class _ConceptMeaningNetworkState extends State<ConceptMeaningNetwork> {
       if (picked != null)
         ConceptDetails(
             node: picked,
+            hierarchy: widget.value.hierarchy,
+            concepts: widget.value.concepts,
+            onSelect: (id) => setState(() => selected = id),
             onExpand: widget.onExpand,
             onOpen:
                 widget.onOpen == null ? null : () => widget.onOpen!(picked.id)),
@@ -374,7 +493,9 @@ class _NetworkCircles extends CustomPainter {
   final List<MeaningCircle> circles;
   final Map<String, SemanticConcept> nodes;
   final String? selected, font;
-  const _NetworkCircles(this.circles, this.nodes, this.selected, this.font);
+  final List<SemanticRelation> relations;
+  const _NetworkCircles(
+      this.circles, this.nodes, this.selected, this.font, this.relations);
   @override
   void paint(Canvas canvas, Size size) {
     const colors = [
@@ -398,28 +519,80 @@ class _NetworkCircles extends CustomPainter {
             ..strokeWidth = c.ids.contains(selected) ? 3 : 1.8
             ..style = PaintingStyle.stroke);
     }
-    for (final c in ordered) {
-      final text = c.ids.map((id) => nodes[id]?.label ?? '').join(' ≡ ');
-      final nested = ordered.any((o) =>
-          o != c && (o.center - c.center).distance + o.radius < c.radius);
-      final at = nested ? c.center - Offset(0, c.radius * .75) : c.center;
-      final label = TextPainter(
-          text: TextSpan(
-              text: text,
-              style: TextStyle(
-                  fontFamily: font,
-                  fontSize: math.max(12, math.min(20, c.radius * .26)),
-                  color: const Color(0xff3d352a),
-                  fontWeight: FontWeight.w600)),
-          textDirection: TextDirection.ltr,
-          textAlign: TextAlign.center,
-          maxLines: 3,
-          ellipsis: '…')
-        ..layout(maxWidth: c.radius * 1.5);
-      final rect = Rect.fromCenter(
-          center: at, width: label.width + 6, height: label.height + 4);
+    for (final r in relations.where((r) => r.intersectionId.isNotEmpty)) {
+      final a = circles.where((c) => c.ids.contains(r.nodeIds[0])).firstOrNull;
+      final b = circles.where((c) => c.ids.contains(r.nodeIds[1])).firstOrNull;
+      if (a == null || b == null) continue;
+      final lens = Path.combine(
+          PathOperation.intersect,
+          Path()..addOval(Rect.fromCircle(center: a.center, radius: a.radius)),
+          Path()..addOval(Rect.fromCircle(center: b.center, radius: b.radius)));
+      canvas.drawPath(lens,
+          Paint()..color = const Color(0xff8d79ac).withValues(alpha: .13));
+    }
+    final labelRects = <Rect>[];
+    for (final placed in meaningCircleLabels(ordered, nodes, font: font)) {
+      final label = placed.painter, rect = placed.rect, at = rect.center;
+      labelRects.add(rect);
       canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(4)),
           Paint()..color = const Color(0xfffffcf6).withValues(alpha: .88));
+      label.paint(canvas, at - Offset(label.width / 2, label.height / 2));
+      label.dispose();
+    }
+    for (final r in relations.where((r) => r.intersectionId.isNotEmpty)) {
+      final a = circles.where((c) => c.ids.contains(r.nodeIds[0])).firstOrNull;
+      final b = circles.where((c) => c.ids.contains(r.nodeIds[1])).firstOrNull;
+      if (a == null || b == null) continue;
+      final delta = b.center - a.center, d = delta.distance;
+      if (d == 0) continue;
+      final low = math.max(-a.radius, d - b.radius),
+          high = math.min(a.radius, d + b.radius);
+      final anchor = a.center + delta / d * ((low + high) / 2);
+      final label = TextPainter(
+          text: TextSpan(
+              text: '${nodes[r.intersectionId]?.label ?? '共同范围'}\n（交集）',
+              style: TextStyle(
+                  fontFamily: font,
+                  fontSize: 15,
+                  color: const Color(0xff503c69),
+                  fontWeight: FontWeight.w700)),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+          maxLines: 3)
+        ..layout(maxWidth: math.min(145, math.max(80, high - low)));
+      final bounds = Rect.fromCircle(center: a.center, radius: a.radius)
+          .intersect(Rect.fromCircle(center: b.center, radius: b.radius));
+      Offset at = anchor;
+      var best = double.infinity;
+      for (var y = 0; y <= 16; y++) {
+        for (var x = 0; x <= 16; x++) {
+          final point = Offset(bounds.left + bounds.width * x / 16,
+              bounds.top + bounds.height * y / 16);
+          final box = Rect.fromCenter(
+              center: point, width: label.width + 8, height: label.height + 6);
+          final corners = [
+            box.topLeft,
+            box.topRight,
+            box.bottomLeft,
+            box.bottomRight
+          ];
+          if (corners.any((p) =>
+              (p - a.center).distance > a.radius ||
+              (p - b.center).distance > b.radius)) continue;
+          final collisions =
+              labelRects.where((r) => r.inflate(5).overlaps(box)).length;
+          final score = collisions * 100000 + (point - anchor).distance;
+          if (score < best) {
+            best = score;
+            at = point;
+          }
+        }
+      }
+      final rect = Rect.fromCenter(
+          center: at, width: label.width + 8, height: label.height + 6);
+      labelRects.add(rect);
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(5)),
+          Paint()..color = const Color(0xfff4effa));
       label.paint(canvas, at - Offset(label.width / 2, label.height / 2));
     }
   }

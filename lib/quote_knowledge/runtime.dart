@@ -96,7 +96,7 @@ class QuoteKnowledgeWorker {
               budget: reservation.state == 'budget',
               busy: reservation.state != 'budget',
               message: reservation.state == 'budget'
-                  ? '本轮AI预算已用完或暂停，请按需继续下一轮。'
+                  ? '本轮AI请求次数已用完或暂停，请按需继续下一轮。'
                   : '');
         }
         return completed;

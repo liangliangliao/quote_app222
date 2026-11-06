@@ -384,7 +384,7 @@ class CognitiveAnalysis {
 
 class JudgmentRevision {
   final String previous, judgment, evidence, reason, createdAt;
-  final String sourceSnapshot;
+  final String sourceSnapshot, counterEvidence;
   const JudgmentRevision({
     required this.previous,
     required this.judgment,
@@ -392,6 +392,7 @@ class JudgmentRevision {
     required this.reason,
     required this.createdAt,
     this.sourceSnapshot = '',
+    this.counterEvidence = '',
   });
   Map<String, dynamic> toJson() => {
         'previous': previous,
@@ -400,6 +401,7 @@ class JudgmentRevision {
         'reason': reason,
         'created_at': createdAt,
         if (sourceSnapshot.isNotEmpty) 'source_snapshot': sourceSnapshot,
+        if (counterEvidence.isNotEmpty) 'counter_evidence': counterEvidence,
       };
   factory JudgmentRevision.fromJson(dynamic value) {
     final m = insightObject(value);
@@ -410,6 +412,7 @@ class JudgmentRevision {
       reason: insightText(m, 'reason'),
       createdAt: insightText(m, 'created_at'),
       sourceSnapshot: insightText(m, 'source_snapshot'),
+      counterEvidence: insightText(m, 'counter_evidence'),
     );
   }
 }
@@ -498,6 +501,7 @@ class CognitiveNote {
     required String evidence,
     String reason = '',
     String sourceSnapshot = '',
+    String counterEvidence = '',
   }) {
     if (judgment.trim().isEmpty || evidence.trim().isEmpty) {
       throw ArgumentError('修订需要新的判断和具体材料');
@@ -512,6 +516,7 @@ class CognitiveNote {
           reason: reason.trim(),
           createdAt: DateTime.now().toUtc().toIso8601String(),
           sourceSnapshot: sourceSnapshot,
+          counterEvidence: counterEvidence.trim(),
         ),
       ],
     );

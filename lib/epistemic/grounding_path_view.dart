@@ -16,13 +16,20 @@ class _GroundingPathViewState extends State<GroundingPathView> {
     if (!visited.add(id)) return [];
     final node = widget.value.concepts.where((c) => c.id == id).firstOrNull;
     if (node == null) return [];
-    if (node.kind == 'experience') return [node];
-    var best = <SemanticConcept>[];
+    if (['experience', 'formal'].contains(node.kind)) return [node];
+    var best = <SemanticConcept>[], priority = 99;
+    const roles = {'mediation': 0, 'grounding': 1, 'instance': 2, 'subtype': 3};
     for (final e in widget.value.hierarchy.where((e) => e.parent == id)) {
       final child = _path(e.child, {...visited});
+      final nextPriority = roles[e.kind] ?? 99;
+      // Prefer an explicitly stated content dependency over a longer class
+      // branch. Length alone does not establish a concept's content.
       if (child.isNotEmpty &&
-          child.last.kind == 'experience' &&
-          child.length > best.length) best = child;
+          ['experience', 'formal'].contains(child.last.kind) &&
+          nextPriority < priority) {
+        best = child;
+        priority = nextPriority;
+      }
     }
     return [node, ...best];
   }
@@ -45,7 +52,7 @@ class _GroundingPathViewState extends State<GroundingPathView> {
           const Text('概念如何获得内容 · 沿中介链回到直观',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          const Text('概念仍是抽象表象。下位限定、概念依赖与直观依据分别核对；模拟描述是返回经验的线索。',
+          const Text('概念仍是抽象表象。这里追踪一条内容链，优先核对概念中介；下位限定和实例保留各自角色，模拟描述是返回经验的线索。',
               style: TextStyle(fontSize: 12, height: 1.6)),
           Wrap(spacing: 6, runSpacing: 4, children: [
             for (final c in concepts)
@@ -78,7 +85,7 @@ class _GroundingPathViewState extends State<GroundingPathView> {
                     ]));
               }),
             Card(
-                color: item.$2.kind == 'experience'
+                color: ['experience', 'formal'].contains(item.$2.kind)
                     ? const Color(0xffe6eff0)
                     : const Color(0xfff7e7c5),
                 elevation: 0,
@@ -99,18 +106,21 @@ class _GroundingPathViewState extends State<GroundingPathView> {
                               Text(item.$2.definition,
                                   style: const TextStyle(
                                       fontSize: 13, height: 1.6)),
-                              if (item.$2.kind == 'experience') ...[
+                              if (['experience', 'formal']
+                                  .contains(item.$2.kind)) ...[
                                 const SizedBox(height: 8),
                                 Text(
-                                    item.$2.status == 'example'
-                                        ? '模拟场景 · 可据此观察人物、动作与条件，再与自己的经验对照。'
-                                        : '原文提供的具体材料 · 仍需核对其观察来源。',
+                                    item.$2.kind == 'formal'
+                                        ? '形式构造 · 定义下的直观内容，不冒充生活事件。'
+                                        : item.$2.status == 'example'
+                                            ? '模拟场景 · 可据此观察人物、动作与条件，再与自己的经验对照。'
+                                            : '原文提供的具体材料 · 仍需核对其观察来源。',
                                     style: const TextStyle(
                                         fontSize: 11, color: Color(0xff526e73)))
                               ],
                             ])))),
           ],
-          if (path.last.kind != 'experience')
+          if (!['experience', 'formal'].contains(path.last.kind))
             const Padding(
                 padding: EdgeInsets.only(top: 10),
                 child: Text('这条链尚缺直观依据；请补充可观察的具体材料，不能用概念名称代替。')),

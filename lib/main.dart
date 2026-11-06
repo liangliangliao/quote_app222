@@ -1,3 +1,4 @@
+import 'services/ai_request_audit.dart';
 import 'quote_knowledge/runtime.dart';
 import 'diary/diary_theme.dart';
 import './services/native_guard.dart';
@@ -148,6 +149,9 @@ Future<void> _runBestEffort(Future<void> Function() action) async {
 Future<void> _warmDatabaseAndRestoreSport() async {
   try {
     AppDatabase.instance();
+    // Hydrate request metadata once, never perform database I/O while drawing
+    // individual concept/budget widgets. This does not call any AI provider.
+    AiRequestAudit.initialize();
     final rec = await SportDao().getLatestUnfinishedRecord();
     if (rec == null || (rec['status'] ?? '').toString() != 'in_progress' || (!Platform.isAndroid && !Platform.isIOS)) return;
     final rid = (rec['id'] is num) ? (rec['id'] as num).toInt() : int.tryParse(rec['id']?.toString() ?? '');

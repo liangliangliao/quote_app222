@@ -1,4 +1,3 @@
-import 'reading_illustration.dart';
 import 'reading_map_quality.dart';
 import '../models/quote_insight.dart';
 import 'concept_analysis.dart';
@@ -7,8 +6,6 @@ import 'semantic_scope.dart';
 /// Adapt only actual saved definitions and examples. No inferred subtype edges.
 SemanticScope? legacyConceptView(String text,
     List<ConceptAbstraction> abstractions, List<ConceptScope> scopes) {
-  final illustration = readingIllustration(text);
-  if (illustration != null) return illustration;
   if (abstractions.isEmpty && scopes.isEmpty) return null;
   final refs = [ScopeReference('A', text)];
   final nodes = <SemanticConcept>[];
@@ -41,6 +38,7 @@ SemanticScope? legacyConceptView(String text,
     }
   }
   SemanticScope result = SemanticScope(const [], const [],
+      sourceVersion: 1,
       concepts: nodes,
       hierarchy: edges,
       recommendedView: EpistemicViewKind.hierarchy);
