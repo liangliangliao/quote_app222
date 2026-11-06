@@ -27,6 +27,31 @@ void main() {
     await dao.ensureSchema();
     await dao.setSetting('quiet_start_hour', '0');
     await dao.setSetting('quiet_end_hour', '0');
+    // Native acceptance can run independently even if a later UI assertion
+    // fails. Keep the fixture alarm an hour away from this UI test.
+    final fixtureNow = DateTime.now();
+    final fixtureHour = (fixtureNow.hour + 1) % 24;
+    final fixturePreset = await BehaviorTrackingDao().savePreset(BehaviorPreset(
+        createdAtMs: fixtureNow.millisecondsSinceEpoch,
+        updatedAtMs: fixtureNow.millisecondsSinceEpoch,
+        name: 'CI 原生阅读预设',
+        category: '学习',
+        primaryLayer: 'action',
+        unit: '页',
+        reminderEnabled: true,
+        reminderHour: fixtureHour,
+        reminderMinute: fixtureNow.minute,
+        weekdays: const [1, 2, 3, 4, 5, 6, 7],
+        active: true,
+        notes: 'Disposable emulator acceptance fixture',
+        sortOrder: 0));
+    final fixtureDir = await getApplicationDocumentsDirectory();
+    await File('${fixtureDir.path}/prp_ci_fixture.json').writeAsString(
+        jsonEncode({
+      'preset_id': fixturePreset,
+      'hour': fixtureHour,
+      'minute': fixtureNow.minute
+    }));
     app.main();
     Future<void> until(bool Function() ready, {int seconds = 35}) async {
       final end = DateTime.now().add(Duration(seconds: seconds));
@@ -256,8 +281,7 @@ void main() {
     expect(await runtime.exportData(), isNot(contains('我不想活了')));
     await tester.tapAt(const Offset(8, 100));
     await tester.pump(const Duration(milliseconds: 800));
-    await until(() =>
-        find.byKey(const ValueKey('prp_master_switch')).evaluate().isNotEmpty);
+    await until(() => find.text('先照顾此刻的安全').evaluate().isEmpty);
     await switchTo('启用插件', false);
     await shot('android_14_off_retained');
     expect((await runtime.store.lessons(sealedOnly: true)).length, 1);
@@ -280,25 +304,6 @@ void main() {
             .where((r) => '${r['title']}'.startsWith('PRP')),
         hasLength(1));
 
-    // Prepare a real preset via the existing DAO for the separate native-only probe.
-    final now = DateTime.now();
-    final preset = await BehaviorTrackingDao().savePreset(BehaviorPreset(
-        createdAtMs: now.millisecondsSinceEpoch,
-        updatedAtMs: now.millisecondsSinceEpoch,
-        name: 'CI 原生阅读预设',
-        category: '学习',
-        primaryLayer: 'action',
-        unit: '页',
-        reminderEnabled: true,
-        reminderHour: now.hour,
-        reminderMinute: now.minute,
-        weekdays: const [1, 2, 3, 4, 5, 6, 7],
-        active: true,
-        notes: 'Disposable emulator acceptance fixture',
-        sortOrder: 0));
-    final dir = await getApplicationDocumentsDirectory();
-    await File('${dir.path}/prp_ci_fixture.json').writeAsString(jsonEncode(
-        {'preset_id': preset, 'hour': now.hour, 'minute': now.minute}));
     binding.reportData = {
       ...?binding.reportData,
       'source_sha': PrpBuildInfo.sourceSha,

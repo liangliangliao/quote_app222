@@ -46,18 +46,24 @@ for prp_attempt in 1 2; do
 done
 if [ "$prp_drive_ok" != true ]; then
   tail -n 120 build/prp/device-evidence/flutter-drive.log
-  adb -s "$prp_device" logcat -d >build/prp/device-evidence/logcat.txt
-  exit 1
 fi
 adb -s "$prp_device" install -r build/prp/acceptance/app-debug-androidTest.apk
 adb -s "$prp_device" shell am instrument -w \
   com.example.quote_app.test/com.example.quote_app.PrpAcceptanceProbe \
   >build/prp/device-evidence/native-probe.log 2>&1
-rg 'PRP_NATIVE_ACCEPTANCE_PASS' build/prp/device-evidence/native-probe.log
-for prp_name in native_01_on.png native_02_off.png native_03_overlay.png native-results.json; do
-  adb -s "$prp_device" exec-out run-as com.example.quote_app cat "files/prp-ci/$prp_name" \
-    >"build/prp/device-evidence/$prp_name"
-done
+prp_native_ok=false
+if rg 'PRP_NATIVE_ACCEPTANCE_PASS' build/prp/device-evidence/native-probe.log; then
+  prp_native_ok=true
+  for prp_name in native_01_on.png native_02_off.png native_03_overlay.png native-results.json; do
+    adb -s "$prp_device" exec-out run-as com.example.quote_app cat "files/prp-ci/$prp_name" \
+      >"build/prp/device-evidence/$prp_name"
+  done
+else
+  cat build/prp/device-evidence/native-probe.log
+fi
+if [ "$prp_drive_ok" != true ] || [ "$prp_native_ok" != true ]; then
+  exit 1
+fi
 adb -s "$prp_device" logcat -d >build/prp/device-evidence/logcat.txt
 python3 - <<'PY'
 import hashlib,json,os,pathlib
