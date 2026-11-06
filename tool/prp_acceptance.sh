@@ -43,8 +43,8 @@ for prp_attempt in 1 2; do
   cp build/prp/device-evidence/flutter-drive.log "build/prp/device-evidence/flutter-drive-attempt-$prp_attempt.log"
   # Retry only a VM attachment failure before any test executes. Never retry
   # assertions, application crashes, or a partially completed product workflow.
-  if ! prp_find -q 'Failed to register service methods.*Service connection disposed' build/prp/device-evidence/flutter-drive.log || \
-      prp_find -q 'TestFailure|Some tests failed|Failure in method:' build/prp/device-evidence/flutter-drive.log; then
+  if ! prp_find -q '(Failed to register service methods.*|getIsolate:.*)Service connection disposed' build/prp/device-evidence/flutter-drive.log || \
+      prp_find -q 'TestFailure|Some tests failed|Failure in method:|PRP Android acceptance:' build/prp/device-evidence/flutter-drive.log; then
     break
   fi
   adb -s "$prp_device" wait-for-device
@@ -97,9 +97,10 @@ else
   cat build/prp/device-evidence/native-probe.log
 fi
 for prp_name in native_01_on.png native_02_off.png native_03_overlay.png native-results.json; do
-  if adb -s "$prp_device" shell run-as com.example.quote_app test -f "files/prp-ci/$prp_name"; then
-    adb -s "$prp_device" exec-out run-as com.example.quote_app cat "files/prp-ci/$prp_name" \
-      >"build/prp/device-evidence/$prp_name"
+  # Android 8 has no executable `test` accessible to run-as; pull directly.
+  if ! adb -s "$prp_device" exec-out run-as com.example.quote_app cat "files/prp-ci/$prp_name" \
+      >"build/prp/device-evidence/$prp_name"; then
+    rm -f "build/prp/device-evidence/$prp_name"
   fi
 done
 if [ "$prp_drive_ok" != true ] || [ "$prp_native_ok" != true ]; then
