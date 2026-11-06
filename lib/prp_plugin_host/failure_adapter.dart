@@ -15,10 +15,20 @@ class PrpFailureAdapter {
     final db = await openDatabase();
     await db.transaction((txn) async {
       // Idempotency and both writes share the same transaction.
-      final existing = await txn.rawQuery(
-          "SELECT id FROM fp_practice_run WHERE task_id = 'PRP_PLUGIN' AND json_extract(result_json, '\$.prp_session_id') = ? LIMIT 1",
-          [sessionId]);
-      if (existing.isNotEmpty) return;
+      // Android 8 ships SQLite without JSON1. Decode only PRP's rows in Dart,
+      // inside the same transaction, rather than requiring json_extract.
+      final prior = await txn.query('fp_practice_run',
+          columns: ['result_json'],
+          where: 'task_id = ?',
+          whereArgs: ['PRP_PLUGIN']);
+      for (final row in prior) {
+        try {
+          final result = jsonDecode('${row['result_json']}');
+          if (result is Map && result['prp_session_id'] == sessionId) return;
+        } on FormatException {
+          // An unrelated damaged historical row must not prevent this result.
+        }
+      }
       final ts = lesson.sealedMs ?? lesson.createdMs;
       await txn.insert('fp_practice_run', {
         'task_id': 'PRP_PLUGIN',

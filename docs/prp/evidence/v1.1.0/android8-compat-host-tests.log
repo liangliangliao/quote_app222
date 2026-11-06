@@ -1,0 +1,14 @@
+00:00 +0: loading /workspace/quote_app222/test/prp_plugin/host_test.dart
+00:00 +0: adapters treat unused modules as missing evidence without creating tables
+00:00 +1: host governance reads existing quiet hours and mute, independent of enemy enablement
+00:00 +2: 30 day dots count explicit misses and done; skipped, absent, future stay unknown
+00:00 +3: PRP waits for overdue confirmation; disabling restores legacy settlement
+00:00 +4: new commitment links a pending recall, then explicit completion verifies it
+00:00 +5: commitment history counts all explicit outcomes, excluding automatic expiry and absent days
+00:00 +6: explicit lesson conversion respects host switch and creates one unstaked commitment
+00:00 +7: enemy reads PRP only through explicit per-source consent, and off exports nothing
+00:00 +8: failure-module result and learning card are written together and idempotently
+00:00 +9: failure-module dual-write rolls both records back if one insert fails
+00:00 +10: a damaged historical PRP JSON row cannot block a new atomic dual-write
+00:00 +11: plugin safety exit mutes the existing enemy persona and stops its voice
+00:00 +12: All tests passed!

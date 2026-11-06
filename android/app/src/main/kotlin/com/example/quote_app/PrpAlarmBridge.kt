@@ -23,6 +23,13 @@ object PrpAlarmBridge {
     fun register(engine: FlutterEngine, context: Context) {
         val bridge = MethodChannel(engine.dartExecutor.binaryMessenger, "prp.native")
         channel = bridge
+        val app = context.applicationContext
+        engine.addEngineLifecycleListener(object: FlutterEngine.EngineLifecycleListener {
+            override fun onPreEngineRestart() { if (channel === bridge) flutterStopped(app) }
+            override fun onEngineWillDestroy() {
+                if (channel === bridge) { channel=null; flutterStopped(app) }
+            }
+        })
         bridge.setMethodCallHandler { call, result ->
             when (call.method) {
                 "state_changed" -> {
@@ -33,6 +40,13 @@ object PrpAlarmBridge {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    /** A destroyed Flutter view cannot keep a native reminder suppressed forever.
+     * Keep all negative safety/consent gates; only the active-view flag expires. */
+    fun flutterStopped(context: Context) {
+        runtimeState = runtimeState?.let { JSONObject(it.toString()).apply { remove("session_active") } }
+        context.sendBroadcast(Intent(ACTION_CHANGED).setPackage(context.packageName))
     }
 
     private fun ledgerChanged(context: Context) {

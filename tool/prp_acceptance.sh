@@ -14,15 +14,31 @@ adb -s "$prp_device" shell appops set com.example.quote_app SYSTEM_ALERT_WINDOW 
 if [ "${PRP_API_LEVEL:-35}" -ge 33 ]; then
   adb -s "$prp_device" shell pm grant com.example.quote_app android.permission.POST_NOTIFICATIONS
 fi
-flutter drive --driver=test_driver/prp_acceptance_driver.dart \
-  --target=integration_test/prp_acceptance_test.dart \
-  --use-application-binary=build/prp/acceptance/app-debug.apk \
-  --no-enable-impeller -d "$prp_device" --timeout=900 \
-  >build/prp/device-evidence/flutter-drive.log 2>&1 || {
-  tail -n 100 build/prp/device-evidence/flutter-drive.log
+prp_drive_ok=false
+for prp_attempt in 1 2; do
+  if flutter drive --no-pub --no-dds --verbose --driver=test_driver/prp_acceptance_driver.dart \
+    --target=integration_test/prp_acceptance_test.dart \
+    --use-application-binary=build/prp/acceptance/app-debug.apk \
+    --no-enable-impeller -d "$prp_device" --timeout=900 \
+    >build/prp/device-evidence/flutter-drive.log 2>&1; then
+    prp_drive_ok=true
+    break
+  fi
+  cp build/prp/device-evidence/flutter-drive.log "build/prp/device-evidence/flutter-drive-attempt-$prp_attempt.log"
+  # Retry only a VM attachment failure before any test executes. Never retry
+  # assertions, application crashes, or a partially completed product workflow.
+  if ! rg -q 'Failed to register service methods.*Service connection disposed' build/prp/device-evidence/flutter-drive.log || \
+      rg -q 'TestFailure|Some tests failed|Failure in method:' build/prp/device-evidence/flutter-drive.log; then
+    break
+  fi
+  adb -s "$prp_device" wait-for-device
+  adb -s "$prp_device" shell am force-stop com.example.quote_app
+done
+if [ "$prp_drive_ok" != true ]; then
+  tail -n 120 build/prp/device-evidence/flutter-drive.log
   adb -s "$prp_device" logcat -d >build/prp/device-evidence/logcat.txt
   exit 1
-}
+fi
 adb -s "$prp_device" install -r build/prp/acceptance/app-debug-androidTest.apk
 adb -s "$prp_device" shell am instrument -w \
   com.example.quote_app.test/com.example.quote_app.PrpAcceptanceProbe \

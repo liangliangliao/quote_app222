@@ -88,6 +88,10 @@ class PrpAcceptanceProbe: Instrumentation() {
             check(hint.lessonId==lessonId)
             check(PrpAlarmBridge.hint(ctx,payload)?.recallId==hint.recallId)
             check(count()==before+1);pass("service_overlay_form_share_one_exposure")
+            runOnMainSync {PrpAlarmBridge.stateChanged(ctx,JSONObject(p.toString()).put("session_active",true))}
+            check(!PrpAlarmBridge.stillAllowed(ctx,hint))
+            runOnMainSync {PrpAlarmBridge.flutterStopped(ctx)}
+            check(PrpAlarmBridge.stillAllowed(ctx,hint));pass("destroyed_flutter_session_releases_native_gate")
             check(PrpAlarmBridge.adopt(ctx,hint));check(PrpAlarmBridge.adopt(ctx,hint))
             check(db.rawQuery("SELECT COUNT(*) FROM prp_event WHERE recall_id=?",arrayOf(hint.recallId.toString())).use{it.moveToFirst();it.getInt(0)}==1)
             pass("adoption_idempotent_pending")

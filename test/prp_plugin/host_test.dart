@@ -259,6 +259,20 @@ void main() {
     expect(await f.db.query('fp_practice_run'), hasLength(1));
   });
 
+  test('a damaged historical PRP JSON row cannot block a new atomic dual-write',
+      () async {
+    final adapter = await failureAdapter();
+    await f.db.insert('fp_practice_run',
+        {'task_id': 'PRP_PLUGIN', 'ts_ms': 1, 'result_json': '{broken'});
+    final lesson = f
+        .lesson(source: PrpSurface.failureModule)
+        .copyWith(id: 11, state: 'sealed', sealedMs: 100);
+    await adapter.lessonSealed(lesson, 42);
+    await adapter.lessonSealed(lesson, 42);
+    expect(await f.db.query('fp_practice_run'), hasLength(2));
+    expect(await f.db.query('fp_learning_card'), hasLength(1));
+  });
+
   test(
       'plugin safety exit mutes the existing enemy persona and stops its voice',
       () async {
