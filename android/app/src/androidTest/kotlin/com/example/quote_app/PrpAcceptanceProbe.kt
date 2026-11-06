@@ -19,6 +19,7 @@ import kotlin.math.sin
 class PrpAcceptanceProbe: Instrumentation() {
     override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
     private val evidence=JSONArray()
+    private val screenshotMethods=JSONObject()
     private fun pass(name:String) { evidence.put(name) }
     private fun waitFor(message:String, condition:()->Boolean) {
         val end=System.currentTimeMillis()+8000
@@ -145,6 +146,7 @@ class PrpAcceptanceProbe: Instrumentation() {
             runOnMainSync {activity.finish();PrpAlarmAudio.stop()}
             val report=JSONObject().put("api_level",Build.VERSION.SDK_INT).put("hardware",Build.HARDWARE)
                 .put("physical_device",false).put("passed",evidence).put("status","passed")
+                .put("screenshot_methods",screenshotMethods)
             File(ctx.filesDir,"prp-ci").apply{mkdirs()}.resolve("native-results.json").writeText(report.toString(2))
             db.close()
             result.putString("stream","PRP_NATIVE_ACCEPTANCE_PASS\n${report}\n")
@@ -157,9 +159,26 @@ class PrpAcceptanceProbe: Instrumentation() {
     }
     private fun screenshot(name:String){
         val target=File(targetContext.filesDir,"prp-ci/$name.png").apply{parentFile!!.mkdirs()}
-        val image=uiAutomation.takeScreenshot()?:error("No screenshot")
+        var capture:android.graphics.Bitmap?=null
+        var method="ui_automation"
+        for(attempt in 0 until 5) {
+            capture=uiAutomation.takeScreenshot()
+            if(capture!=null)break
+            Thread.sleep(100)
+        }
+        // API 26's UiAutomation capture can return null with the headless GPU.
+        // screencap reads the actual display too; it does not redraw the view.
+        if(capture==null) {
+            val output=uiAutomation.executeShellCommand("/system/bin/screencap -p")
+            capture=android.os.ParcelFileDescriptor.AutoCloseInputStream(output).use {
+                android.graphics.BitmapFactory.decodeStream(it)
+            }
+            method="shell_screencap"
+        }
+        val image=capture?:error("No device screenshot from UiAutomation or screencap")
         target.outputStream().use{check(image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it))}
         image.recycle()
+        screenshotMethods.put(name,method)
     }
     private fun hasText(node:android.view.accessibility.AccessibilityNodeInfo?, text:String):Boolean {
         if(node==null)return false
