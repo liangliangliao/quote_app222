@@ -1,4 +1,5 @@
 import '../enemy_host_tools.dart';
+import '../enemy_host_hooks.dart';
 import 'package:flutter/material.dart';
 
 import '../copy.dart';
@@ -20,6 +21,25 @@ Future<void> attributeFlow(
   EnemyCommitment c,
 ) async {
   if (c.status == CommitmentStatus.open) await engine.markMissed(c.id);
+  if (!context.mounted) return;
+
+  // 宿主（例如 PRP 插件）可以接管“失败之后做什么”；不接管就走下面原有的归因弹层。
+  try {
+    final bool handled = await EnemyHostHooks.failure.onMissed(
+      context,
+      engine,
+      EnemyCommitmentInfo(
+        id: c.id,
+        text: c.text,
+        createdMs: c.createdMs,
+        dueMs: c.dueMs,
+        stake: c.stake,
+      ),
+    );
+    if (handled) return;
+  } catch (_) {
+    // 宿主出错不影响原有流程。
+  }
   if (!context.mounted) return;
 
   String category = EnemyCopy.failureCategories.first;
@@ -310,6 +330,20 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
       );
       return;
     }
+    final int? newId = r.id;
+    if (newId != null) {
+      try {
+        await EnemyHostHooks.failure.onCommitmentCreated(EnemyCommitmentInfo(
+          id: newId,
+          text: text,
+          createdMs: _engine.nowMs(),
+          dueMs: due.millisecondsSinceEpoch,
+          stake: _stake.text,
+        ));
+      } catch (_) {
+        // 宿主出错不影响创建字据。
+      }
+    }
     _controller.clear();
     _stake.clear();
     await _load();
@@ -330,6 +364,7 @@ class _CommitmentsTabState extends State<CommitmentsTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
+          EnemyHostHooks.failure.commitmentHint(context, _controller),
           TextField(
             controller: _controller,
             style: const TextStyle(color: kEnemyText),
@@ -495,6 +530,7 @@ class _LessonsTabState extends State<LessonsTab> {
               ),
             ),
           const SizedBox(height: 16),
+          EnemyHostHooks.failure.lessonsHeader(context),
           const Text('教训库', style: TextStyle(color: kEnemyText, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           if (_lessons.isEmpty)

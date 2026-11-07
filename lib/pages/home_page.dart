@@ -1,4 +1,5 @@
 
+import '../prp_plugin/prp_plugin.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -853,11 +854,21 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
     setState(() => _nextBusy = true);
     try {
       Map<String, dynamic>? row;
+      // PRP 插件（可选，默认关闭）：偶尔把用户自己盖印的教训作为“自己的名言”混进来。
+      // 运行时混入，不写入 quotes 表；插件关闭或没到时间时返回 null，行为与原来完全一致。
       try {
-        row = await _library.randomOther(
-          (_todayData?['quote'] ?? '').toString(),
+        final Map<String, dynamic>? own = await PrpPlugin.instance.ownQuoteRow(
+          excludeContent: (_todayData?['quote'] ?? '').toString(),
         );
+        if (own != null) row = QuoteLibraryStore.normalize(own);
       } catch (_) {}
+      if (row == null) {
+        try {
+          row = await _library.randomOther(
+            (_todayData?['quote'] ?? '').toString(),
+          );
+        } catch (_) {}
+      }
       row ??= QuoteLibraryStore.normalize(await _loadNextFallbackQuote());
       if (mounted && (row['content'] ?? '').toString().trim().isNotEmpty)
         await _displayLibraryQuote(row);

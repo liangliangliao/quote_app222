@@ -78,9 +78,12 @@ import 'beautiful_enemy/beautiful_enemy.dart' show EnemyEntry;
 import 'beautiful_enemy_host/enemy_host_page.dart';
 import 'beautiful_enemy_host/enemy_host_patrol.dart';
 import 'beautiful_enemy_host/enemy_host_presence.dart';
+import 'prp_plugin_host/prp_install.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // PRP 插件：只做同步装配，不访问数据库、不起后台任务；总开关默认关闭。
+  installPrpPlugin();
   NativeGuard.ensureNotificationTapHandler();
   // 只保留首帧真正需要的同步设置。MethodChannel、数据库、后台任务和
   // 通知插件初始化全部放到首帧之后，避免 Android 12+ 启动画面长时间停留。

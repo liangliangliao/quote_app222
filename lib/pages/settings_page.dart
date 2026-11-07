@@ -1,4 +1,5 @@
 import '../diary/diary_settings_page.dart';
+import '../prp_plugin/prp_plugin.dart';
 import 'package:path/path.dart' as p;
 import '../services/sport_music_service.dart';
 import '../services/youtube_music_service.dart';
@@ -3887,6 +3888,16 @@ Future<String?> _saveAvatarTemp(File file) async {
         Icons.book_outlined,
         () => Navigator.of(context).push(
           MaterialPageRoute<void>(builder: (_) => const DiarySettingsPage()),
+        ),
+      ),
+      _settingsLink(
+        'PRP 插件 · 失败成长',
+        '没做到的时候，先缓一缓，再对一次账，留下一条真的教训（可开关）',
+        Icons.psychology_outlined,
+        () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PrpPlugin.instance.settingsPage(),
+          ),
         ),
       ),
     ],

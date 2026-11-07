@@ -16,7 +16,16 @@ export 'src/domain/motivation_profile.dart'
 export 'src/domain/motivation_stimulus.dart'
     show MotivationStimulus, StimulusFeedback, StimulusStyle;
 export 'src/data/models.dart'
-    show EventDraft, EnemyEvent, EnemyMessage, EnemyMotion, MessageKind, MessageRole, MotionStatus;
+    show
+        CommitmentStatus,
+        EnemyCommitment,
+        EventDraft,
+        EnemyEvent,
+        EnemyMessage,
+        EnemyMotion,
+        MessageKind,
+        MessageRole,
+        MotionStatus;
 export 'src/domain/enemy_presence.dart'
     show
         DrillResult,
@@ -29,6 +38,9 @@ export 'src/domain/enemy_presence.dart'
 export 'src/enemy_oracle.dart' show EnemyOracle, EnemyDraft, LocalFactOracle;
 export 'src/enemy_talker.dart' show EnemyTalker, EnemyVoiceOut, NoopEnemyVoiceOut;
 export 'src/enemy_host_tools.dart' show EnemyHostTools, NoopEnemyHostTools, EnemyHostPower;
+export 'src/enemy_host_hooks.dart'
+    show EnemyFailureHook, NoopEnemyFailureHook, EnemyHostHooks, EnemyCommitmentInfo;
+export 'src/domain/guard.dart' show SafetyValve;
 export 'src/enemy_reminder.dart' show EnemyReminder, NoopEnemyReminder;
 export 'src/ui/enemy_discover_entry.dart' show EnemyDiscoverEntry;
 
