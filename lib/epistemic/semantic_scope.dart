@@ -524,8 +524,28 @@ class SemanticScope {
       }
     }
 
+    // The endpoints already locate their own source text. When a model cites
+    // only one side of a cross-material link or relation, add the missing
+    // side's own locating excerpt instead of dropping the whole connection.
+    // References only locate the analysed objects; they never prove the link.
+    List<ScopeReference> completed(
+        List<String> endpoints, List<ScopeReference> references,
+        {String only = ''}) {
+      final result = [...references];
+      for (final id in endpoints) {
+        final own = (nodes[id]?.references ?? const <ScopeReference>[])
+            .where((r) => only.isEmpty || r.source == only)
+            .toList();
+        final used = result.map((r) => r.source).toSet();
+        if (own.isNotEmpty && !own.any((r) => used.contains(r.source))) {
+          result.add(own.first);
+        }
+      }
+      return result;
+    }
+
     List<ScopeReference> linkRefs(String from, String to, dynamic raw) {
-      final references = refs(raw);
+      final references = completed([from, to], refs(raw));
       coverSources([from, to], references);
       return references;
     }
@@ -535,10 +555,18 @@ class SemanticScope {
     for (final entry in items('propositions', 80).indexed) {
       attempt('propositions[${entry.$1}]', () {
         final m = insightObject(entry.$2);
-        final evidence =
-            referenceTable[insightText(m, 'evidence_ref')]?.excerpt ??
-                insightText(m, 'evidence');
+        var evidence = referenceTable[insightText(m, 'evidence_ref')]?.excerpt ??
+            insightText(m, 'evidence');
         final conclusion = insightText(m, 'conclusion');
+        if ((evidence.isEmpty || !sources.any((s) => s.text.contains(evidence))) &&
+            conclusion.isNotEmpty &&
+            originalTexts.length == 1) {
+          // With one original sentence, that sentence is the locator.
+          evidence = originalTexts.values.single;
+          issues.add(AnalysisIssue('propositions[${entry.$1}].evidence',
+              '命题未逐条定位原文，暂以整句作依据。',
+              retryable: false));
+        }
         if (evidence.isEmpty ||
             !sources.any((s) => s.text.contains(evidence)) ||
             conclusion.isEmpty) {
@@ -722,9 +750,43 @@ class SemanticScope {
 
     for (final entry in items('relations', 80).indexed) {
       attempt('relations[${entry.$1}]', () {
-        final m = insightObject(entry.$2),
-            p = insightText(insightObject(entry.$2), 'placement');
-        final references = refs(m['references']);
+        final m = insightObject(entry.$2);
+        var p = insightText(m, 'placement');
+        var references = refs(m['references']);
+        final endpoints =
+            strings(m['node_ids']).where(nodes.containsKey).toList();
+        if (ids.length > 1 && endpoints.length == 2) {
+          // Placement follows where the two concepts actually live. Only the
+          // locating references are repaired; the relation itself is kept.
+          final shared = [
+            for (final source in ids)
+              if (endpoints.every((id) =>
+                  nodes[id]!.references.any((r) => r.source == source)))
+                source
+          ];
+          if (shared.isEmpty) {
+            p = 'cross';
+          } else if (p != 'cross' && !shared.contains(p)) {
+            p = shared.contains(references.first.source)
+                ? references.first.source
+                : shared.first;
+          }
+          if (p == 'cross') {
+            references = completed(endpoints, references);
+            if (references.map((r) => r.source).toSet().length < 2 &&
+                shared.isNotEmpty) {
+              p = shared.contains(references.first.source)
+                  ? references.first.source
+                  : shared.first;
+            }
+          }
+          if (p != 'cross') {
+            final own = references.where((r) => r.source == p).toList();
+            references =
+                own.isNotEmpty ? own : completed(endpoints, const [], only: p);
+          }
+        }
+        if (references.isEmpty) throw const FormatException('图形缺少原文依据');
         placement(p, references);
         final scopeMap = insightObject(m['scope']);
         if (insightText(scopeMap, 'basis').isEmpty &&

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quote_app/epistemic/reading_map_quality.dart';
 import 'package:quote_app/epistemic/schopenhauer_guidance.dart';
@@ -7,7 +9,9 @@ import 'fixtures/purposeful_case.dart';
 
 const _camus = '在隆冬之中，我终于在自己内心发现了一个不可战胜的夏天。';
 
-Map<String, dynamic> _concept(String id, String label, String definition) => {
+Map<String, dynamic> _concept(String id, String label, String definition,
+        {String ref = 'e1'}) =>
+    {
       'id': id,
       'label': label,
       'definition': definition,
@@ -16,7 +20,7 @@ Map<String, dynamic> _concept(String id, String label, String definition) => {
       'kind': 'concept',
       'status': 'interpretation',
       'universe': '人的能力',
-      'references': ['e1'],
+      'references': [ref],
     };
 
 Map<String, dynamic> _edge(String parent, String child) => {
@@ -31,7 +35,9 @@ Map<String, dynamic> _edge(String parent, String child) => {
 
 // The reading that was seen on a phone: two unconnected two-step chains made of
 // abstract near-synonyms, and a conclusion that stops at "literal or figurative".
-SemanticScope _stalled({bool disclaimer = true}) => SemanticScope.parse({
+Map<String, dynamic> _stalledMap(
+        {bool disclaimer = true, bool evidenceRef = true}) =>
+    {
       'schema_version': 6,
       'analysis_purpose': '理解名言的核心概念及其与生活经验的关系',
       'selection_strategy': '选取心理能力与自我认识',
@@ -58,11 +64,14 @@ SemanticScope _stalled({bool disclaimer = true}) => SemanticScope.parse({
           'conclusion': disclaimer
               ? '说话者称自己终于在内心发现了一个不可战胜的夏天；原句未说明这是字面季节还是隐喻。'
               : '说话者在最艰难的处境里发现了不可摧毁的内在生机。',
-          'evidence_ref': 'e1',
+          if (evidenceRef) 'evidence_ref': 'e1',
           'origin': 'A',
         }
       ],
-    }, [const ScopeSource('A', _camus)]);
+    };
+
+SemanticScope _stalled({bool disclaimer = true}) => SemanticScope.parse(
+    _stalledMap(disclaimer: disclaimer), [const ScopeSource('A', _camus)]);
 
 void main() {
   test('a stalled reading of a metaphor is sent back for a positive reading', () {
@@ -96,6 +105,82 @@ void main() {
 
   test('structure checks stay silent when no view was requested', () {
     expect(ReadingMapQuality.issues(_stalled()).any((i) => i.path.startsWith('reading.metaphor')), isFalse);
+  });
+
+  group('references are repaired locally instead of dropping the connection',
+      () {
+    final sources = [const ScopeSource('A', camusPassage)];
+    Map<String, dynamic> damaged(void Function(Map<String, dynamic>) edit) {
+      final map =
+          jsonDecode(jsonEncode(purposefulCase())) as Map<String, dynamic>;
+      edit(map);
+      return map;
+    }
+
+    test('relations that cite only the sentence keep their circles', () {
+      final map = damaged((m) {
+        for (final r in m['relations'] as List) {
+          (r as Map)['references'] = ['q'];
+        }
+      });
+      final value = SemanticScope.parse(map, sources);
+      expect(value.relations.length, 3);
+      expect(value.issues, isEmpty);
+    });
+
+    test('a wrong excerpt is still rejected', () {
+      final map = damaged((m) {
+        ((m['relations'] as List).first as Map)['references'] = [
+          {'source': 'A', 'excerpt': '原句里没有的话'}
+        ];
+      });
+      final value = SemanticScope.parse(map, sources);
+      expect(value.relations.length, 2);
+      expect(value.issues.single.message, contains('不符'));
+    });
+
+    test('a link between two materials keeps both sides located', () {
+      final value = SemanticScope.parse({
+        'schema_version': 6,
+        'analysis_purpose': '比较两则材料中的认真',
+        'selection_strategy': '各取一个核心概念',
+        'material_kind': 'argument',
+        'evidence': [
+          {'id': 'e1', 'source': 'A', 'excerpt': '成年人的成熟'},
+          {'id': 'e2', 'source': 'B', 'excerpt': '全神贯注'},
+        ],
+        'concepts': [
+          _concept('a1', '成年人的成熟', '成年人身上的成熟状态', ref: 'e1'),
+          _concept('b1', '孩子的专注', '孩子玩耍时的全神贯注', ref: 'e2'),
+        ],
+        'meaning_links': [
+          {
+            'from': 'a1',
+            'to': 'b1',
+            'kind': 'analogy',
+            'explanation': '成熟中的认真与游戏中的专注相似',
+            'status': 'interpretation',
+            'references': ['e1'],
+          }
+        ],
+      }, [
+        const ScopeSource('A', '成年人的成熟，就是找回孩提时玩耍所具有的认真。'),
+        const ScopeSource('B', '孩子玩耍时全神贯注。'),
+      ]);
+      expect(value.meaningLinks.length, 1);
+      expect(value.issues, isEmpty);
+    });
+
+    test('with one sentence, a proposition without a locator is kept and flagged',
+        () {
+      final value = SemanticScope.parse(_stalledMap(evidenceRef: false),
+          [const ScopeSource('A', _camus)]);
+      expect(value.propositions.length, 1);
+      final note = value.issues
+          .singleWhere((i) => i.path == 'propositions[0].evidence');
+      expect(note.retryable, isFalse);
+      expect(note.message, contains('整句'));
+    });
   });
 
   test('guidance v9 carries the reading principles for every graph', () {
