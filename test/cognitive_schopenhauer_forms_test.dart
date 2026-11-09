@@ -17,6 +17,9 @@ import 'package:quote_app/epistemic/semantic_scope_view.dart';
 import 'package:quote_app/services/unified_ai_service.dart';
 import 'fixtures/schopenhauer_forms.dart';
 import 'fixtures/meaning_relations.dart';
+import 'quote_knowledge_circles_test.dart' as knowledge_circle_tests;
+import 'schopenhauer_circles_test.dart' as circle_tests;
+import 'schopenhauer_reading_checks_test.dart' as reading_check_tests;
 
 const sources=[ScopeSource('A',wangQuote)];
 const config=UnifiedAiResolvedConfig(provider:'test',apiKey:'',model:'offline',endpoint:'https://example.invalid',
@@ -42,6 +45,11 @@ class ExpansionService extends SemanticScopeService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  // The focused circle, ground-layer and reading-check tests live in their own
+  // files; they run here until the workflow lists those files directly.
+  group('schopenhauer circles', circle_tests.main);
+  group('schopenhauer reading checks', reading_check_tests.main);
+  group('quote knowledge circles', knowledge_circle_tests.main);
   setUpAll(() async {
     await (FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
     final font=File('/tmp/quote-preview-cjk.otf');
