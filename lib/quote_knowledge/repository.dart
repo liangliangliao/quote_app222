@@ -525,6 +525,28 @@ class QuoteKnowledgeRepository {
         [id, if (query.isNotEmpty) '%$query%', limit, offset]);
   }
 
+  /// The individuals (quotes) inside each category's circle.
+  ///
+  /// The set is closed upward: a quote filed under a sub-category also lies in
+  /// every ancestor, exactly as a species lies inside its genus. Relations
+  /// between two categories (equal, inside, overlapping) are read from these
+  /// sets, never guessed by a model.
+  Future<Map<String, Set<String>>> categoryExtensions(
+      {String query = ''}) async {
+    final db = await database,
+        args = query.isEmpty ? <Object?>[] : <Object?>['%$query%'];
+    final rows = await db.rawQuery(
+        '${_membershipCte(query)} SELECT DISTINCT category_id,quote_key FROM members',
+        args);
+    final result = <String, Set<String>>{};
+    for (final row in rows) {
+      result
+          .putIfAbsent('${row['category_id']}', () => <String>{})
+          .add('${row['quote_key']}');
+    }
+    return result;
+  }
+
   Future<List<Map<String, dynamic>>> assignments(String quoteKey) async =>
       (await database).rawQuery('''
     SELECT c.*,m.reason,m.evidence,m.status FROM qk_memberships m JOIN qk_categories c ON c.id=m.category_id WHERE m.quote_key=?''',

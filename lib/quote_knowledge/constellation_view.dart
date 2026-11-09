@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../epistemic/schopenhauer_circles.dart';
 import '../models/quote_insight.dart';
 import '../services/quote_insight_settings.dart';
 import '../widgets/quote_portrait.dart';
@@ -193,6 +194,37 @@ class _QuoteKnowledgeConstellationState
     final g = _graph!;
     final edges =
         g.edges.where((e) => e.from == _selected || e.to == _selected).toList();
+    final selected = g.category(_selected ?? '');
+    var readings = <(QuoteCategory, CircleReading)>[];
+    var sameName = <QuoteCategory>[];
+    if (selected != null) {
+      try {
+        final extensions =
+            await _repository.categoryExtensions(query: widget.query);
+        final mine = extensions[selected.id] ?? <String>{};
+        for (final c in g.categories) {
+          if (c.id == selected.id) continue;
+          final reading =
+              classifyExtensions(mine, extensions[c.id] ?? <String>{});
+          if (reading.relation == CircleRelation.unknown ||
+              reading.relation == CircleRelation.disjoint) continue;
+          readings.add((c, reading));
+        }
+        readings.sort((a, b) => b.$2.both.length != a.$2.both.length
+            ? b.$2.both.length.compareTo(a.$2.both.length)
+            : a.$1.name.compareTo(b.$1.name));
+        readings = readings.take(8).toList();
+      } catch (_) {
+        /* The stored relations below stay readable without the circles. */
+      }
+      sameName = [
+        for (final c in g.categories)
+          if (c.id != selected.id &&
+              categoryNameKey(c.name) == categoryNameKey(selected.name))
+            c
+      ];
+    }
+    if (!mounted) return;
     await showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
@@ -200,7 +232,42 @@ class _QuoteKnowledgeConstellationState
             ListView(padding: const EdgeInsets.all(16), children: [
               const Text('概念关系与依据',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-              const Text('收录数量与共同收录表示名言索引；主题层级表示分类范围。概念的外延关系需结合具体材料另行分析。'),
+              const Text(
+                  '含义圈按已收录的名言计算：类别所含的名言是圈里的点，下位类别的名言同时属于上位类别。'
+                  '它说明收录材料里的包含与相交，不等于对所有名言的普遍断言；共同收录与主题层级只是名言索引。'),
+              if (selected != null) ...[
+                const SizedBox(height: 12),
+                Text('含义圈 · ${selected.name}',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600)),
+                if (readings.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('已收录的名言里，此类别暂时与其他类别没有共有的名言，尚不能说明它与别的概念怎样相交。')),
+                for (final (c, reading) in readings)
+                  ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: SizedBox(
+                          width: 100,
+                          height: 56,
+                          child: CustomPaint(painter: _RelationPainter(reading))),
+                      title: Text('${selected.name} 与 ${c.name}：${reading.label}'),
+                      subtitle: Text(
+                          '${reading.sentence(selected.name, c.name, basis: '已收录的名言')}'
+                          '共有 ${reading.both.length} 条（${selected.name} ${reading.sizeA} 条，${c.name} ${reading.sizeB} 条）。'
+                          '${reading.direction}')),
+                if (sameName.isNotEmpty)
+                  ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.layers_outlined),
+                      title: Text('“${selected.name}”还作为另一个类别出现'),
+                      subtitle: Text(
+                          '${sameName.map((c) => g.category(c.parentId)?.name ?? '顶层').join('、')}。'
+                          '同一概念应只画一个圈：含义相同请合并，含义不同请改名区分。')),
+                const Divider(),
+              ],
+              const Text('保存的概念关系',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
               if (edges.isEmpty)
                 const Padding(
                     padding: EdgeInsets.all(16), child: Text('此类别还没有保存的概念关系。')),
@@ -755,4 +822,48 @@ class _ConstellationPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ConstellationPainter old) => true;
+}
+
+/// Two circles whose areas follow the number of quotes in each category and
+/// whose overlap follows the number they share: equal circles coincide, a
+/// species sits inside its genus, partly shared categories cross.
+class _RelationPainter extends CustomPainter {
+  final CircleReading reading;
+  const _RelationPainter(this.reading);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final a = math.max(1, reading.sizeA).toDouble(),
+        b = math.max(1, reading.sizeB).toDouble();
+    final scale = (size.height / 2 - 3) / math.sqrt(math.max(a, b));
+    final ra = math.sqrt(a) * scale, rb = math.sqrt(b) * scale;
+    final shared = (reading.both.length / math.min(a, b)).clamp(0.0, 1.0);
+    final gap = switch (reading.relation) {
+      CircleRelation.equal => 0.0,
+      CircleRelation.subset ||
+      CircleRelation.superset =>
+        (ra - rb).abs() * .5,
+      _ => (ra + rb) - ((ra + rb) - (ra - rb).abs()) * shared,
+    };
+    final cx = size.width / 2, cy = size.height / 2;
+    void circle(Offset center, double r, Color color) {
+      canvas.drawCircle(center, r, Paint()..color = color.withValues(alpha: .35));
+      canvas.drawCircle(
+          center,
+          r,
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2);
+    }
+
+    circle(Offset(cx - gap / 2, cy), ra, const Color(0xff73b9cf));
+    circle(Offset(cx + gap / 2, cy), rb, const Color(0xffb67c79));
+  }
+
+  @override
+  bool shouldRepaint(_RelationPainter old) =>
+      old.reading.relation != reading.relation ||
+      old.reading.sizeA != reading.sizeA ||
+      old.reading.sizeB != reading.sizeB ||
+      old.reading.both.length != reading.both.length;
 }

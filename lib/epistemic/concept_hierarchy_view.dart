@@ -3,6 +3,7 @@ import 'concept_connections.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'schopenhauer_circles.dart';
 import 'semantic_scope.dart';
 import 'cognitive_mode.dart';
 
@@ -364,6 +365,32 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
     final edges = [...classEdges, ...tracedEdges];
     final visibleIds = {for (final e in edges) e.parent, for (final e in edges) e.child};
     final nodes = widget.value.concepts.where((n) => visibleIds.contains(n.id)).toList();
+    // Distance from intuition decides 殊相 (ground floor) and 共相 (upper
+    // floors); a concept with no path down to a recognisable experience is
+    // shown as hanging in the air instead of being given a layer.
+    final layers = GroundLayers.compute(
+        conceptIds: [for (final n in nodes) n.id],
+        groundIds: [
+          for (final n in nodes)
+            if (n.kind == 'experience' || n.kind == 'formal') n.id
+        ],
+        edges: [for (final e in edges) (e.parent, e.child)]);
+    String roleLabel(SemanticConcept n) => n.kind == 'formal'
+        ? '形式构造 · 定义下的直观'
+        : n.kind == 'experience'
+            ? (n.status == 'example' ? '具体经验 · 模拟' : '具体经验')
+            : edges.any((e) => e.child == n.id && e.kind == 'subtype')
+                ? '下位概念 · 新增限定'
+                : edges.any((e) => e.child == n.id && e.kind == 'mediation')
+                    ? '中介概念'
+                    : edges.any((e) => e.parent == n.id && e.kind == 'subtype')
+                        ? '上位概念 · 共同规定'
+                        : n.status == 'interpretation'
+                            ? '解释概念'
+                            : '原文概念';
+    String subtitle(SemanticConcept n) => n.kind == 'concept'
+        ? '${GroundLayers.label(layers[n.id])}\n${roleLabel(n)}'
+        : roleLabel(n);
     final connections = [for (final e in edges) ConceptConnection(e.parent, e.child, e.kind,
         e.differentia.isEmpty ? e.explanation : e.differentia,
         e.basisKind == 'analytic_definition' ? 'definition' : 'text_claim', e.references,
@@ -473,31 +500,7 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
                                               fontWeight: FontWeight.w700)),
                                       const SizedBox(height: 5),
                                       Text(
-                                          n.kind == 'formal'
-                                              ? '形式构造 · 定义下的直观'
-                                              : n.kind == 'experience'
-                                                  ? n.status == 'example'
-                                                      ? '具体经验 · 模拟'
-                                                      : '具体经验'
-                                                  : edges.any((e) =>
-                                                          e.child == n.id &&
-                                                          e.kind == 'subtype')
-                                                      ? '下位概念 · 新增限定'
-                                                      : edges.any((e) =>
-                                                              e.child == n.id &&
-                                                              e.kind ==
-                                                                  'mediation')
-                                                          ? '中介概念'
-                                                          : edges.any((e) =>
-                                                                  e.parent ==
-                                                                      n.id &&
-                                                                  e.kind ==
-                                                                      'subtype')
-                                                              ? '上位概念 · 共同规定'
-                                                              : n.status ==
-                                                                      'interpretation'
-                                                                  ? '解释概念'
-                                                                  : '原文概念',
+                                          subtitle(n),
                                           style: const TextStyle(fontSize: 12),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
@@ -509,7 +512,9 @@ class _ConceptHierarchyViewState extends State<ConceptHierarchyView> {
         TextButton(
             onPressed: () => setState(() => _fullTree = false),
             child: const Text('追踪概念的直观链路')),
-      const Text('实线表示下位类新增的规定；虚线区分概念中介与直观追溯，不表示上下位。分支不自动表示互斥或穷尽，同一概念可以有交叉归属。',
+      const Text('读法：自下而上读“是”（子类属于上位），自上而下问“追溯”（凭什么成立、落到哪个直观），两个方向不能混读。'
+          '殊相＝直接落到可指认经历的概念，共相＝要隔几层概念才落地，悬空＝尚无直观依据。'
+          '实线表示下位类新增的规定；虚线区分概念中介与直观追溯，不表示上下位。分支不自动表示互斥或穷尽，同一概念可以有交叉归属。',
           style: TextStyle(fontSize: 12)),
       Wrap(spacing: 6, children: [
         for (final n in nodes)

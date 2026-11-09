@@ -37,6 +37,23 @@ class ConceptMeaningDiagram extends StatefulWidget {
 
 class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
   String? _region;
+
+  /// The judgment this relation expresses. Containment is read from the inner
+  /// circle outward ("是"); crossing circles only share a part and must not be
+  /// read as "A 是 B".
+  String _reading() {
+    final a = widget.setA, b = widget.setB;
+    final range = widget.universe.isEmpty ? '上位范围' : widget.universe;
+    return switch (widget.relation) {
+      QuoteRelation.equal => '读法：「$a」与「$b」含义圈重合，凡「$a」皆「$b」，凡「$b」皆「$a」。',
+      QuoteRelation.subset => '读法：所有「$a」都是「$b」，反过来不成立；由内圈向外圈读“是”，外圈向内要问“凭什么”。',
+      QuoteRelation.superset => '读法：所有「$b」都是「$a」，反过来不成立；由内圈向外圈读“是”，外圈向内要问“凭什么”。',
+      QuoteRelation.overlap => '读法：有些「$a」是「$b」，有些「$a」不是「$b」；相交只说明有共同部分，不能读成“$a 是 $b”。',
+      QuoteRelation.partition => '读法：「$a」与「$b」互相排斥，合起来穷尽「$range」。',
+      QuoteRelation.siblings => '读法：「$a」与「$b」互相排斥，同在「$range」之内但没有穷尽它。',
+      _ => '读法：没有「$a」是「$b」。',
+    };
+  }
   void _select(String region) {
     setState(() => _region = region);
     widget.onRegion?.call(region);
@@ -75,6 +92,8 @@ class _ConceptMeaningDiagramState extends State<ConceptMeaningDiagram> {
             '概念含义圈 · $label',
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
+        if (!widget.compact)
+          Text(_reading(), style: const TextStyle(fontSize: 12)),
         const SizedBox(height: 8),
         if (!widget.compact && widget.universe.isNotEmpty)
           Text('论域：${widget.universe}', style: const TextStyle(fontSize: 12)),
