@@ -255,6 +255,53 @@ void main() {
       expect(parse(data((s, m) => s.remove('relation_scope'))).scopeRelations.length, 1);
       expect(parse(data((s, m) => s.remove('justification'))).scopeRelations.length, 1);
     });
+    test('reworded member criteria are replaced by the concept definitions', () {
+      final v = parse(data((s, m) {
+        s['criterion_a'] = '人处在艰难、受压的境况之中';
+        s['criterion_b'] = '内心体验到的不被击垮的力量';
+      }));
+      final scope = v.scopeRelations.single.scope!;
+      expect(scope.criterionA, '人所处的艰难、受压的状态');
+      expect(scope.criterionB, '人在内心体验到的、未被击垮的力量');
+      final notes = v.issues.where((i) => i.path.contains('.criterion_'));
+      expect(notes.length, 2);
+      expect(notes.any((i) => i.retryable), isFalse);
+    });
+    test('node ids are found by exact label, and swapped sets are put right',
+        () {
+      final byLabel = parse(data((s, m) {
+        s['set_a'] = '艰难处境';
+        s['set_b'] = '内在力量';
+        ((m['relations'] as List).first as Map).remove('node_ids');
+      }));
+      expect(byLabel.scopeRelations.single.nodeIds, ['c1', 'c2']);
+      final swapped = parse(data((s, m) {
+        s['set_a'] = '内在力量';
+        s['set_b'] = '艰难处境';
+      }));
+      final relation = swapped.scopeRelations.single;
+      expect(relation.nodeIds, ['c2', 'c1']);
+      expect(relation.scope!.setA, '内在力量');
+    });
+    test('an analytic scope is labelled a definition, and a missing statement is filled',
+        () {
+      final v = parse(data((s, m) {
+        ((m['relations'] as List).first as Map)['status'] = 'interpretation';
+        ((m['relations'] as List).first as Map).remove('statement');
+      }));
+      final relation = v.scopeRelations.single;
+      expect(relation.status, 'definition');
+      expect(relation.statement, '依所列定义核对');
+    });
+    test('a proper subset with identical criteria is still refused', () {
+      final v = parse(data((s, m) {
+        s['relation_type'] = 'subset';
+        s.remove('only_a');
+        ((m['concepts'] as List)[1] as Map)['definition'] = '人所处的艰难、受压的状态';
+      }));
+      expect(v.scopeRelations, isEmpty);
+      expect(v.issues.single.message, contains('相同成员判准'));
+    });
     test('real gaps are still refused', () {
       final differentUniverse = parse(data((s, m) {
         ((m['concepts'] as List)[1] as Map)['universe'] = '人的力量';

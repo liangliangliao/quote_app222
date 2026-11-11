@@ -795,22 +795,48 @@ class SemanticScope {
               referenceTable[scopeMap['basis_ref']]?.excerpt ?? '';
         }
         ConceptScope? scope;
-        final declaredIds = strings(m['node_ids']);
+        var declaredIds = strings(m['node_ids']);
+        // Identity comes from the concept nodes. A reply that names the two
+        // sets but forgets node_ids is matched by exact, unique label.
+        if (scopeMap.isNotEmpty && declaredIds.length != 2) {
+          final byLabel = <String>[];
+          for (final key in ['set_a', 'set_b']) {
+            final matches = nodes.values
+                .where((n) =>
+                    n.kind == 'concept' && n.label == insightText(scopeMap, key))
+                .toList();
+            if (matches.length == 1) byLabel.add(matches.single.id);
+          }
+          if (byLabel.length == 2 && byLabel.toSet().length == 2) {
+            declaredIds = byLabel;
+            m['node_ids'] = byLabel;
+          }
+        }
         if (scopeMap.isNotEmpty &&
             declaredIds.length == 2 &&
             declaredIds.every(nodes.containsKey)) {
+          // Sets named in the opposite order of node_ids are swapped back so
+          // the region texts keep describing the set they were written for.
+          if (nodes[declaredIds[0]]!.label == insightText(scopeMap, 'set_b') &&
+              nodes[declaredIds[1]]!.label == insightText(scopeMap, 'set_a')) {
+            declaredIds = declaredIds.reversed.toList();
+            m['node_ids'] = declaredIds;
+          }
           for (var i = 0; i < 2; i++) {
             final node = nodes[declaredIds[i]]!, suffix = i == 0 ? 'a' : 'b';
-            if (insightText(scopeMap, 'set_$suffix').isEmpty)
-              scopeMap['set_$suffix'] = node.label;
-            if (insightText(scopeMap, 'criterion_$suffix').isEmpty)
-              scopeMap['criterion_$suffix'] = node.definition;
+            final written = insightText(scopeMap, 'criterion_$suffix');
             if (inputVersion >= 3 &&
-                PropositionConsistency.normalize(
-                        insightText(scopeMap, 'criterion_$suffix')) !=
+                written.isNotEmpty &&
+                PropositionConsistency.normalize(written) !=
                     PropositionConsistency.normalize(node.definition)) {
-              throw const FormatException('关系中的成员判准改变了已有概念定义；同名异义须使用独立身份');
+              // A rewording must not redefine the concept, so the node's own
+              // definition is the criterion. The substitution is recorded as a note.
+              issues.add(AnalysisIssue('relations[${entry.$1}].criterion_$suffix',
+                  '成员判准已统一为概念「${node.label}」的原定义，模型改写的判准未采用。',
+                  retryable: false));
             }
+            scopeMap['set_$suffix'] = node.label;
+            scopeMap['criterion_$suffix'] = node.definition;
           }
         }
         if (scopeMap.isNotEmpty) {
@@ -878,7 +904,9 @@ class SemanticScope {
         }
         var statement = insightText(m, 'statement');
         var status = insightText(m, 'status');
-        if (scope?.basisKind == 'analytic_definition' && status != 'definition') throw const FormatException('分析性范围须标为依所列定义，不能冒称原文已经证明');
+        // An analytic scope is a definition; labelling it so only lowers the claim.
+        if (scope?.basisKind == 'analytic_definition' && status != 'definition' && status != 'unknown') status = 'definition';
+        if (statement.isEmpty && scope != null) statement = scope.justification;
         if (statement.isEmpty ||
             !['text_claim', 'interpretation', 'definition', 'unknown']
                 .contains(status) ||
