@@ -237,6 +237,7 @@ class FpLearningCard {
   final String title;
   final String body;
   final String tagsJson;
+  final String? talEventId;
 
   const FpLearningCard({
     required this.id,
@@ -244,6 +245,7 @@ class FpLearningCard {
     required this.title,
     required this.body,
     required this.tagsJson,
+    this.talEventId,
   });
 
   factory FpLearningCard.fromMap(Map<String, dynamic> m) => FpLearningCard(
@@ -252,5 +254,6 @@ class FpLearningCard {
         title: (m['title'] ?? '').toString(),
         body: (m['body'] ?? '').toString(),
         tagsJson: (m['tags_json'] ?? '[]').toString(),
+        talEventId: m['tal_event_id'] as String?,
       );
 }

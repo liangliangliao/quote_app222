@@ -8,6 +8,10 @@ on:
       - 'lib/prp_plugin/**'
       - 'lib/prp_plugin_host/**'
       - 'test/prp_plugin/**'
+      - 'test/tal_failure_change/**'
+      - 'assets/failure_module/tal/**'
+      - 'android/app/src/main/kotlin/com/example/quote_app/Prp*.kt'
+      - 'integration_test/prp_acceptance_test.dart'
       - 'lib/beautiful_enemy/**'
       - 'lib/beautiful_enemy_host/**'
       - 'lib/behavior_tracking/**'
@@ -15,12 +19,15 @@ on:
       - 'lib/kindling/**'
       - 'lib/main.dart'
       - 'lib/pages/home_page.dart'
+      - 'lib/pages/discover_page.dart'
       - 'lib/pages/settings_page.dart'
       - 'lib/widgets/settings_dashboard.dart'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - 'tools/pack_prp.py'
+      - 'tools/pack_tal_failure_change.py'
       - 'docs/prp/**'
+      - 'docs/tal_failure_change/**'
       - '.github/workflows/prp_plugin_ci.yml'
   workflow_dispatch:
 
@@ -48,15 +55,17 @@ jobs:
       - name: Analyze plugin and adapters
         run: >-
           flutter analyze --no-pub --no-fatal-infos lib/prp_plugin lib/prp_plugin_host
+          lib/failure_module/tal test/tal_failure_change
           test/prp_plugin integration_test/prp_acceptance_test.dart test_driver/prp_acceptance_driver.dart
       - name: Analyze integration points
         run: >-
           flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
           lib/beautiful_enemy lib/beautiful_enemy_host lib/behavior_tracking
           lib/failure_module lib/kindling lib/pages/home_page.dart
+          lib/pages/discover_page.dart
           lib/pages/settings_page.dart lib/widgets/settings_dashboard.dart lib/main.dart
       - name: Plugin contracts and interactive flows
-        run: flutter test --no-pub --reporter expanded test/prp_plugin
+        run: flutter test --no-pub --reporter expanded test/prp_plugin test/tal_failure_change
       - name: Build the complete Flutter bundle for Android arm64
         run: flutter build bundle --debug --no-pub --target-platform android-arm64
       - name: Safety, kindling and settings regressions
@@ -75,8 +84,8 @@ jobs:
         continue-on-error: true
         run: flutter test --no-pub --reporter expanded test/beautiful_enemy
       - name: Package reviewable source
-        run: python3 tools/pack_prp.py
+        run: python3 tools/pack_tal_failure_change.py
       - uses: actions/upload-artifact@v4
         with:
-          name: quote-app-prp-v1.1.0-source
-          path: build/prp/quote_app_prp_v1.1.0.zip
+          name: quote-app-tal-failure-change-v1.1-source
+          path: build/tal_failure_change/quote_app_tal_failure_change_v1_1.zip*

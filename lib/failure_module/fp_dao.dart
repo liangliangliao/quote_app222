@@ -9,7 +9,10 @@ import 'fp_models.dart';
 /// - Seeds from assets/failure_module/seed_failure_perfection.json
 /// - Stores user progress and practice logs in fp_* tables.
 class FpDao {
-  Future<Database> _db() => AppDatabase.instance();
+  FpDao({Future<Database> Function()? openDatabase})
+      : database = openDatabase ?? AppDatabase.instance;
+  final Future<Database> Function() database;
+  Future<Database> _db() => database();
 
   Future<void> ensureTables() async {
     final db = await _db();
@@ -111,6 +114,21 @@ class FpDao {
         tags_json TEXT NOT NULL DEFAULT '[]'
       )
     ''');
+    // The Tal workflow lives in the existing learning-card ledger. Nullable
+    // columns preserve every historical card and work on Android 8 SQLite.
+    await db.transaction((txn) async {
+      final info = await txn.rawQuery('PRAGMA table_info(fp_learning_card)');
+      final names = info.map((r) => r['name']).toSet();
+      for (final name in ['tal_event_id', 'tal_subject_key', 'tal_state', 'tal_data_json']) {
+        if (!names.contains(name)) {
+          await txn.execute('ALTER TABLE fp_learning_card ADD COLUMN $name TEXT');
+        }
+      }
+      await txn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_fp_tal_event '
+          'ON fp_learning_card(tal_event_id)');
+      await txn.execute('CREATE INDEX IF NOT EXISTS idx_fp_tal_subject '
+          'ON fp_learning_card(tal_subject_key, tal_state)');
+    });
   }
 
   Future<void> seedIfNeeded() async {

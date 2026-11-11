@@ -1,0 +1,194 @@
+{
+  "version": "1.0.0",
+  "note": "产品工程路由，不是Tal官方心理诊断算法；规则是建议优先级，并非确定因果结论。",
+  "default_max_methods": 2,
+  "default_max_questions": 1,
+  "fallback_method": "explore_failures",
+  "rules": [
+    {
+      "id": "R01",
+      "if_all": [
+        "event_user_confirmed",
+        "user_wants_reflection"
+      ],
+      "suggest": [
+        "explore_failures"
+      ],
+      "priority": 50
+    },
+    {
+      "id": "R00",
+      "if_all": [
+        "user_wants_to_process_failure_emotion",
+        "user_opted_in_to_prp"
+      ],
+      "suggest": [
+        "prp"
+      ],
+      "priority": 95,
+      "note": "原著三阶段可往返，无强制下一步"
+    },
+    {
+      "id": "R02",
+      "if_any": [
+        "self_condemnation",
+        "high_emotional_distress"
+      ],
+      "suggest": [
+        "permission_to_be_human"
+      ],
+      "priority": 90
+    },
+    {
+      "id": "R03",
+      "if_any": [
+        "catastrophizing",
+        "selective_negative_focus",
+        "unsupported_inference"
+      ],
+      "suggest": [
+        "three_ms"
+      ],
+      "priority": 80
+    },
+    {
+      "id": "R04",
+      "if_all": [
+        "user_requests_benefit_finding",
+        "emotionally_ready"
+      ],
+      "suggest": [
+        "benefit_finding"
+      ],
+      "priority": 45
+    },
+    {
+      "id": "R05",
+      "if_all": [
+        "avoids_due_to_failure_fear",
+        "challenge_is_safe"
+      ],
+      "suggest": [
+        "learn_to_fail",
+        "stretch_zone"
+      ],
+      "priority": 65
+    },
+    {
+      "id": "R06",
+      "if_all": [
+        "valued_positive_trait_linked_to_negative_trait",
+        "user_interested_in_exploration"
+      ],
+      "suggest": [
+        "unbundling"
+      ],
+      "priority": 72
+    },
+    {
+      "id": "R07",
+      "if_all": [
+        "user_chooses_goal",
+        "hard_to_start",
+        "physical_conditions_ok"
+      ],
+      "suggest": [
+        "five_minute_takeoff"
+      ],
+      "priority": 40
+    },
+    {
+      "id": "R08",
+      "if_any": [
+        "cannot_repeat",
+        "often_forgets",
+        "needs_consistent_schedule"
+      ],
+      "suggest": [
+        "creating_rituals",
+        "three_rs"
+      ],
+      "priority": 58
+    },
+    {
+      "id": "R09",
+      "if_any": [
+        "challenge_too_large",
+        "panic_when_trying"
+      ],
+      "suggest": [
+        "stretch_zone"
+      ],
+      "priority": 66
+    },
+    {
+      "id": "R10",
+      "if_any": [
+        "fatigue_or_sleep_concern",
+        "overloaded"
+      ],
+      "suggest": [
+        "spire"
+      ],
+      "priority": 60
+    },
+    {
+      "id": "R11",
+      "if_all": [
+        "prior_method_not_helped",
+        "user_wants_new_trial"
+      ],
+      "suggest": [
+        "trial_error",
+        "abc_change"
+      ],
+      "priority": 88
+    },
+    {
+      "id": "R12",
+      "if_any": [
+        "goal_no_longer_fits",
+        "rational_decline"
+      ],
+      "suggest": [],
+      "priority": 100,
+      "route": "review_goal_no_failure_label"
+    }
+  ],
+  "hard_exclusions": [
+    {
+      "condition": "prior_method_not_helped",
+      "exclude_method": "five_minute_takeoff",
+      "unless": "user_asks_to_retry"
+    },
+    {
+      "condition": "no_confirmed_missed",
+      "route": "do_not_trigger_failure"
+    },
+    {
+      "condition": "kindling_aborted",
+      "route": "do_not_trigger_failure"
+    },
+    {
+      "condition": "unconsented_ai",
+      "route": "offline_only"
+    },
+    {
+      "condition": "crisis_warning",
+      "route": "safety_exit"
+    }
+  ],
+  "status_labels": [
+    "EVENT_RECORDED",
+    "REFLECTION_DRAFT",
+    "INSIGHT_CANDIDATE",
+    "ACTION_PLANNED",
+    "ACTION_ATTEMPTED",
+    "OUTCOME_HELPED",
+    "OUTCOME_UNCLEAR",
+    "OUTCOME_NOT_HELPED",
+    "LESSON_REVISED",
+    "PAUSED",
+    "GOAL_EXITED"
+  ]
+}

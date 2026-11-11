@@ -124,6 +124,7 @@ flutter:
     - assets/avatars/avatar_legacy_01.jpg
     - assets/avatars/README.txt
     - assets/failure_module/seed_failure_perfection.json
+    - assets/failure_module/tal/
     - assets/will/ch26_simplified_full.txt
     - assets/yangming_module/mission_state_machines.json
     - assets/yangming_module/zhixing15_content.txt

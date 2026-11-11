@@ -55,7 +55,7 @@ abstract class PrpPlugin {
             .push<void>(MaterialPageRoute(builder: (ctx) {
           mountedRoute = ctx;
           return Scaffold(
-            appBar: AppBar(title: const Text('缓一缓 · 对账 · 留下一条教训')),
+            appBar: AppBar(title: const Text('一次经历 · 下一次行动')),
             body: SafeArea(
                 child: SingleChildScrollView(
                     child: sessionCard(offer, onFinished: () {

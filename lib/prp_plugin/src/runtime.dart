@@ -22,6 +22,10 @@ class PrpRuntime extends PrpPlugin {
       {required this.settings,
       required this.store,
       this.host = const NoopPrpHost(),
+      this.reflectionBuilder,
+      this.recallBuilder,
+      this.additionalRecallBudget,
+      this.externalQuotes,
       DateTime Function()? clock,
       Stopwatch Function()? stopwatchFactory})
       : clock = clock ?? DateTime.now,
@@ -30,6 +34,12 @@ class PrpRuntime extends PrpPlugin {
   final PrpSettings settings;
   final PrpStore store;
   final PrpHost host;
+  /// Optional host adapters extend existing surfaces without importing their
+  /// business modules into the PRP core. Existing drafts keep the legacy UI.
+  final Widget Function(PrpRuntime, PrpOffer, Widget, VoidCallback?)? reflectionBuilder;
+  final Widget Function(PrpRuntime, PrpContext, Widget)? recallBuilder;
+  final Future<({int used, bool ignoredRecently, bool quotedRecently})> Function(DatabaseExecutor, int, int)? additionalRecallBudget;
+  final Future<List<PrpQuote>> Function(PrpRuntime)? externalQuotes;
   final DateTime Function() clock;
   final Stopwatch Function() stopwatchFactory;
   PrpPreferences preferences = const PrpPreferences();
@@ -281,6 +291,26 @@ class PrpRuntime extends PrpPlugin {
 
   bool offerActive(PrpOffer offer) =>
       enabledFor(offer.signal.surface) && _offers[offer.sessionId] == _epoch;
+
+  Future<void> completeExternalReflection(PrpOffer offer) async {
+    if (!offerActive(offer)) return;
+    final epoch = _epoch;
+    await _serial<void>('external_reflection', null, () async {
+      final db = await _db(epoch, offer.signal.surface);
+      await db.transaction((txn) async {
+        _check(epoch, offer.signal.surface);
+        await txn.update('prp_session', {
+          'step': 'done', 'outcome': 'saved_in_learning_card', 'ended_ms': nowMs,
+        }, where: 'id = ? AND outcome = ?', whereArgs: [offer.sessionId, 'open']);
+        _check(epoch, offer.signal.surface);
+      });
+      _offers.remove(offer.sessionId);
+      _offerValues.remove(offer.sessionId);
+      _evidence.remove(offer.sessionId);
+      _presented.remove(offer.sessionId);
+      _publish();
+    });
+  }
   PrpOffer? pendingOffer(PrpSurface surface) => _offerValues.values
       .where((o) => o.signal.surface == surface && offerActive(o))
       .firstOrNull;
@@ -731,7 +761,9 @@ class PrpRuntime extends PrpPlugin {
                 'SELECT COUNT(*) FROM prp_recall WHERE ts >= ?',
                 [dayStartMs])) ??
             0;
-        if (count >= preferences.recallCap) return null;
+        final external = await additionalRecallBudget?.call(txn, dayStartMs, nowMs);
+        if (count + (external?.used ?? 0) >= preferences.recallCap ||
+            external?.ignoredRecently == true) return null;
         final ignored = await txn.query('prp_recall',
             columns: ['id'],
             where: "outcome = 'ignored' AND ts > ?",
@@ -926,6 +958,9 @@ class PrpRuntime extends PrpPlugin {
     final epoch = _epoch;
     return _serial<List<PrpQuote>>('quote_stream', const [], () async {
       if (!await _allowed(epoch, PrpSurface.quoteHome)) return const [];
+      final external = await externalQuotes?.call(this);
+      _check(epoch, PrpSurface.quoteHome);
+      if (external != null && external.isNotEmpty) return external;
       final lessons = (await store.lessons(sealedOnly: true))
           .where((l) => l.quoteAllowed)
           .toList();
@@ -949,7 +984,10 @@ class PrpRuntime extends PrpPlugin {
             where: "outcome = 'ignored' AND ts > ?",
             whereArgs: [nowMs - const Duration(hours: 24).inMilliseconds],
             limit: 1);
-        if (count >= preferences.recallCap ||
+        final external = await additionalRecallBudget?.call(txn, dayStartMs, nowMs);
+        if (count + (external?.used ?? 0) >= preferences.recallCap ||
+            external?.ignoredRecently == true ||
+            external?.quotedRecently == true ||
             recent.isNotEmpty ||
             ignored.isNotEmpty) return false;
         await txn.insert('prp_recall', {
@@ -1217,17 +1255,21 @@ class PrpRuntime extends PrpPlugin {
   Widget sessionCard(PrpOffer offer, {VoidCallback? onFinished}) => _slot(
       offer.signal.surface,
       () => offerActive(offer)
-          ? PrpSessionCard(
+          ? _reflection(offer, PrpSessionCard(
               key: ValueKey('prp_session_${offer.sessionId}_$_epoch'),
               runtime: this,
               onFinished: onFinished,
-              offer: offer)
+              offer: offer), onFinished)
           : const SizedBox.shrink());
+  Widget _reflection(PrpOffer offer, Widget legacy, VoidCallback? onFinished) =>
+      reflectionBuilder?.call(this, offer, legacy, onFinished) ?? legacy;
   @override
   Widget recallChip(PrpContext context) => _slot(
       context.surface,
       () => preferences.recalls
-          ? PrpRecallChip(runtime: this, contextValue: context)
+          ? (recallBuilder?.call(this, context,
+              PrpRecallChip(runtime: this, contextValue: context)) ??
+            PrpRecallChip(runtime: this, contextValue: context))
           : const SizedBox.shrink());
   @override
   Widget playbook({bool management = false}) => management

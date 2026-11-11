@@ -5,6 +5,7 @@ import 'pages/fp_concepts_page.dart';
 import 'pages/fp_learn_page.dart';
 import 'pages/fp_practice_page.dart';
 import 'pages/fp_journal_page.dart';
+import 'tal/tal_failure_change.dart';
 
 class FailureModuleHomePage extends StatefulWidget {
   const FailureModuleHomePage({super.key});
@@ -91,16 +92,24 @@ class _FpDashboardPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
       children: [
-        const Text('把失败变成学习，把完美主义变成迭代。', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        const Text('从一次真实经历，到下一次可观察的改变。', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
         Text(
-          '核心目标：允许自己失败 → 从失败中学习 → 用可实践的过程替代“必须完美”。',
+          '可以先记事实，也可以暂不分析。认识、计划、执行与有效分别记录。',
           style: TextStyle(color: Colors.black.withOpacity(0.7)),
         ),
         const SizedBox(height: 14),
         FpSectionCard(
+          title: '今天一件没有按计划发生的事',
+          subtitle: '1–3 分钟 · 可跳过、可离线 · 继续、调整或退出由你决定。',
+          icon: Icons.edit_note_outlined,
+          onTap: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const TalReflectionPage())),
+        ),
+        const SizedBox(height: 12),
+        FpSectionCard(
           title: '我刚失败了：3P急救',
-          subtitle: '情绪最强的时候先止血：允许做人 → 积极重构 → 视角转换 → 最小行动。',
+          subtitle: '保留已有 App 模板；塔尔原著 PRP 三步骤可往返，行动与盖印为 App 扩展。',
           icon: Icons.health_and_safety_outlined,
           onTap: () => Navigator.push(
             context,

@@ -1,0 +1,25 @@
+{
+  "verified_at_utc": "2026-11-11T13:27:08.790579+00:00",
+  "flutter_version": "3.35.3",
+  "dart_version": "3.9.2",
+  "final_new_tests_passed": 51,
+  "related_regression_run_passed": 195,
+  "counts_overlap": true,
+  "core_analysis": "no_issues",
+  "integration_analysis_errors": 0,
+  "integration_existing_findings": 22,
+  "flutter_bundle": {
+    "status": "passed",
+    "target": "android-arm64",
+    "kernel_bytes": 135019968,
+    "kernel_sha256": "3f6a55bb92012cce5563c7c1e2b032c65b889f242cad6ecbf32db5f4cf9f3809",
+    "new_assets_verified": true
+  },
+  "android_apk": {
+    "status": "incomplete",
+    "reason": "7.9 GB workspace filled by SDK/NDK and Gradle caches; configuration failed with no disk space"
+  },
+  "emulator_tested": false,
+  "physical_device_tested": false,
+  "real_ai_api_calls": 0
+}

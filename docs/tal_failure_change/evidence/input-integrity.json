@@ -1,0 +1,15 @@
+{
+  "requirements_zip_sha256": "88cec331e5bcfce923f384c63096485c99ecdccf6ea1dfc61b62a75caf64317b",
+  "assets": [
+    {
+      "path": "assets/failure_module/tal/method_case_catalog.json",
+      "sha256": "6bd17e9f2a1aab1663f51bdc1f5de3366575632cbeea8ab9a035957c96560f40",
+      "matches_user_package": true
+    },
+    {
+      "path": "assets/failure_module/tal/routing_rules.json",
+      "sha256": "de80dd3bc17bbd9f8a025299d25b5ffcf4690826336186a5caf2fdb7bc96a20c",
+      "matches_user_package": true
+    }
+  ]
+}

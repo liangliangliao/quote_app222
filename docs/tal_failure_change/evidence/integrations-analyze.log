@@ -1,0 +1,26 @@
+Analyzing 7 items...
+
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/failure_module/failure_module_home_page.dart:99:48 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/failure_module/failure_module_home_page.dart:142:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/failure_module/failure_module_home_page.dart:147:50 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/failure_module/pages/fp_journal_page.dart:100:62 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/pages/discover_page.dart:1239:62 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/pages/discover_page.dart:1248:49 • deprecated_member_use
+warning • The declaration '_buildTimeline' isn't referenced • lib/pages/discover_page.dart:1408:10 • unused_element
+warning • The declaration '_buildEsteemAnalyticsCard' isn't referenced • lib/pages/discover_page.dart:2369:10 • unused_element
+warning • The operand can't be 'null', so the condition is always 'false' • lib/pages/discover_page.dart:2800:17 • unnecessary_null_comparison
+   info • 'textScaleFactor' is deprecated and shouldn't be used. Use textScaler instead. Use of textScaleFactor was deprecated in preparation for the upcoming nonlinear text scaling support. This feature was deprecated after v3.12.0-2.0.pre • lib/pages/discover_page.dart:2818:29 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/pages/discover_page.dart:2834:49 • deprecated_member_use
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/discover_page.dart:3334:39 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/discover_page.dart:4509:33 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/discover_page.dart:4510:39 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/discover_page.dart:4518:24 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/discover_page.dart:4519:23 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/discover_page.dart:4520:24 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/discover_page.dart:4521:33 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/discover_page.dart:4577:39 • unnecessary_non_null_assertion
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/pages/discover_page.dart:5495:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/pages/discover_page.dart:5515:33 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/pages/discover_page.dart:5530:33 • deprecated_member_use
+
+22 issues found. (ran in 21.8s)

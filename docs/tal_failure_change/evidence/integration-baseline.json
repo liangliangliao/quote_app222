@@ -1,0 +1,160 @@
+{
+  "base_commit": "efe30bb21bb60098f25f5e1415d7045c03beec1e",
+  "error_count": 0,
+  "issues": [
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/failure_module/failure_module_home_page.dart",
+      "line": 99,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/failure_module/failure_module_home_page.dart",
+      "line": 142,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/failure_module/failure_module_home_page.dart",
+      "line": 147,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/failure_module/pages/fp_journal_page.dart",
+      "line": 100,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/pages/discover_page.dart",
+      "line": 1239,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/pages/discover_page.dart",
+      "line": 1248,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_element",
+      "path": "lib/pages/discover_page.dart",
+      "line": 1408,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_element",
+      "path": "lib/pages/discover_page.dart",
+      "line": 2369,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unnecessary_null_comparison",
+      "path": "lib/pages/discover_page.dart",
+      "line": 2800,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/pages/discover_page.dart",
+      "line": 2818,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/pages/discover_page.dart",
+      "line": 2834,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unnecessary_non_null_assertion",
+      "path": "lib/pages/discover_page.dart",
+      "line": 3334,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unnecessary_non_null_assertion",
+      "path": "lib/pages/discover_page.dart",
+      "line": 4509,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unnecessary_non_null_assertion",
+      "path": "lib/pages/discover_page.dart",
+      "line": 4510,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unnecessary_non_null_assertion",
+      "path": "lib/pages/discover_page.dart",
+      "line": 4518,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unnecessary_non_null_assertion",
+      "path": "lib/pages/discover_page.dart",
+      "line": 4519,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unnecessary_non_null_assertion",
+      "path": "lib/pages/discover_page.dart",
+      "line": 4520,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unnecessary_non_null_assertion",
+      "path": "lib/pages/discover_page.dart",
+      "line": 4521,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "warning",
+      "rule": "unnecessary_non_null_assertion",
+      "path": "lib/pages/discover_page.dart",
+      "line": 4577,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/pages/discover_page.dart",
+      "line": 5495,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/pages/discover_page.dart",
+      "line": 5515,
+      "unchanged_line_in_base": true
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "path": "lib/pages/discover_page.dart",
+      "line": 5530,
+      "unchanged_line_in_base": true
+    }
+  ]
+}

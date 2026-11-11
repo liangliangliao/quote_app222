@@ -96,7 +96,7 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                           const Text(
-                              '没做到时，先缓一缓，再对账，留下自己认可的教训。只有亲手盖印后，教训才会回访。\n\n每一步都可跳过，随时可关闭，关闭后教训仍保留。它不是心理治疗工具，也不承诺疗效。'),
+                              '从一件真实经历开始，可以只记录，也可以选择一个行动计划。新计划需你另行同意才在下次同类行动处回访；已有完整练习仍需亲手盖印。\n\n所有反思字段可跳过，PRP 三步骤可往返。随时可关闭，关闭后记录仍保留。它不是心理治疗工具，也不承诺疗效。'),
                           const SizedBox(height: 12),
                           for (final s in PrpSurface.values)
                             CheckboxListTile(
@@ -234,8 +234,8 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
     final first = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-              title: const Text('清除所有教训数据？'),
-              content: const Text('将清除教训、会话、回访及本地录音。此操作不可恢复，你可以先导出。'),
+              title: const Text('清除 PRP 手册数据？'),
+              content: const Text('将清除完整 PRP 练习的教训、会话、回访及本地录音。此操作不可恢复，你可以先导出。简短复盘与行动反馈保存在“失败与完美主义 → 学习卡”，可在那里逐条导出或删除。'),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(ctx, false),
@@ -547,6 +547,7 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
                 ListTile(
                     leading: const Icon(Icons.file_download_outlined),
                     title: const Text('导出教训数据（JSON）'),
+                    subtitle: const Text('完整 PRP 练习；简短复盘可在学习卡内导出'),
                     onTap: _export),
                 ListTile(
                     leading: const Icon(Icons.copy_outlined),
@@ -567,6 +568,7 @@ class _PrpSettingsPageState extends State<PrpSettingsPage> {
                 ListTile(
                     leading: const Icon(Icons.delete_outline),
                     title: const Text('清除 PRP 数据'),
+                    subtitle: const Text('管理完整 PRP 手册与录音；学习卡在失败模块中管理'),
                     onTap: _clear),
                 ListTile(
                     leading: const Icon(Icons.bug_report_outlined),

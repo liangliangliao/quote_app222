@@ -1,0 +1,51 @@
+Downloading android-arm-profile/linux-x64 tools...                 382ms
+Downloading android-arm-release/linux-x64 tools...                 804ms
+Downloading android-arm64-profile/linux-x64 tools...               931ms
+Downloading android-arm64-release/linux-x64 tools...               365ms
+Downloading android-x64-profile/linux-x64 tools...                 297ms
+Downloading android-x64-release/linux-x64 tools...                 309ms
+Running Gradle task 'assembleDebug'...
+Picked up JAVA_TOOL_OPTIONS:  -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 -Dhttp.nonProxyHosts=localhost|127.*
+Checking the license for package NDK (Side by side) 27.0.12077973 in /workspace/android-sdk/licenses
+License for package NDK (Side by side) 27.0.12077973 accepted.
+Preparing "Install NDK (Side by side) 27.0.12077973 v.27.0.12077973".
+"Install NDK (Side by side) 27.0.12077973 v.27.0.12077973" ready.
+Installing NDK (Side by side) 27.0.12077973 in /workspace/android-sdk/ndk/27.0.12077973
+"Install NDK (Side by side) 27.0.12077973 v.27.0.12077973" complete.
+"Install NDK (Side by side) 27.0.12077973 v.27.0.12077973" finished.
+
+FAILURE: Build completed with 2 failures.
+
+1: Task failed with an exception.
+-----------
+* What went wrong:
+A problem occurred configuring project ':flutter_web_auth_2'.
+> A build operation failed.
+      Failed to create parent directory '/workspace/.gradle-cache/caches/8.13/transforms/28a71f55b67b74e7b1bdf45e18949863-6e7b8b92-5c8d-42a5-9de0-7d0528b9de99' when creating directory '/workspace/.gradle-cache/caches/8.13/transforms/28a71f55b67b74e7b1bdf45e18949863-6e7b8b92-5c8d-42a5-9de0-7d0528b9de99/transformed'
+   > Failed to create parent directory '/workspace/.gradle-cache/caches/8.13/transforms/28a71f55b67b74e7b1bdf45e18949863-6e7b8b92-5c8d-42a5-9de0-7d0528b9de99' when creating directory '/workspace/.gradle-cache/caches/8.13/transforms/28a71f55b67b74e7b1bdf45e18949863-6e7b8b92-5c8d-42a5-9de0-7d0528b9de99/transformed'
+> Failed to notify project evaluation listener.
+   > java.lang.NullPointerException (no error message)
+   > java.lang.NullPointerException (no error message)
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+2: Task failed with an exception.
+-----------
+* What went wrong:
+java.lang.IllegalArgumentException: Could not create problems-report directory '/workspace/quote_app222/android/build/reports/problems'
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+BUILD FAILED in 6m 39s
+Running Gradle task 'assembleDebug'...                            400.4s
+Gradle task assembleDebug failed with exit code 1

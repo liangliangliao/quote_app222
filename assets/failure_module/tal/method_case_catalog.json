@@ -1,0 +1,600 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "tal_failure_reflection_change_knowledge_pack",
+  "copyright": "全部为原创摘要；不含整篇受版权保护原著",
+  "provenance_policy": {
+    "tal_original_exercise": "塔尔原著明确练习",
+    "tal_lecture": "塔尔公开课讲过",
+    "tal_autobiography": "塔尔亲身经历",
+    "product_extension": "本产品设计、并非Tal原创",
+    "external_research": "其他研究/作者"
+  },
+  "sources": {
+    "S01": {
+      "title": "How to Move From Perfectionism to Optimalism",
+      "author": "Tal Ben-Shahar",
+      "type": "author_book_excerpt",
+      "url": "https://experiencelife.lifetime.life/article/beyond-perfect/"
+    },
+    "S02": {
+      "title": "Harvard Positive Psychology lectures 1-12 transcript",
+      "author": "Tal Ben-Shahar",
+      "type": "lecture_unofficial_transcript",
+      "url": "https://positivepsychology.com/harvard-positive-psychology-course-1504/transcripts_-_lectures_1-12/",
+      "caution": "非哈佛官方校订转录，存在转录错字"
+    },
+    "S03": {
+      "title": "Real Change",
+      "author": "Tal Ben-Shahar",
+      "type": "author_book_excerpt",
+      "url": "https://wholebeinginstitute.com/real-change/"
+    },
+    "S04": {
+      "title": "Just Do It!",
+      "author": "Tal Ben-Shahar",
+      "type": "author_book_excerpt",
+      "url": "https://wholebeinginstitute.com/just-do-it/"
+    },
+    "S05": {
+      "title": "Creating Rituals",
+      "author": "Tal Ben-Shahar",
+      "type": "author_book_excerpt",
+      "url": "https://kripalu.org/living-kripalu/creating-rituals"
+    },
+    "S06": {
+      "title": "Happy Habits",
+      "author": "Tal Ben-Shahar",
+      "type": "official_book_description",
+      "url": "https://www.talbenshahar.com/media-podcasts-interviews-books-and-1/happy-habits"
+    },
+    "S07": {
+      "title": "The Pursuit of Perfect - Interview",
+      "author": "Tal Ben-Shahar",
+      "type": "first_person_interview",
+      "url": "https://www.mindtools.com/axyd3ab/the-myth-of-perfection/"
+    },
+    "S08": {
+      "title": "Why Does Squash Make You Happy?",
+      "author": "Squash Magazine/Tal Ben-Shahar",
+      "type": "interview_with_book_quotes",
+      "url": "https://squashmagazine.com/2019/04/why-does-squash-make-you-happy-tal-ben-shahar-and-positive-psychology/"
+    },
+    "S09": {
+      "title": "15 Questions With Tal D. Ben-Shahar",
+      "author": "The Harvard Crimson/Tal Ben-Shahar",
+      "type": "first_person_interview",
+      "url": "https://www.thecrimson.com/article/2008/2/13/15-questions-with-tal-d-ben-shahar/"
+    },
+    "S10": {
+      "title": "Harvard Thinking - Optimism",
+      "author": "Harvard University/Tal Ben-Shahar",
+      "type": "first_person_interview",
+      "url": "https://harvard-thinking.simplecast.com/episodes/optimism-kLsLA99y"
+    },
+    "S11": {
+      "title": "Psych! Students Show, Tests Don’t",
+      "author": "Harvard Crimson",
+      "type": "journalist_report",
+      "url": "https://www.thecrimson.com/article/2006/5/19/psych-students-show-tests-dont-of/"
+    },
+    "S12": {
+      "title": "Happiness Studies",
+      "author": "Tal Ben-Shahar",
+      "type": "publisher_overview",
+      "url": "https://link.springer.com/book/10.1007/978-3-030-64869-5"
+    },
+    "S13": {
+      "title": "Happier (original book sample)",
+      "author": "Tal Ben-Shahar",
+      "type": "author_book_excerpt",
+      "url": "https://www.zvab.com/9780071492393/Happier-Learn-Secrets-Ben-Shahar-Tal-0071492399/plp"
+    },
+    "S14": {
+      "title": "The Pursuit of Perfect (original book sample)",
+      "author": "Tal Ben-Shahar",
+      "type": "author_book_excerpt",
+      "url": "https://www.abebooks.de/9780071608824/Pursuit-Perfect-Stop-Chasing-Perfection-0071608826/plp"
+    },
+    "S15": {
+      "title": "Big Think Interview with Tal Ben-Shahar",
+      "author": "Tal Ben-Shahar",
+      "type": "first_person_interview",
+      "url": "https://bigthink.com/videos/big-think-interview-with-tal-ben-shahar/"
+    },
+    "S16": {
+      "title": "3 barriers to lasting change",
+      "author": "Big Think/Tal Ben-Shahar",
+      "type": "interview_excerpt",
+      "url": "https://bigthinkmedia.substack.com/p/3-barriers-to-lasting-change-and?showTranscript=true"
+    },
+    "S17": {
+      "title": "The Pursuit of Perfect, Chapter 9: Cognitive Therapy / The PRP Process, pp.176-179",
+      "author": "Tal Ben-Shahar",
+      "type": "author_book_original_chapter",
+      "url": "https://www.bnfa.fr/livre?biblionumber=67077",
+      "scope": "法文译本馆藏目录明确列出PRP；英语原著第176–179页确认其原文及练习；不复制整段版权内容"
+    },
+    "S18": {
+      "title": "A Primer for Pessimists",
+      "author": "TIME",
+      "type": "2009_interview_secondary",
+      "url": "https://time.com/archive/6688052/a-primer-for-pessimists/",
+      "caution": "网页现可能展示不相关赞助内容；原始报道摘要明确提到PRP"
+    }
+  },
+  "methods": [
+    {
+      "id": "prp",
+      "name": "The PRP Process (Permission—Reconstruction—Perspective)",
+      "provenance": "原著明确命名练习",
+      "source_ids": [
+        "S17",
+        "S18"
+      ],
+      "problem": "失败后情绪强烈、过度纠结或需要更完整现实解释",
+      "exercise": "Permission接纳发生的事实和情绪；Reconstruction寻找可用教训与可能积极后果；Perspective把事件放在更大时间和生活尺度；可往返、无需线性",
+      "limit": "不强迫情绪快点消失、不强迫找好处；不是持续行为改变的全部方法；App加的行动验证步骤属产品扩展"
+    },
+    {
+      "id": "explore_failures",
+      "name": "Explore Your Failures",
+      "provenance": "原著练习",
+      "source_ids": [
+        "S01"
+      ],
+      "problem": "失败之后尚未学习",
+      "exercise": "记述行为、想法、当时/现在感受、教训、可能收益",
+      "limit": "允许未知；不强迫找出深层原因"
+    },
+    {
+      "id": "learn_to_fail",
+      "name": "Learn to Fail",
+      "provenance": "原著练习",
+      "source_ids": [
+        "S01"
+      ],
+      "problem": "因害怕失败而回避可承受的挑战",
+      "exercise": "选择低风险尝试、获取反馈与帮助、接纳结果",
+      "limit": "禁止鼓励高损失风险或无意义受伤"
+    },
+    {
+      "id": "permission_to_be_human",
+      "name": "Permission to Be Human",
+      "provenance": "课堂理论",
+      "source_ids": [
+        "S02"
+      ],
+      "problem": "因为情绪自责或回避",
+      "exercise": "允许情绪，区分感受和判断/行为",
+      "limit": "不将情绪接纳等同于同意错误行为"
+    },
+    {
+      "id": "three_ms",
+      "name": "3Ms / Zoom Out",
+      "provenance": "课堂理论",
+      "source_ids": [
+        "S02"
+      ],
+      "problem": "灾难化、忽略事实、无证据推断",
+      "exercise": "检查Magnifying/Minimizing/Making Up并补齐事实",
+      "limit": "不强制正面评价，必须依据证据"
+    },
+    {
+      "id": "benefit_finding",
+      "name": "Benefit Finding",
+      "provenance": "课堂理论",
+      "source_ids": [
+        "S02"
+      ],
+      "problem": "用户希望寻找经验但只能看见损失",
+      "exercise": "寻找真实可迁移教训及可能收获",
+      "limit": "不强行美化创伤或不公平"
+    },
+    {
+      "id": "unbundling",
+      "name": "Unbundling Exercise",
+      "provenance": "原著练习",
+      "source_ids": [
+        "S03"
+      ],
+      "problem": "明确旧行为与珍视价值相捆绑",
+      "exercise": "写希望保留的品质与希望改变的部分",
+      "limit": "不能默认所有拖延都有隐秘收益"
+    },
+    {
+      "id": "abc_change",
+      "name": "ABCs of Change",
+      "provenance": "课堂理论",
+      "source_ids": [
+        "S02"
+      ],
+      "problem": "改变从何处着手尚不清楚",
+      "exercise": "依据事实考虑情绪/行为/认知入口",
+      "limit": "不是官方固定分诊算法"
+    },
+    {
+      "id": "stretch_zone",
+      "name": "Gradual Change / Stretch Zone",
+      "provenance": "课堂理论",
+      "source_ids": [
+        "S02"
+      ],
+      "problem": "任务过难导致回避",
+      "exercise": "分阶段提升真实挑战强度",
+      "limit": "不能无限缩小任务以替代有时限的目标"
+    },
+    {
+      "id": "five_minute_takeoff",
+      "name": "Five-Minute Takeoff",
+      "provenance": "原著练习",
+      "source_ids": [
+        "S04"
+      ],
+      "problem": "真想做但临时缺乏启动动力",
+      "exercise": "自愿尝试先做五分钟",
+      "limit": "用户之前反复验证无效则降低推荐优先级"
+    },
+    {
+      "id": "creating_rituals",
+      "name": "Creating Rituals",
+      "provenance": "原著练习",
+      "source_ids": [
+        "S05"
+      ],
+      "problem": "偶尔做到但难以持续",
+      "exercise": "明确行为、固定时间、价值，一次一两项",
+      "limit": "不等同于闹钟越多越好"
+    },
+    {
+      "id": "three_rs",
+      "name": "3Rs",
+      "provenance": "著作方法",
+      "source_ids": [
+        "S06"
+      ],
+      "problem": "关键时刻忘记/难重复/未形成稳定惯例",
+      "exercise": "Reminders、Repetitions、Rituals",
+      "limit": "需用户同意提醒，不能保证习惯形成天数"
+    },
+    {
+      "id": "mvi",
+      "name": "Minimum Viable Interventions",
+      "provenance": "著作方法",
+      "source_ids": [
+        "S06"
+      ],
+      "problem": "改变成本太高，暂时缺乏起步条件",
+      "exercise": "选择有真实价值的短小干预",
+      "limit": "不能替代健康评估、就业或关键任务"
+    },
+    {
+      "id": "spire",
+      "name": "SPIRE",
+      "provenance": "著作理论",
+      "source_ids": [
+        "S12"
+      ],
+      "problem": "忽略意义、身体、学习、关系或情绪领域",
+      "exercise": "按需求检查全人生活条件",
+      "limit": "不是诊断量表、不是必须同时训练五项"
+    },
+    {
+      "id": "trial_error",
+      "name": "Trial and Error",
+      "provenance": "本人访谈",
+      "source_ids": [
+        "S07"
+      ],
+      "problem": "新干预也不奏效或过度矫正",
+      "exercise": "比较结果后调整努力水平、策略和目标",
+      "limit": "不是单次观察就确定因果"
+    }
+  ],
+  "cases": [
+    {
+      "id": "C01",
+      "title": "16岁赢得以色列壁球冠军，却并不持久幸福",
+      "problem": "获冠军后幸福很快消退；起初认为成就不够大。",
+      "reported_action": "后来在哈佛因多方面顺利但依旧不幸福而改读哲学与心理学，研究幸福。",
+      "reported_outcome": "本人说研究和应用心理学后幸福感改善。",
+      "evidence_level": "later_interpretation",
+      "source_ids": [
+        "S13",
+        "S09",
+        "S02"
+      ],
+      "mapped_method_ids": [
+        "abc_change",
+        "trial_error"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C02",
+      "title": "大学考试未得A，羞于见人",
+      "problem": "因为不完美成绩而把自己关在房间里。",
+      "reported_action": "后来通过研究完美主义认识过度失败恐惧问题，努力转向optimalism。",
+      "reported_outcome": "个人称渐渐改变，但没有宣称彻底不再完美主义。",
+      "evidence_level": "later_interpretation",
+      "source_ids": [
+        "S01"
+      ],
+      "mapped_method_ids": [
+        "permission_to_be_human",
+        "learn_to_fail",
+        "unbundling"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C03",
+      "title": "职业壁球因背伤被迫停止",
+      "problem": "严重背伤与医疗风险限制职业生涯。",
+      "reported_action": "选择终止职业道路，后来继续学习其他方向。",
+      "reported_outcome": "转向后续学术事业；伤病本身并未被解决。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S02",
+        "S08"
+      ],
+      "mapped_method_ids": [
+        "benefit_finding"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C04",
+      "title": "剑桥博士项目未通过",
+      "problem": "博士项目没能通过，认为羞耻与浪费一年。",
+      "reported_action": "后来重新理解为使自己更加谦逊的经历。",
+      "reported_outcome": "本人认为谦逊对随后在亚洲工作有所帮助。",
+      "evidence_level": "later_interpretation",
+      "source_ids": [
+        "S02"
+      ],
+      "mapped_method_ids": [
+        "benefit_finding"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C05",
+      "title": "哈佛研究生资格考试没通过",
+      "problem": "当届考试唯一不及格，留校条件是下次优秀通过。",
+      "reported_action": "重新精读大量基础心理学论文和教材。",
+      "reported_outcome": "本人认为积累的知识帮助了后续积极心理学课程的设计。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S02"
+      ],
+      "mapped_method_ids": [
+        "explore_failures",
+        "trial_error"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C06",
+      "title": "Jon Stewart节目访谈后，因一句回答懊悔",
+      "problem": "返程航班上反复纠结一句不理想回答。",
+      "reported_action": "有意识Zoom Out、检查整次采访和实际结果，允许遗憾存在。",
+      "reported_outcome": "本人称恢复速度比以往更快。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S02"
+      ],
+      "mapped_method_ids": [
+        "three_ms",
+        "permission_to_be_human"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C07",
+      "title": "哈佛壁球队缺乏投入",
+      "problem": "队内技能很高，但对共同目标参与度不足。",
+      "reported_action": "教练明确要求他作出投入或退出的选择，他决定投入。",
+      "reported_outcome": "后来帮助球队获得团体冠军并取得个人竞技成绩；不可将全部成绩归因于谈话。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S08"
+      ],
+      "mapped_method_ids": [
+        "abc_change",
+        "creating_rituals"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C08",
+      "title": "长期害怕公众演讲",
+      "problem": "面对多人就紧张，过去试图强行让自己不焦虑。",
+      "reported_action": "允许紧张、认真准备、使用心理模拟、从小听众逐步练习。",
+      "reported_outcome": "本人仍会紧张，但可完成大型教学。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S02"
+      ],
+      "mapped_method_ids": [
+        "permission_to_be_human",
+        "stretch_zone",
+        "abc_change"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C09",
+      "title": "多年无法改变完美主义",
+      "problem": "知道过度害怕失败伤害自己，却难以改变。",
+      "reported_action": "发现将完美主义与雄心捆绑，区分想保留的雄心与想减轻的恐惧。",
+      "reported_outcome": "本人报告改变阻力减轻；无充分客观效果数据。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S02",
+        "S03"
+      ],
+      "mapped_method_ids": [
+        "unbundling"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C10",
+      "title": "过度忙碌，难以减少承诺",
+      "problem": "承担太多事，影响生产力和幸福。",
+      "reported_action": "意识到将减少任务误认成失去竞争优势。",
+      "reported_outcome": "形成更合理的取舍认识；没有逐日执行数据。",
+      "evidence_level": "later_interpretation",
+      "source_ids": [
+        "S02",
+        "S15"
+      ],
+      "mapped_method_ids": [
+        "unbundling",
+        "creating_rituals"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C11",
+      "title": "写作启动困难",
+      "problem": "早上不愿意开始，即使坐在电脑前也会分心。",
+      "reported_action": "用Five-Minute Takeoff，有时重复两三轮。",
+      "reported_outcome": "本人说通常能够进入写作工作状态。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S04"
+      ],
+      "mapped_method_ids": [
+        "five_minute_takeoff"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C12",
+      "title": "有意减少学习投入却差点不及格",
+      "problem": "为修正完美主义，在一门课停止继续投入，结果努力程度不足。",
+      "reported_action": "依现实结果向较高投入微调，不陷入两个极端。",
+      "reported_outcome": "学会通过trial-and-error寻找更合适的努力水平。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S07"
+      ],
+      "mapped_method_ids": [
+        "trial_error"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C13",
+      "title": "1999年开始感恩日记",
+      "problem": "听到Oprah提出感恩日记，认为值得试。",
+      "reported_action": "1999-09-19开始，每晚重复记录，后来与家人分享相关练习。",
+      "reported_outcome": "本人长期保留这一惯例并认为有帮助；不是控制试验证明。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S10"
+      ],
+      "mapped_method_ids": [
+        "creating_rituals",
+        "three_rs"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C14",
+      "title": "成为心理学教师后依然知道却做不到",
+      "problem": "理论上清楚演讲焦虑、育儿和表达需求应怎样处理，现实仍会犯错。",
+      "reported_action": "转而强调短小行动、改变的实践基础与3Rs。",
+      "reported_outcome": "持续探索，不能宣称这些问题均被治愈。",
+      "evidence_level": "later_interpretation",
+      "source_ids": [
+        "S16",
+        "S06"
+      ],
+      "mapped_method_ids": [
+        "mvi",
+        "three_rs"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C15",
+      "title": "失误导致哈佛856名学生期末考试延迟",
+      "problem": "因复印分工误解，试卷未准备，学生等待约一小时。",
+      "reported_action": "本人和助教紧急复印，调整作答要求，并承认失误、考虑补救公平性。",
+      "reported_outcome": "考试得以继续；是否建立长期流程改进未有充分记录。",
+      "evidence_level": "external_report",
+      "source_ids": [
+        "S11"
+      ],
+      "mapped_method_ids": [
+        "trial_error"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C16",
+      "title": "儿子出生后体验嫉妒与强烈的爱",
+      "problem": "有时嫉妒妻子关注婴儿，同时又强烈地爱孩子。",
+      "reported_action": "想起医生提醒允许复杂情绪，未再因为矛盾感受立即谴责自己。",
+      "reported_outcome": "本人称这种情绪接纳有帮助。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S02"
+      ],
+      "mapped_method_ids": [
+        "permission_to_be_human"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C17",
+      "title": "通过穿粉红色T恤尝试挑战刻板观念",
+      "problem": "想到自己对男性气质的旧观念。",
+      "reported_action": "在课堂上实际尝试曾让自己不自在的穿衣行为。",
+      "reported_outcome": "完成一次可观察的伸展区实验，不能据此称旧观念全部消失。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S02"
+      ],
+      "mapped_method_ids": [
+        "stretch_zone",
+        "abc_change"
+      ],
+      "mapping_disclaimer": "方法映射为产品/分析归纳；不能据此声称本人当时严格采用这些步骤"
+    },
+    {
+      "id": "C18",
+      "title": "送女儿上托儿所后发现赶不上写作计划，亲自使用PRP",
+      "problem": "原计划利用送女儿之后、上课之前的间隙写作；发现时间已不够，责怪自己效率低。",
+      "reported_action": "Permission允许失望；Reconstruction认识到日程过满、需要减少义务以留出写作和陪女儿时间；Perspective看到少写这一小时在更长时间尺度并非大事。随后没有匆忙赶回家，而是陪女儿悠闲散步。",
+      "reported_outcome": "确认了当日一次行为选择不同；是否长期改善过度忙碌无完整追踪证据。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S17"
+      ],
+      "mapped_method_ids": [
+        "prp",
+        "unbundling"
+      ],
+      "mapping_disclaimer": "PRP是塔尔明确自述当时应用的原著方法；Unbundling关联属后续分析映射"
+    },
+    {
+      "id": "C19",
+      "title": "朋友表达职业困惑与拖延时，他急于给建议却毫无帮助",
+      "problem": "读研时有朋友说失去动力、拖延且不确定职业方向；塔尔立即分析并提供大量方法。",
+      "reported_action": "发现对方没有真正听进去；事后反思自己只顾提供解决方案，忽略对方当下需要有人倾听。",
+      "reported_outcome": "本人反思认为朋友需要的是倾听、陪伴而不是复杂理论；没有证据说明后续关系永久改善。",
+      "evidence_level": "first_person_strong",
+      "source_ids": [
+        "S17"
+      ],
+      "mapped_method_ids": [
+        "permission_to_be_human",
+        "explore_failures"
+      ],
+      "mapping_disclaimer": "原著后续章中是倾听与关系的反思案例；不宣称作者以PRP三步正式处理这件事。"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+00:00 +0: loading /workspace/quote_app222/test/tal_failure_change/widget_test.dart
+00:00 +0: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: T01 light path saves all-empty record without analysis or AI
+00:03 +1: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: PRP allows perspective first, returning to permission, and skipping all other stages
+00:07 +2: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: T09 user-selected Unbundling records separate retained and reduced parts
+00:09 +3: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: T12 AI requires per-request preview and denying it sends nothing
+00:10 +4: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: T15 the light form supports responsibility before any optional advice
+00:10 +5: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: T18 crisis input immediately exits, never saves or calls AI
+00:11 +6: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: T16 feedback records execution while keeping unknown effect unverified
+00:12 +7: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: personal reminder is enabled per record without claiming improved behavior
+00:14 +8: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: standard mode opens the full experience and keeps writing when switching length
+00:16 +9: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: T03 literal user text routes to 3Ms with the actual quoted basis
+00:17 +10: loading /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart
+00:18 +10: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: catalog preserves all supplied methods, cases, sources and boundaries
+00:18 +11: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T02 unknown causes stay unknown: no signal invents an unconscious cause
+00:18 +12: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T03 catastrophizing recommends 3Ms, each recommendation has evidence and limits
+00:18 +13: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T04 rational goal exit has no failure label or training coercion
+00:18 +14: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T05 pending / no data blocks automatic reflection
+00:18 +15: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T06 kindling abort overrides all training rules
+00:18 +16: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T07 failed five-minute method is excluded; other failed and rejected methods too
+00:18 +17: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T08 challenge must be explicitly safe before any exposure recommendation
+00:18 +18: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T09 Unbundling requires expressed value conflict and willingness
+00:18 +19: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T10 emotional distress never forces benefit finding
+00:18 +20: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T14 stories are exactly catalog facts, not AI-generated first-person dialogue
+00:18 +21: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T18 crisis exit takes precedence even over rational goal review
+00:18 +22: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: literal observations keep quotations, handle negation and do not infer readiness
+00:18 +23: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: fatigue is not reduced to lack of willpower; methods are capped at two
+00:18 +24: loading /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart
+00:28 +24: /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart: real offer opens light workflow, retains active-session governance, saves only FP content
+00:31 +25: /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart: the existing PRP allocator respects the FP budget and ignore cooldown
+00:31 +26: /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart: manual lesson is recalled by the existing text matcher with real SQLite governance
+00:32 +27: /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart: (tearDownAll)
+00:32 +27: loading /workspace/quote_app222/test/tal_failure_change/ledger_test.dart
+00:33 +27: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: migration is additive, idempotent, concurrent-safe, and preserves legacy cards
+00:33 +28: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T01 everything may be skipped; manual events do not imply confirmed failure
+00:33 +29: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T02 uncertainty is saved verbatim without manufacturing a cause
+00:33 +30: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T04 explicit exit stops recall and creates no action obligation
+00:33 +31: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T05/T06 only an explicit missed record creates an automatic event
+00:33 +32: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T10 sadness permits a draft with no benefit, lesson or trial
+00:33 +33: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T11/T17 opt-in, dedup, cooldown and three ignores stop repeated reminders
+00:33 +34: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: old PRP and the inline adapter share cap; simultaneous claims stay within cap
+00:33 +35: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T16 execution with unknown effect is not labelled effective
+00:33 +36: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T18 crisis text never reaches SQLite in capture, reflection, trial or feedback
+00:33 +37: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T19 same event id from multiple hosts creates one card without overwriting content
+00:33 +38: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T20 revisions preserve prior statements and immutable evidence history
+00:33 +39: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: one trial has one primary intervention and a new trial keeps the old result
+00:33 +40: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: export includes evidence; revocation and deletion leave unrelated historical cards intact
+00:34 +41: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: switch-off during transaction rolls back a draft and never silently loses earlier evidence
+00:34 +42: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: L5 requires user confirmation and improvement across three days and two contexts
+00:34 +43: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: personal reminder needs individual opt-in, shares the cap, waits 24 hours and creates no quotation
+00:34 +44: loading /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart
+00:34 +44: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: valid narrow extraction preserves original spans
+00:34 +45: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: T12 no consent means zero AI calls; network errors keep local route available
+00:34 +46: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: T13 rejects hidden motives, certainty, fabricated facts and unsupported confidence
+00:34 +47: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: T14 rejects unsolicited cases and invented provenance; source limits must be exact
+00:34 +48: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: AI cannot decide the goal, force action, ask multiple questions or ignore safety
+00:34 +49: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: consent revoked while request is in flight discards its response
+00:34 +50: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: T18 crisis input is refused before contacting the AI Provider
+00:34 +51: All tests passed!

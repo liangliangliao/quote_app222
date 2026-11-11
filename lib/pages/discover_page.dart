@@ -57,6 +57,7 @@ import '../epistemic/cognitive_sheet.dart';
 import '../self_os/self_os_home_page.dart';
 import '../widgets/discovery_directory.dart';
 import '../widgets/journey_design.dart';
+import '../failure_module/tal/tal_failure_change.dart';
 
 /// 以分类与搜索呈现探索入口，保留当天心情记录浮层。
 class DiscoverPage extends StatefulWidget {
@@ -2530,6 +2531,16 @@ Widget _buildEmotionPieChart() {
   }
 
   List<DiscoveryDestination> _destinations() => [
+    DiscoveryDestination(
+      key: const ValueKey('discover_tal_failure_change'),
+      title: '失败 · 复盘 · 改变',
+      subtitle: '真实经历、可控行动与后续反馈；允许继续、调整或退出',
+      icon: Icons.edit_note_outlined,
+      artwork: JourneyArt.sprout,
+      categories: const {'行动成长', '认识自己'},
+      recommended: true,
+      onTap: () => _openDiscoveryPage(const TalReflectionPage()),
+    ),
     DiscoveryDestination(
       title: '当下心情与情绪分析',
       subtitle: '看见此刻的自己',

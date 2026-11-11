@@ -908,7 +908,8 @@ Future<Map<String, dynamic>> _loadNextFallbackQuote() async {
         final quote = own.first;
         if (_todayData?['prp_lesson_id'] == null) _beforePrpQuote = Map<String, dynamic>.from(_todayData!);
         final payload = <String, dynamic>{'topic': '自己的话', 'quote': quote.text,
-          'author': quote.author, 'author_original_name': quote.author, 'source': '我的教训手册',
+          'author': quote.author, 'author_original_name': quote.author,
+          'source': quote.lessonId < 0 ? '我的学习卡 · 个人提醒' : '我的教训手册',
           'note': '自己认可过的教训，下一次再验证。', 'prp_lesson_id': quote.lessonId};
         setState(() => _todayData = payload);
         await _activateFrame(payload);

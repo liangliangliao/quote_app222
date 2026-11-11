@@ -93,6 +93,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
     }
 
+    Future<void> startLegacyReflection() async {
+      await tap(find.byKey(const ValueKey('prp_begin_reflection')));
+      await until(() => find.text('这次没有按计划发生什么？').evaluate().isNotEmpty ||
+          find.text('先缓一缓').evaluate().isNotEmpty);
+      if (find.text('这次没有按计划发生什么？').evaluate().isNotEmpty) {
+        await tap(find.text('改用已有 App 完整练习（双栏 / 盖印等扩展）'));
+      }
+      await until(() => find.text('先缓一缓').evaluate().isNotEmpty);
+    }
+
     Future<void> switchTo(String label, bool value) async {
       final control = find.widgetWithText(SwitchListTile, label);
       await visible(control);
@@ -156,8 +166,7 @@ void main() {
     await until(() => runtime.enabled);
     expect(runtime.aiAllowed, false);
     await shot('android_02_enabled');
-    await tap(find.byKey(const ValueKey('prp_begin_reflection')));
-    await until(() => find.text('先缓一缓').evaluate().isNotEmpty);
+    await startLegacyReflection();
     expect(find.text('把事实摆出来'), findsNothing);
     expect(find.byKey(const ValueKey('prp_next')), findsNothing);
     await shot('android_03_pause');
@@ -283,8 +292,7 @@ void main() {
     await tap(find.byKey(const ValueKey('settings-entry-prp')));
     await until(() =>
         find.byKey(const ValueKey('prp_master_switch')).evaluate().isNotEmpty);
-    await tap(find.byKey(const ValueKey('prp_begin_reflection')));
-    await until(() => find.text('先缓一缓').evaluate().isNotEmpty);
+    await startLegacyReflection();
     await enter('可以写一句，也可以什么都不写', '我不想活了');
     await until(() => find.text('先照顾此刻的安全').evaluate().isNotEmpty);
     await shot('android_13_safety');

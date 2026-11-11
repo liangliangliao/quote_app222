@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../fp_dao.dart';
 import '../fp_models.dart';
+import '../tal/tal_failure_change.dart';
+import '../../prp_plugin/prp_plugin.dart';
 
 class FpJournalPage extends StatefulWidget {
   const FpJournalPage({super.key});
@@ -105,12 +107,15 @@ class _FpJournalPageState extends State<FpJournalPage> {
                             if (v == 'edit') {
                               await Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => _LearningCardEditor(card: c)),
+                                MaterialPageRoute(builder: (_) => c.talEventId == null
+                                  ? _LearningCardEditor(card: c)
+                                  : TalRecordPage(eventId: c.talEventId!)),
                               );
                               await _load();
                             }
                             if (v == 'delete') {
                               await _dao.deleteLearningCard(c.id);
+                              if (c.talEventId != null) PrpPlugin.changed();
                               await _load();
                             }
                           },
@@ -122,7 +127,9 @@ class _FpJournalPageState extends State<FpJournalPage> {
                         onTap: () async {
                           await Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => _LearningCardEditor(card: c)),
+                            MaterialPageRoute(builder: (_) => c.talEventId == null
+                              ? _LearningCardEditor(card: c)
+                              : TalRecordPage(eventId: c.talEventId!)),
                           );
                           await _load();
                         },

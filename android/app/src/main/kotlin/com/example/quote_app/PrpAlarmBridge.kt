@@ -56,6 +56,33 @@ object PrpAlarmBridge {
         }
     }
 
+    /** Share the existing recall budget with FP's opt-in inline action cards.
+     * Decode in Kotlin because Android 8 SQLite may not include JSON1. */
+    private fun learningCardBudget(db: SQLiteDatabase, today: Long, now: Long): Pair<Int, Boolean> {
+        if (!has(db, "fp_learning_card")) return 0 to false
+        val migrated = db.rawQuery("PRAGMA table_info(fp_learning_card)", null).use { c ->
+            var found = false
+            while (c.moveToNext()) if (c.getString(c.getColumnIndexOrThrow("name")) == "tal_data_json") found = true
+            found
+        }
+        if (!migrated) return 0 to false
+        var used = 0
+        var ignored = false
+        db.rawQuery("SELECT tal_data_json FROM fp_learning_card WHERE tal_event_id IS NOT NULL", null).use { c ->
+            while (c.moveToNext()) {
+                val receipts = JSONObject(c.getString(0)).optJSONArray("reminders") ?: continue
+                for (i in 0 until receipts.length()) {
+                    val receipt = receipts.optJSONObject(i) ?: continue
+                    val ts = receipt.optLong("ts", 0L)
+                    if (ts >= today) used++
+                    if (receipt.optBoolean("ignored", false) &&
+                        receipt.optLong("ignored_ms", ts) > now - 86400000L) ignored = true
+                }
+            }
+        }
+        return used to ignored
+    }
+
     fun stateChanged(context: Context, state: JSONObject) {
         runtimeState = state
         if (!state.optBoolean("enabled", false) || !state.optBoolean("voice", false) ||
@@ -178,7 +205,8 @@ object PrpAlarmBridge {
                 if (recallId == null) {
                     val cap = (preferences(db)?.optInt("recall_cap", 1) ?: 1).coerceIn(0, 3)
                     val count = db.rawQuery("SELECT COUNT(*) FROM prp_recall WHERE ts>=?", arrayOf(today.toString())).use { it.moveToFirst(); it.getInt(0) }
-                    if (count >= cap) return null
+                    val extra = learningCardBudget(db, today, System.currentTimeMillis())
+                    if (count + extra.first >= cap || extra.second) return null
                     val ignored = db.rawQuery("SELECT id FROM prp_recall WHERE outcome='ignored' AND ts>? LIMIT 1",
                         arrayOf((System.currentTimeMillis() - 86400000L).toString())).use { it.moveToFirst() }
                     if (ignored) return null
