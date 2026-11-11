@@ -814,6 +814,27 @@ class SemanticScope {
           }
         }
         if (scopeMap.isNotEmpty) {
+          // The client owns canonical identities, locators and protocol
+          // constants, so a formal slip does not discard a whole circle. What
+          // the model claims about the regions is still checked below.
+          if (insightText(scopeMap, 'relation_scope').isEmpty) {
+            scopeMap['relation_scope'] = 'extension';
+          }
+          if (declaredIds.length == 2 && declaredIds.every(nodes.containsKey)) {
+            final shared = {for (final id in declaredIds) nodes[id]!.universe};
+            if (shared.length == 1 && shared.single.isNotEmpty) {
+              scopeMap['universe'] = shared.single;
+            }
+          }
+          if (insightText(scopeMap, 'justification').isEmpty) {
+            scopeMap['justification'] = insightText(m, 'statement');
+          }
+          final located = references.map((r) => r.excerpt).join('\n');
+          final basis = insightText(scopeMap, 'basis');
+          if (scopeMap['illustration'] != true &&
+              (basis.runes.length < 2 || !located.contains(basis))) {
+            scopeMap['basis'] = references.first.excerpt;
+          }
           final gaps = MeaningCircleContract.gaps(scopeMap);
           if (gaps.isNotEmpty) throw FormatException(gaps.join('；'));
           scope = ConceptScope.parse(

@@ -489,6 +489,15 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
             onExpand: widget.onExpand,
             onOpen: widget.onOpenConcept,
             onRelation: (i) => setState(() => selected = i)),
+        if (drawable.isEmpty)
+          for (final reason in {
+            for (final issue in value.issues)
+              if (issue.path.startsWith('relations[')) issue.message
+          })
+            Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('未画出的原因：$reason',
+                    style: const TextStyle(fontSize: 12))),
         if (drawable.isEmpty && widget.onRegenerate != null)
           FilledButton.icon(onPressed: widget.onRegenerate,
               icon: const Icon(Icons.auto_awesome), label: const Text('按本次考量补全共同尺度与含义圈')),

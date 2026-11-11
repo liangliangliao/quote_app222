@@ -183,6 +183,90 @@ void main() {
     });
   });
 
+  group('a circle is not discarded for a formal slip', () {
+    const quote = '在隆冬之中，我终于在自己内心发现了一个不可战胜的夏天。';
+    const excerpt = '我终于在自己内心发现了一个不可战胜的夏天';
+    Map<String, dynamic> node(String id, String label, String definition,
+            {String universe = '人的经历'}) =>
+        _concept(id, label, definition)..['universe'] = universe;
+    Map<String, dynamic> data(
+        void Function(Map<String, dynamic> scope, Map<String, dynamic> map)
+            edit) {
+      final map = {
+        'schema_version': 6,
+        'analysis_purpose': '理解名言',
+        'selection_strategy': '取处境与力量',
+        'material_kind': 'metaphor',
+        'evidence': [
+          {'id': 'e1', 'source': 'A', 'excerpt': excerpt}
+        ],
+        'concepts': [
+          node('c1', '艰难处境', '人所处的艰难、受压的状态'),
+          node('c2', '内在力量', '人在内心体验到的、未被击垮的力量'),
+        ],
+        'relations': [
+          {
+            'placement': 'A',
+            'statement': '在分析性定义下，艰难处境与内在力量可以在同一段经历中并存',
+            'status': 'definition',
+            'outcome': 'drawable',
+            'node_ids': ['c1', 'c2'],
+            'references': ['e1'],
+            'scope': {
+              'relation_type': 'overlap',
+              'relation_scope': 'extension',
+              'universe': '人的经历',
+              'basis_kind': 'analytic_definition',
+              'basis_ref': 'e1',
+              'justification': '依所列定义核对',
+              'intersection': '在艰难中仍感到内在力量的经历',
+              'only_a': '只有艰难、感到被击垮的经历',
+              'only_b': '顺境中感到力量的经历',
+              'illustration': false,
+            },
+          }
+        ],
+      };
+      final copy = jsonDecode(jsonEncode(map)) as Map<String, dynamic>;
+      edit(((copy['relations'] as List).first as Map)['scope']
+          as Map<String, dynamic>, copy);
+      return copy;
+    }
+
+    SemanticScope parse(Map<String, dynamic> map) =>
+        SemanticScope.parse(map, [const ScopeSource('A', quote)]);
+
+    test('the conforming reply is drawn', () {
+      expect(parse(data((s, m) {})).scopeRelations.length, 1);
+    });
+    test('a different wording of the shared universe', () {
+      final v = parse(data((s, m) => s['universe'] = '人的生活经历与体验'));
+      expect(v.scopeRelations.length, 1);
+      expect(v.issues, isEmpty);
+    });
+    test('a paraphrased basis is replaced by the located excerpt', () {
+      final v = parse(data((s, m) {
+        s.remove('basis_ref');
+        s['basis'] = '原句把处境与内心力量放在一起';
+      }));
+      expect(v.scopeRelations.single.scope!.basis, excerpt);
+    });
+    test('a missing relation_scope or justification', () {
+      expect(parse(data((s, m) => s.remove('relation_scope'))).scopeRelations.length, 1);
+      expect(parse(data((s, m) => s.remove('justification'))).scopeRelations.length, 1);
+    });
+    test('real gaps are still refused', () {
+      final differentUniverse = parse(data((s, m) {
+        ((m['concepts'] as List)[1] as Map)['universe'] = '人的力量';
+      }));
+      expect(differentUniverse.scopeRelations, isEmpty);
+      expect(differentUniverse.issues.single.message, contains('同一论域'));
+      final missingRegion = parse(data((s, m) => s.remove('only_b')));
+      expect(missingRegion.scopeRelations, isEmpty);
+      expect(missingRegion.issues.single.message, contains('only_b'));
+    });
+  });
+
   test('guidance v9 carries the reading principles for every graph', () {
     expect(SchopenhauerGuidance.version, 9);
     for (final needle in [
