@@ -1,0 +1,22 @@
+00:00 +0: loading /workspace/quote_app222/test/tal_failure_change/widget_test.dart
+00:00 +0: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: default starts with facts only; all five steps can be skipped to L0
+00:01 +1: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: job search: facts -> experience -> unknown -> one next action -> real feedback
+00:03 +2: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: can start from an action without filling any emotional questions
+00:03 +3: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: partial action survives pause, reopening, and deliberate clearing
+00:04 +4: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: pause and exit stop an existing action reminder
+00:04 +5: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: standard writing preserves facts and current feelings across mode changes
+00:04 +6: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: original PRP permits perspective first and freely returning to permission
+00:05 +7: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: real case C18 leads to its specific exercise and returns to the same event
+00:05 +8: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: choosing Unbundling opens retained/reduced practice rather than just a method label
+00:06 +9: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: literal catastrophic words show their basis without diagnosing or calling AI
+00:06 +10: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: AI preview denial sends nothing and local steps remain usable
+00:06 +11: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: AI adoption is explicit, editable and does not decide a goal or execute a plan
+00:07 +12: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: not done follow-up stays unknown and does not ask for another reflection
+00:07 +13: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: crisis input immediately ends reflection and creates no record or AI call
+00:07 +14: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: crisis during a case exercise blocks returning a draft
+00:07 +15: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: crisis in follow-up does not append feedback
+00:07 +16: loading /workspace/quote_app222/tools/tal_flow_preview_test.dart
+00:08 +16: /workspace/quote_app222/tools/tal_flow_preview_test.dart: (setUpAll)
+00:08 +16: /workspace/quote_app222/tools/tal_flow_preview_test.dart: capture the five-step job search and follow-up journey
+00:12 +17: /workspace/quote_app222/tools/tal_flow_preview_test.dart: (tearDownAll)
+00:12 +17: All tests passed!

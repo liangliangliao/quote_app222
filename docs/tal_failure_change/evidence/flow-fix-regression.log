@@ -1,0 +1,235 @@
+00:00 +0: loading /workspace/quote_app222/test/tal_failure_change/widget_test.dart
+00:00 +0: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: default starts with facts only; all five steps can be skipped to L0
+00:01 +1: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: job search: facts -> experience -> unknown -> one next action -> real feedback
+00:04 +2: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: can start from an action without filling any emotional questions
+00:05 +3: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: partial action survives pause, reopening, and deliberate clearing
+00:06 +4: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: pause and exit stop an existing action reminder
+00:06 +5: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: standard writing preserves facts and current feelings across mode changes
+00:07 +6: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: original PRP permits perspective first and freely returning to permission
+00:07 +7: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: real case C18 leads to its specific exercise and returns to the same event
+00:08 +8: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: choosing Unbundling opens retained/reduced practice rather than just a method label
+00:09 +9: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: literal catastrophic words show their basis without diagnosing or calling AI
+00:09 +10: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: AI preview denial sends nothing and local steps remain usable
+00:10 +11: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: AI adoption is explicit, editable and does not decide a goal or execute a plan
+00:10 +12: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: not done follow-up stays unknown and does not ask for another reflection
+00:10 +13: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: crisis input immediately ends reflection and creates no record or AI call
+00:11 +14: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: crisis during a case exercise blocks returning a draft
+00:11 +15: /workspace/quote_app222/test/tal_failure_change/widget_test.dart: crisis in follow-up does not append feedback
+00:11 +16: loading /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart
+00:12 +16: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: catalog preserves all supplied methods, cases, sources and boundaries
+00:12 +17: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T02 unknown causes stay unknown: no signal invents an unconscious cause
+00:12 +18: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T03 catastrophizing recommends 3Ms, each recommendation has evidence and limits
+00:12 +19: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T04 rational goal exit has no failure label or training coercion
+00:12 +20: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T05 pending / no data blocks automatic reflection
+00:12 +21: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T06 kindling abort overrides all training rules
+00:12 +22: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T07 failed five-minute method is excluded; other failed and rejected methods too
+00:12 +23: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T08 challenge must be explicitly safe before any exposure recommendation
+00:12 +24: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T09 Unbundling requires expressed value conflict and willingness
+00:12 +25: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T10 emotional distress never forces benefit finding
+00:12 +26: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T14 stories are exactly catalog facts, not AI-generated first-person dialogue
+00:12 +27: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: T18 crisis exit takes precedence even over rational goal review
+00:12 +28: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: literal observations keep quotations, handle negation and do not infer readiness
+00:12 +29: /workspace/quote_app222/test/tal_failure_change/catalog_routing_test.dart: fatigue is not reduced to lack of willpower; methods are capped at two
+00:12 +30: loading /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart
+00:29 +30: /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart: real offer opens light workflow, retains active-session governance, saves only FP content
+00:33 +31: /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart: existing failure-module 3P and AAR entries keep their legacy training flow
+00:33 +32: /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart: the existing PRP allocator respects the FP budget and ignore cooldown
+00:33 +33: /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart: manual lesson is recalled by the existing text matcher with real SQLite governance
+00:35 +34: /workspace/quote_app222/test/tal_failure_change/prp_adapter_test.dart: (tearDownAll)
+00:35 +34: loading /workspace/quote_app222/test/tal_failure_change/ledger_test.dart
+00:35 +34: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: migration is additive, idempotent, concurrent-safe, and preserves legacy cards
+00:36 +35: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T01 everything may be skipped; manual events do not imply confirmed failure
+00:36 +36: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T02 uncertainty is saved verbatim without manufacturing a cause
+00:36 +37: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T04 explicit exit stops recall and creates no action obligation
+00:36 +38: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T05/T06 only an explicit missed record creates an automatic event
+00:36 +39: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T10 sadness permits a draft with no benefit, lesson or trial
+00:36 +40: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T11/T17 opt-in, dedup, cooldown and three ignores stop repeated reminders
+00:36 +41: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: old PRP and the inline adapter share cap; simultaneous claims stay within cap
+00:36 +42: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T16 execution with unknown effect is not labelled effective
+00:36 +43: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T18 crisis text never reaches SQLite in capture, reflection, trial or feedback
+00:36 +44: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T19 same event id from multiple hosts creates one card without overwriting content
+00:36 +45: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: a two-answer self-report saves without making evidence mandatory or validating effectiveness
+00:36 +46: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: T20 revisions preserve prior statements and immutable evidence history
+00:36 +47: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: one trial has one primary intervention and a new trial keeps the old result
+00:36 +48: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: export includes evidence; revocation and deletion leave unrelated historical cards intact
+00:36 +49: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: switch-off during transaction rolls back a draft and never silently loses earlier evidence
+00:36 +50: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: L5 requires user confirmation and improvement across three days and two contexts
+00:36 +51: /workspace/quote_app222/test/tal_failure_change/ledger_test.dart: personal reminder needs individual opt-in, shares the cap, waits 24 hours and creates no quotation
+00:36 +52: loading /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart
+00:37 +52: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: valid narrow extraction preserves original spans
+00:37 +53: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: T12 no consent means zero AI calls; network errors keep local route available
+00:37 +54: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: T13 rejects hidden motives, certainty, fabricated facts and unsupported confidence
+00:37 +55: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: T14 rejects unsolicited cases and invented provenance; source limits must be exact
+00:37 +56: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: AI cannot decide the goal, force action, ask multiple questions or ignore safety
+00:37 +57: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: consent revoked while request is in flight discards its response
+00:37 +58: /workspace/quote_app222/test/tal_failure_change/ai_contract_test.dart: T18 crisis input is refused before contacting the AI Provider
+00:37 +59: loading /workspace/quote_app222/test/prp_plugin/visual_test.dart
+00:38 +59: /workspace/quote_app222/test/prp_plugin/visual_test.dart: review screenshots: off/on, pause, seal, playbook and recall
+00:46 +60: loading /workspace/quote_app222/test/prp_plugin/home_stream_test.dart
+00:46 +60: /workspace/quote_app222/test/prp_plugin/home_stream_test.dart: (setUpAll)
+[DBG] AppDatabase opened at: /tmp/prp_quote_home_IQPXVE/quotes.db
+00:47 +60: /workspace/quote_app222/test/prp_plugin/home_stream_test.dart: personal quote is ephemeral, cannot pollute favorites, and disappears with valid history on disable
+【信息】[2026-11-11T14:31:22.424411][DAO] latestNotifiedToday 列检测：无 last_notify_time，仅按 last_notified_at 检索；返回: 0
+【信息】[2026-11-11T14:31:22.432111][HOME] 今日未检索到有效记录：显示默认名言
+00:49 +61: /workspace/quote_app222/test/prp_plugin/home_stream_test.dart: (tearDownAll)
+00:49 +61: loading /workspace/quote_app222/test/prp_plugin/architecture_test.dart
+00:50 +61: /workspace/quote_app222/test/prp_plugin/architecture_test.dart: plugin core imports no app module, DAO, AI service or host adapter
+00:50 +62: /workspace/quote_app222/test/prp_plugin/architecture_test.dart: calling modules import only the plugin facade
+00:50 +63: /workspace/quote_app222/test/prp_plugin/architecture_test.dart: PRP schema statements only create PRP tables and indexes
+00:50 +64: loading /workspace/quote_app222/test/prp_plugin/caller_widget_test.dart
+00:51 +64: /workspace/quote_app222/test/prp_plugin/caller_widget_test.dart: (setUpAll)
+[DBG] AppDatabase opened at: /tmp/prp_callers_ALYGQO/quotes.db
+00:51 +64: /workspace/quote_app222/test/prp_plugin/caller_widget_test.dart: actual failure entry 我刚失败了：3P急救 selects exactly one form with PRP=true
+00:57 +65: /workspace/quote_app222/test/prp_plugin/caller_widget_test.dart: actual failure entry 我刚失败了：3P急救 selects exactly one form with PRP=false
+01:02 +66: /workspace/quote_app222/test/prp_plugin/caller_widget_test.dart: actual failure entry 直接练：失败复盘（AAR） selects exactly one form with PRP=true
+01:08 +67: /workspace/quote_app222/test/prp_plugin/caller_widget_test.dart: actual failure entry 直接练：失败复盘（AAR） selects exactly one form with PRP=false
+01:13 +68: /workspace/quote_app222/test/prp_plugin/caller_widget_test.dart: actual behavior daily confirmation offers PRP only after an explicit missed click
+01:15 +69: /workspace/quote_app222/test/prp_plugin/caller_widget_test.dart: actual enemy commitment missed control opens PRP and suppresses the old attribution dialog
+01:16 +70: /workspace/quote_app222/test/prp_plugin/caller_widget_test.dart: (tearDownAll)
+01:16 +70: loading /workspace/quote_app222/test/prp_plugin/widget_test.dart
+01:18 +70: /workspace/quote_app222/test/prp_plugin/widget_test.dart: pause hides every analysis field and gates the next button for the actual duration
+01:21 +71: /workspace/quote_app222/test/prp_plugin/widget_test.dart: background time does not count as time spent pausing
+01:23 +72: /workspace/quote_app222/test/prp_plugin/widget_test.dart: a short preset goal can be clarified without losing its original source
+01:25 +73: /workspace/quote_app222/test/prp_plugin/widget_test.dart: a short hold never seals; a full three-second hold seals once with a visible stamp
+01:27 +74: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis input in 可以写一句，也可以什么都不写 leaves help visible and stores no crisis text
+01:29 +75: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis input in 原本希望做到什么？ leaves help visible and stores no crisis text
+01:30 +76: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis input in 你的话 leaves help visible and stores no crisis text
+01:32 +77: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis input in 有效：这次有哪件事是对的？ leaves help visible and stores no crisis text
+01:34 +78: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis input in 无效：当时什么没起作用？ leaves help visible and stores no crisis text
+01:35 +79: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis input in 这件事让我看见了什么？（可留空） leaves help visible and stores no crisis text
+01:37 +80: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis input in 最早出现的信号是什么？ leaves help visible and stores no crisis text
+01:39 +81: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis input in 如果：一个能认出来的线索 leaves help visible and stores no crisis text
+01:40 +82: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis input in 那么：一个可检验的小动作 leaves help visible and stores no crisis text
+01:42 +83: /workspace/quote_app222/test/prp_plugin/widget_test.dart: disabling removes a mounted session immediately without a final draft write
+01:43 +84: /workspace/quote_app222/test/prp_plugin/widget_test.dart: manual fact classification and crossed-out revisions survive moving to the next step
+01:45 +85: /workspace/quote_app222/test/prp_plugin/widget_test.dart: crisis in a revision closes its editor and keeps the help route visible
+01:47 +86: /workspace/quote_app222/test/prp_plugin/widget_test.dart: disabling closes a full-screen offer including its PRP app bar
+01:49 +87: /workspace/quote_app222/test/prp_plugin/widget_test.dart: voice note stops at 15 seconds and saves only its local path
+01:51 +88: /workspace/quote_app222/test/prp_plugin/widget_test.dart: paper and safety text remain readable inside a dark enemy host
+01:52 +89: /workspace/quote_app222/test/prp_plugin/widget_test.dart: dragging a sentence to self-blame excludes it from the saved ledger
+01:54 +90: /workspace/quote_app222/test/prp_plugin/widget_test.dart: late AI classification never replaces facts edited while waiting
+01:58 +91: /workspace/quote_app222/test/prp_plugin/widget_test.dart: clearing data removes an already displayed recall without navigating away
+01:59 +92: /workspace/quote_app222/test/prp_plugin/widget_test.dart: skipping a full-screen offer saves a draft and closes its own page
+02:03 +93: loading /workspace/quote_app222/test/prp_plugin/runtime_test.dart
+02:05 +93: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: Noop is side-effect free and all slots collapse
+02:05 +94: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: enemy: master=false surface=false controls every entry
+02:05 +95: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: enemy: master=false surface=true controls every entry
+02:05 +96: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: enemy: master=true surface=false controls every entry
+02:05 +97: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: enemy: master=true surface=true controls every entry
+02:05 +98: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: behavior: master=false surface=false controls every entry
+02:05 +99: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: behavior: master=false surface=true controls every entry
+02:05 +100: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: behavior: master=true surface=false controls every entry
+02:05 +101: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: behavior: master=true surface=true controls every entry
+02:05 +102: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: failure_module: master=false surface=false controls every entry
+02:05 +103: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: failure_module: master=false surface=true controls every entry
+02:05 +104: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: failure_module: master=true surface=false controls every entry
+02:05 +105: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: failure_module: master=true surface=true controls every entry
+02:05 +106: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: kindling: master=false surface=false controls every entry
+02:05 +107: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: kindling: master=false surface=true controls every entry
+02:05 +108: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: kindling: master=true surface=false controls every entry
+02:05 +109: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: kindling: master=true surface=true controls every entry
+02:05 +110: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: quote_home: master=false surface=false controls every entry
+02:05 +111: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: quote_home: master=false surface=true controls every entry
+02:05 +112: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: quote_home: master=true surface=false controls every entry
+02:05 +113: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: quote_home: master=true surface=true controls every entry
+02:05 +114: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: off methods never open storage or call AI, even with old offer IDs
+02:05 +115: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: master off/on and process restart retain sealed lessons and settings
+02:05 +116: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: daily offer budget is atomic under concurrent distinct signals
+02:05 +117: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: same event is idempotent and can reopen its unfinished offer
+02:05 +118: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: explicit manual reviews do not consume automatic offers and still obey governance
+02:05 +119: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: missing data, skipped and kindling aborted never become misses
+02:05 +120: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: quiet and mute suppress offers and recalls without consuming budgets
+02:05 +121: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: three consecutive internal errors trip only this process circuit
+02:05 +122: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: disable cancels an in-flight offer before it can create a schema
+02:05 +123: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: partial pause, short hold, and skipped drafts cannot be sealed or recalled
+02:05 +124: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: guard rejects banned words, identity judgments, vague and untestable actions
+02:05 +125: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: crisis exits without retaining text, drafts or recall eligibility; survives restart
+02:05 +126: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: same subject recall reuses pending exposure and outcome increments once
+02:05 +127: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: empty contexts and unrelated text do not get an arbitrary lesson
+02:06 +128: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: daily recall cap persists across restarts and pending means unverified
+02:06 +129: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: backdated outcome cannot validate a later recall
+02:06 +130: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: rewriting retires parent only when the new version is actually sealed
+02:06 +131: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: own quotes require stream, surface and per-lesson consent plus a 24-hour gap
+02:06 +132: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: daily review imports only explicit grounded misses as idempotent drafts
+02:06 +133: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: AI is never called without consent and invented classifications are discarded
+02:06 +134: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: revoking AI consent cancels the in-flight classification result
+02:06 +135: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: AI draft rejects ungrounded or guarded actions and safely falls back
+02:06 +136: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: new PRP schema leaves existing tables byte-for-byte unchanged; clear affects only PRP
+02:06 +137: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: missing host guard fails closed before any PRP database write
+02:06 +138: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: importing a daily-review draft never consumes or suppresses an offer
+02:06 +139: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: manual revision is available even after the automatic-offer budget is spent
+02:06 +140: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: daily-review AI candidates require consent, stay grounded and remain unsealed
+02:06 +141: /workspace/quote_app222/test/prp_plugin/runtime_test.dart: ignoring a recall suppresses further exposure for 24 hours across midnight
+02:06 +142: loading /workspace/quote_app222/test/prp_plugin/enhancement_widget_test.dart
+02:08 +142: /workspace/quote_app222/test/prp_plugin/enhancement_widget_test.dart: forecast UI saves actuals once and preserves a readable record when disabled
+02:15 +143: /workspace/quote_app222/test/prp_plugin/enhancement_widget_test.dart: crisis in a new prediction closes its editor, presents help and stores no label
+02:18 +144: /workspace/quote_app222/test/prp_plugin/enhancement_widget_test.dart: press and release remain an unscored experiment and disabling closes its actual route
+02:20 +145: loading /workspace/quote_app222/test/prp_plugin/host_test.dart
+02:21 +145: /workspace/quote_app222/test/prp_plugin/host_test.dart: adapters treat unused modules as missing evidence without creating tables
+02:21 +146: /workspace/quote_app222/test/prp_plugin/host_test.dart: host governance reads existing quiet hours and mute, independent of enemy enablement
+02:21 +147: /workspace/quote_app222/test/prp_plugin/host_test.dart: 30 day dots count explicit misses and done; skipped, absent, future stay unknown
+02:21 +148: /workspace/quote_app222/test/prp_plugin/host_test.dart: PRP waits for overdue confirmation; disabling restores legacy settlement
+02:21 +149: /workspace/quote_app222/test/prp_plugin/host_test.dart: new commitment links a pending recall, then explicit completion verifies it
+02:22 +150: /workspace/quote_app222/test/prp_plugin/host_test.dart: commitment history counts all explicit outcomes, excluding automatic expiry and absent days
+02:22 +151: /workspace/quote_app222/test/prp_plugin/host_test.dart: explicit lesson conversion respects host switch and creates one unstaked commitment
+02:22 +152: /workspace/quote_app222/test/prp_plugin/host_test.dart: enemy reads PRP only through explicit per-source consent, and off exports nothing
+02:22 +153: /workspace/quote_app222/test/prp_plugin/host_test.dart: failure-module result and learning card are written together and idempotently
+02:22 +154: /workspace/quote_app222/test/prp_plugin/host_test.dart: failure-module dual-write rolls both records back if one insert fails
+02:22 +155: /workspace/quote_app222/test/prp_plugin/host_test.dart: a damaged historical PRP JSON row cannot block a new atomic dual-write
+02:22 +156: /workspace/quote_app222/test/prp_plugin/host_test.dart: plugin safety exit mutes the existing enemy persona and stops its voice
+02:22 +157: loading /workspace/quote_app222/test/prp_plugin/enhancements_test.dart
+02:23 +157: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: all enhancements are opt-in, including after an older preferences upgrade
+02:23 +158: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: forecast disabled performs no storage or AI access
+02:23 +159: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: predictions and actuals form one immutable, finite comparison
+02:23 +160: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: zero actual values remain observations without infinite coefficients
+02:23 +161: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: crisis prediction exits and retains no label
+02:23 +162: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: legacy three-table PRP upgrades additively without altering any existing table
+02:23 +163: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: adoption is explicit, idempotent and never fabricates an outcome
+02:23 +164: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: a second confirmed miss recalls the old lesson without inventing a result
+02:23 +165: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: native reminder reservations reuse the Flutter recall and global budget
+02:23 +166: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: observation rates exclude imported drafts and unreported recalls
+02:23 +167: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: recurrence intervals use explicit results rather than unreported time
+02:23 +168: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: export and clear include forecasts and adoption while disabled
+02:23 +169: /workspace/quote_app222/test/prp_plugin/enhancements_test.dart: practice quotations are original local prompts, not sealed evidence or quote rows
+02:23 +170: loading /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart
+02:24 +170: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: a concrete, evidenced draft passes
+02:24 +171: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: no evidence, or evidence outside the digest, is rejected
+02:24 +172: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: a charge without a number or quote is not concrete
+02:24 +173: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: every action needs a due time inside the next seven days
+02:24 +174: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: tone may not exceed the effective intensity
+02:24 +175: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: identity attacks, threats and control language are banned
+02:24 +176: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: a harsh line aimed at behaviour is not banned
+02:24 +177: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: profanity is rejected at every intensity
+02:24 +178: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: fact-only drafts skip the concreteness rule but not the banned list
+02:24 +179: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: safety valve detects crisis wording and the truce word
+02:24 +180: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: intensity governor never exceeds the base and never rises on its own
+02:24 +181: /workspace/quote_app222/test/beautiful_enemy/enemy_guard_test.dart: intensity governor truce day forces fact-only
+02:24 +182: loading /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart
+02:24 +182: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: (setUpAll)
+02:24 +182: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: no copy carries an exclamation mark or a pep-talk word
+02:24 +183: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: the module never speaks of streaks, badges, ranking or sharing
+02:24 +184: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: no progress indicator or percentage is rendered
+02:24 +185: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: UI files hold no literal copy of their own
+02:25 +186: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: the module depends on nothing beyond flutter and sqflite
+02:25 +187: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: the probe ladder shows wording only, never a score
+02:25 +188: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: the recall questions keep their fixed wording and order
+02:25 +189: /workspace/quote_app222/test/kindling/kindling_red_lines_test.dart: (tearDownAll)
+02:25 +189: loading /workspace/quote_app222/test/kindling/kindling_schema_test.dart
+02:25 +189: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: createAll builds every k_ table and is idempotent
+02:25 +190: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: migrate is idempotent and independent of host version numbers
+02:25 +191: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: no foreign key points outside the module
+02:25 +192: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: item schema carries no goal / plan / deadline / streak column
+02:26 +193: /workspace/quote_app222/test/kindling/kindling_schema_test.dart: probe score is constrained to 0..4
+02:26 +194: loading /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart
+02:26 +194: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: an empty list offers 回溯, 十五分钟 and 直接写一个 only
+02:27 +195: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 直接写一个 immediately asks the verdict question
+02:29 +196: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: answering 不做 keeps the item and moves it to 放掉的
+02:30 +197: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: long press opens 换个说法 / 问一句 / 卡住了 / 放掉
+02:31 +198: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 痒度自评只给措辞，不给任何数字
+02:32 +199: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 换个说法可以顺手留一句备注
+02:33 +200: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 卡住了 only asks and ends with the fixed closing line
+02:34 +201: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 卡住了 进场立刻有第一问，不等追问器
+02:34 +202: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: 回溯 turns raw answers into candidates the user may keep
+02:36 +203: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: the discover entry hands the tap back to the host
+02:37 +204: /workspace/quote_app222/test/kindling/kindling_flow_widget_test.dart: (tearDownAll)
+02:37 +204: All tests passed!

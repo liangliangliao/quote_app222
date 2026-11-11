@@ -57,6 +57,26 @@ void main() {
     expect(f.runtime.hasActiveSession, isFalse);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets(
+      'existing failure-module 3P and AAR entries keep their legacy training flow',
+      (tester) async {
+    final offer = (await prpIo(
+        tester,
+        () => f.runtime.signal(
+            f.signal(surface: PrpSurface.failureModule, kind: 'manual'))))!;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: TalPrpSession(
+                runtime: f.runtime,
+                offer: offer,
+                legacy: const Text('已有 3P / AAR 训练')))));
+    await settlePrp(tester, until: find.text('已有 3P / AAR 训练'));
+    expect(find.text('已有 3P / AAR 训练'), findsOneWidget);
+    expect(find.byType(TalReflectionPanel), findsNothing);
+    expect(
+        await prpIo(tester, () => ledger.get(offer.signal.reference!)), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
   test('the existing PRP allocator respects the FP budget and ignore cooldown',
       () async {
     final r = PrpRuntime(
@@ -151,6 +171,14 @@ void main() {
     expect(
         (await prpIo(tester, () => ledger.get('manual:matching')))!.reminders,
         hasLength(1));
+    final feedback = find.text('记录行动与结果');
+    await tester.ensureVisible(feedback);
+    await tester.tap(feedback);
+    await settlePrp(tester, until: find.text('1. 这个动作做了吗？'));
+    expect(find.text('1. 这个动作做了吗？'), findsOneWidget);
+    expect(find.text('2. 结果如何？'), findsOneWidget);
+    expect(find.byType(TalRecordPage), findsNothing);
+    expect(find.byType(TalReflectionPanel), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 }

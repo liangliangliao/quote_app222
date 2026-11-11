@@ -39,4 +39,11 @@ class TalFixture {
         trigger: '下次打开招聘页',
         check: '收藏列表与匹配要求');
   }
+
+  Future<List<TalRecord>> records() async {
+    final cards = await dao.listLearningCards();
+    return Future.wait(cards
+        .where((c) => c.talEventId != null)
+        .map((c) async => (await ledger.get(c.talEventId!))!));
+  }
 }

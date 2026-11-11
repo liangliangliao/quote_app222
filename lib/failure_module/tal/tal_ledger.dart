@@ -258,9 +258,8 @@ class TalLessonLedger {
     _safe([observation, context, ...evidenceRefs]);
     if (!['helped', 'not_helped', 'unclear', 'pending'].contains(outcome) ||
         evidenceId.isEmpty ||
-        (outcome == 'helped' &&
-            (actionDone != true || observation.trim().isEmpty))) {
-      throw const FormatException('有帮助需要已执行的行动与实际结果；效果未知可以如实记录。');
+        (outcome == 'helped' && actionDone != true)) {
+      throw const FormatException('先确认行动是否发生；效果未知可以如实记录。');
     }
     return _change(eventId, (old) {
       if (old.trials
@@ -319,7 +318,7 @@ class TalLessonLedger {
             !r.trials.expand((t) => t.evidence).any((e) =>
                 e['action_done'] == true &&
                 e['outcome'] == 'helped' &&
-                '${e['observed_outcome']}'.trim().isNotEmpty)) {
+                '${e['observed_outcome'] ?? ''}'.trim().isNotEmpty)) {
           throw StateError('先记录一次相关行动的真实改善证据，才能确认这条认识有效。');
         }
         final next = r.withJson(

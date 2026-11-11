@@ -280,6 +280,21 @@ void main() {
     expect(await f.dao.listLearningCards(), hasLength(1));
     expect((await f.ledger.get('shared:123'))!.plan, results[0]!.plan);
   });
+  test(
+      'a two-answer self-report saves without making evidence mandatory or validating effectiveness',
+      () async {
+    final r = await f.planned();
+    final result = await f.ledger.appendOutcome(r.eventId,
+        trialId: r.currentTrial!.id,
+        evidenceId: 'two-answers',
+        actionDone: true,
+        outcome: 'helped',
+        observation: '');
+    expect(result.currentTrial!.state, TalState.outcomeHelped);
+    expect(result.level, 'L3 执行');
+    expect(result.validatedByUser, isFalse);
+    await expectLater(f.ledger.validateLesson(r.eventId), throwsStateError);
+  });
   test('T20 revisions preserve prior statements and immutable evidence history',
       () async {
     var r = await f.planned();

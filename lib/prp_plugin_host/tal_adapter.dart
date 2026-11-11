@@ -36,7 +36,8 @@ class _TalPrpSessionState extends State<TalPrpSession> {
     final state = await r.sessionState(widget.offer);
     if (mounted)
       setState(() {
-        _legacy = state['lesson_id'] != null ||
+        _legacy = widget.offer.signal.surface == PrpSurface.failureModule ||
+            state['lesson_id'] != null ||
             r.initialLessons.containsKey(widget.offer.sessionId);
         _loading = false;
       });
@@ -202,16 +203,13 @@ class _TalPrpRecallState extends State<TalPrpRecall> {
               const Text('行动后再核对有没有做和实际结果，不自动认定方法有效。'),
               Wrap(children: [
                 TextButton(
-                    onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                            builder: (_) => TalRecordPage(
-                                eventId: record.eventId,
-                                environment: TalEnvironment(
-                                    ledger: ledger,
-                                    host: widget.runtime.host,
-                                    aiEnabled: () => widget.runtime.aiAllowed,
-                                    onCrisis: () =>
-                                        widget.runtime.crisisExit(null))))),
+                    onPressed: () => showTalOutcome(context,
+                        record: record,
+                        environment: TalEnvironment(
+                            ledger: ledger,
+                            host: widget.runtime.host,
+                            aiEnabled: () => widget.runtime.aiAllowed,
+                            onCrisis: () => widget.runtime.crisisExit(null))),
                     child: const Text('记录行动与结果')),
                 TextButton(
                     onPressed: () async {
