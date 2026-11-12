@@ -142,6 +142,29 @@ class ReadingMapQuality {
             '以原句核心概念为根的一棵树，并让每一支都追到可指认的个别经验；确实没有共同规定时，在判断中写明差异所在。'));
       }
     }
+    if (requestedViews.contains('grounds')) {
+      // Advice only: a sentence may truly lack a form, but then a related case
+      // that is marked as a case should carry it, or the gap should be said.
+      const titles = {
+        'time': '时间',
+        'space': '空间',
+        'cause': '因果',
+        'evidence': '认识根据',
+        'motive': '动机',
+      };
+      final shown = value.meaningfulGrounds.map((g) => g.kind).toSet();
+      final missing = [
+        for (final e in titles.entries)
+          if (!shown.contains(e.key)) e.value
+      ];
+      if (missing.isNotEmpty) {
+        issues.add(AnalysisIssue('reading.grounds_via_case',
+            '${missing.join('、')}既没有出现在原句，也没有由相关案例表示。原句明示的用 text_claim 并引用原句；'
+            '原句没有的，请用同一个意义高度对应、明确标为教学的相关案例统一表示（status=example，逐字引用案例文字），'
+            '案例也无法自然承载的，不要硬造，在 judgments 写明缺口。',
+            retryable: false));
+      }
+    }
     return issues;
   }
 

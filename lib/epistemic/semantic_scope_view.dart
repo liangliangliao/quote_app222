@@ -7,6 +7,7 @@ import 'concept_meaning_diagram.dart';
 import 'concept_meaning_network.dart';
 import 'concept_circle_preview.dart';
 import 'concept_hierarchy_view.dart';
+import 'ground_coverage.dart';
 import 'semantic_scope.dart';
 import 'cognitive_mode.dart';
 import 'semantic_scope_service.dart';
@@ -521,6 +522,49 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
       if (active == EpistemicViewKind.grounds) ...[
         const Text('四重根据 · 按当前材料与相关案例展开',
             style: TextStyle(fontWeight: FontWeight.bold)),
+        const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+                '时间、空间、因果、认识根据、动机是可以向一句话提出的五种“为什么”，不是都要填的格子。'
+                '句子明示的直接标出；句子没有的，由与它意义高度一致、明确标为教学的相关案例来表示。',
+                style: TextStyle(fontSize: 12))),
+        for (final row in GroundCoverage.of(value, [for (final s in widget.sources) s.text]))
+          Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(
+                    switch (row.presence) {
+                      GroundPresence.stated => Icons.check_circle_outline,
+                      GroundPresence.partial => Icons.adjust,
+                      GroundPresence.viaCase => Icons.menu_book_outlined,
+                      GroundPresence.cueOnly => Icons.help_outline,
+                      GroundPresence.absent => Icons.remove_circle_outline,
+                    },
+                    size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(row.title,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(row.status, style: const TextStyle(fontSize: 12)),
+                      if (row.cueText.isNotEmpty)
+                        Text(row.cueText, style: const TextStyle(fontSize: 12)),
+                    ])),
+              ])),
+        if (GroundCoverage.of(value, [for (final s in widget.sources) s.text])
+            .any((row) => row.needsCase))
+          Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                      onPressed: busy
+                          ? null
+                          : () => _analyze(null, EpistemicViewKind.grounds),
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Text('用相关案例补全未表示的根据')))),
         for (final root in [
           '生成根据 · 因果与条件',
           '认识根据 · 判断的依据',

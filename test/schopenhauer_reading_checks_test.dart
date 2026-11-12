@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quote_app/epistemic/ground_coverage.dart';
 import 'package:quote_app/epistemic/reading_map_quality.dart';
 import 'package:quote_app/epistemic/schopenhauer_guidance.dart';
 import 'package:quote_app/epistemic/semantic_scope.dart';
@@ -311,6 +312,76 @@ void main() {
       final missingRegion = parse(data((s, m) => s.remove('only_b')));
       expect(missingRegion.scopeRelations, isEmpty);
       expect(missingRegion.issues.single.message, contains('only_b'));
+    });
+  });
+
+  group('the five forms of the principle of sufficient reason', () {
+    GroundCoverage row(List<GroundCoverage> rows, String kind) =>
+        rows.singleWhere((r) => r.form.kind == kind);
+
+    test('a metaphor states little: cues are hints, not grounds', () {
+      final rows = GroundCoverage.of(_stalled(), const [_camus]);
+      expect(row(rows, 'time').presence, GroundPresence.cueOnly);
+      expect(row(rows, 'time').cues, contains('终于'));
+      expect(row(rows, 'time').status, contains('意象'));
+      expect(row(rows, 'space').presence, GroundPresence.cueOnly);
+      expect(row(rows, 'evidence').cues, ['发现']);
+      expect(row(rows, 'cause').presence, GroundPresence.absent);
+      expect(row(rows, 'motive').presence, GroundPresence.absent);
+      expect(rows.where((r) => r.needsCase).length, 5);
+    });
+
+    test('a related case expresses what the sentence does not', () {
+      final value = SemanticScope.parse(
+          purposefulCase(), [const ScopeSource('A', camusPassage)]);
+      final rows = GroundCoverage.of(value, [camusPassage]);
+      expect(row(rows, 'motive').presence, GroundPresence.viaCase);
+      expect(row(rows, 'time').presence, GroundPresence.viaCase);
+      expect(row(rows, 'time').status, '本句没有，由相关案例表示');
+      expect(row(rows, 'cause').needsCase, isTrue);
+      expect(row(rows, 'motive').needsCase, isFalse);
+    });
+
+    test('a form the sentence states is shown as stated', () {
+      const sentence = '因为下雨，所以地面湿了。';
+      final value = SemanticScope.parse({
+        'schema_version': 6,
+        'analysis_purpose': '理解',
+        'selection_strategy': '取因果',
+        'material_kind': 'argument',
+        'evidence': [
+          {'id': 'e1', 'source': 'A', 'excerpt': '因为下雨，所以地面湿了'}
+        ],
+        'grounds': [
+          {
+            'kind': 'cause',
+            'from': '下雨',
+            'to': '地面湿了',
+            'link': '雨水落到地面使地面变湿',
+            'status': 'text_claim',
+            'references': ['e1'],
+          }
+        ],
+      }, [const ScopeSource('A', sentence)]);
+      final rows = GroundCoverage.of(value, const [sentence]);
+      expect(row(rows, 'cause').presence, GroundPresence.stated);
+      expect(row(rows, 'cause').status, '本句明示');
+      expect(row(rows, 'cause').cues, containsAll(['因为', '所以']));
+      expect(row(rows, 'time').presence, GroundPresence.absent);
+      expect(row(rows, 'time').status, '本句没有；尚无相关案例表示');
+    });
+
+    test('the grounds advice is only advice and only when requested', () {
+      final requested = ReadingMapQuality.structureIssues(_stalled(),
+          requestedViews: const ['grounds']);
+      final note = requested.singleWhere((i) => i.path == 'reading.grounds_via_case');
+      expect(note.retryable, isFalse);
+      expect(note.message, contains('时间、空间、因果、认识根据、动机'));
+      expect(
+          ReadingMapQuality.structureIssues(_stalled(),
+                  requestedViews: const ['hierarchy'])
+              .any((i) => i.path == 'reading.grounds_via_case'),
+          isFalse);
     });
   });
 
