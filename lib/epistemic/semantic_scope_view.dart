@@ -283,6 +283,7 @@ class _SemanticScopePanelState extends State<SemanticScopePanel> {
               imagePaths: widget.imagePaths,
               onExpand: busy ? null : (id) => _analyze(id),
               onRegenerate: busy ? null : () => _analyze(null, EpistemicViewKind.circles),
+              onRequestGrounds: busy ? null : () => _analyze(null, EpistemicViewKind.grounds),
               onOpenConcept: widget.onOpenConcept == null
                   ? null
                   : (id) => widget.onOpenConcept!(id, value))
@@ -355,7 +356,7 @@ class SemanticScopeView extends StatefulWidget {
   final bool guidedReading;
   final EpistemicViewKind? preferredView;
   final ValueChanged<String>? onExpand, onOpenConcept;
-  final VoidCallback? onRegenerate;
+  final VoidCallback? onRegenerate, onRequestGrounds;
   final Map<String, String> imagePaths;
   const SemanticScopeView(
       {super.key,
@@ -368,6 +369,7 @@ class SemanticScopeView extends StatefulWidget {
       this.preferredView,
       this.onExpand,
       this.onRegenerate,
+      this.onRequestGrounds,
       this.onOpenConcept,
       this.imagePaths = const {}});
   @override
@@ -553,16 +555,15 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
                         Text(row.cueText, style: const TextStyle(fontSize: 12)),
                     ])),
               ])),
-        if (GroundCoverage.of(value, [for (final s in widget.sources) s.text])
-            .any((row) => row.needsCase))
+        if (widget.onRequestGrounds != null &&
+            GroundCoverage.of(value, [for (final s in widget.sources) s.text])
+                .any((row) => row.needsCase))
           Padding(
               padding: const EdgeInsets.only(top: 10),
               child: SizedBox(
                   width: double.infinity,
                   child: FilledButton.tonalIcon(
-                      onPressed: busy
-                          ? null
-                          : () => _analyze(null, EpistemicViewKind.grounds),
+                      onPressed: widget.onRequestGrounds,
                       icon: const Icon(Icons.auto_awesome),
                       label: const Text('用相关案例补全未表示的根据')))),
         for (final root in [
