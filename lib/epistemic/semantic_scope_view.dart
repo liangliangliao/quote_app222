@@ -406,6 +406,12 @@ class _SemanticScopeViewState extends State<SemanticScopeView> {
     if ((preferred == EpistemicViewKind.hierarchy ||
             (preferred == EpistemicViewKind.circles && widget.allowCircles)) &&
         !views.contains(preferred)) views.insert(0, preferred!);
+    // The five forms are questions that can be put to any sentence, so the
+    // panel always offers them, even before any ground has been built.
+    if (widget.onRequestGrounds != null &&
+        !views.contains(EpistemicViewKind.grounds)) {
+      views.add(EpistemicViewKind.grounds);
+    }
     final active = views.contains(preferred)
         ? preferred
         : views.contains(value.primaryView)
