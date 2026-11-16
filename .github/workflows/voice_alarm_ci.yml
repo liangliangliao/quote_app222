@@ -4,7 +4,9 @@ on:
     paths:
       - 'android/app/src/main/kotlin/com/example/quote_app/VoiceAlarm*'
       - 'tool/tests/VoiceAlarmSpeechTest.kt'
+      - 'tool/tests/VoiceAlarmWakeupTest.kt'
       - 'tool/voice_alarm_regression.sh'
+      - 'tool/voice_alarm_wakeup_regression.sh'
       - '.github/workflows/voice_alarm_ci.yml'
   workflow_dispatch:
 permissions:
@@ -28,3 +30,7 @@ jobs:
         env:
           KOTLINC: /tmp/voice-kotlin/kotlinc/bin/kotlinc
         run: bash tool/voice_alarm_regression.sh
+      - name: Verify AI Wakeup HTTP contract with fictional fixtures
+        env:
+          KOTLINC: /tmp/voice-kotlin/kotlinc/bin/kotlinc
+        run: bash tool/voice_alarm_wakeup_regression.sh

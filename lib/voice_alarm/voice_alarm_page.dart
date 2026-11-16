@@ -104,6 +104,13 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Map<String, dynamic> _alarmTtsConfig = <String, dynamic>{};
   List<Map<String, dynamic>> _scheduledAlarms = <Map<String, dynamic>>[];
   bool _showAdvanced = false;
+  bool _aiWakeupEnabled = false;
+  bool _testingWakeup = false;
+  bool _hasWakeupDeviceToken = false;
+  bool _hasWakeupServiceToken = false;
+  final _wakeupUrl = TextEditingController(text: 'https://ai-wakeup-personal-lab.fond-beech-0136.chatgpt.site');
+  final _wakeupDeviceToken = TextEditingController();
+  final _wakeupServiceToken = TextEditingController();
   String _speechPreset = 'balanced';
   double _speechCompleteSilenceMs = 1400;
   double _speechPossiblyCompleteSilenceMs = 1000;
@@ -124,6 +131,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     super.initState();
     _loadMode('morning');
     _loadScheduledAlarms();
+    _loadWakeupConnection();
   }
 
   // 读取原生实际已排期的所有闹钟（含前端没记录、但仍会到点响的“幽灵闹钟”），供展示与删除。
@@ -209,6 +217,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   void dispose() {
     _text.dispose();
     _voiceId.dispose();
+    _wakeupUrl.dispose();
+    _wakeupDeviceToken.dispose();
+    _wakeupServiceToken.dispose();
     super.dispose();
   }
 
@@ -257,6 +268,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     if (!mounted) return;
     setState(() {
       _voiceProfiles = profiles;
+      _aiWakeupEnabled = data['aiWakeupEnabled'] == true;
       _generatedVoice = data['voicePath']?.toString();
       _text.text = (data['text'] ?? (mode == 'morning' ? _morningDefault : _nightDefault)).toString();
       _provider = (data['provider'] ?? 'microsoft').toString();
@@ -277,8 +289,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _emotion = (data['emotion'] ?? (mode == 'morning' ? 'cheerful' : 'calm')).toString();
       _frequency = (data['frequency'] ?? 'daily').toString();
       _weekdays = (data['weekdays'] is List ? (data['weekdays'] as List).map((e) => (e as num).toInt()).toSet() : {1, 2, 3, 4, 5, 6, 7});
-      _voiceVolume = (data['voiceVolume'] as num?)?.toDouble() ?? 1;
-      _musicVolume = (data['musicVolume'] as num?)?.toDouble() ?? 0.4;
+      _voiceVolume = ((data['voiceVolume'] as num?)?.toDouble() ?? 1).clamp(0.0, 1.0);
+      _musicVolume = ((data['musicVolume'] as num?)?.toDouble() ?? 0.4).clamp(0.0, 1.0);
       _stability = (data['stability'] as num?)?.toDouble() ?? 0.55;
       _styleStrength = (data['styleStrength'] as num?)?.toDouble() ?? 0.25;
       _pitch = (data['pitch'] as num?)?.toDouble() ?? 0;
@@ -465,7 +477,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'voiceId': _voiceId.text.trim(),
       'speed': _speed,
       'pitch': _pitch,
-      'volume': _voiceVolume,
+      // Apply gain at playback so quiet synthesis can still be turned up.
+      'volume': 1.0,
       'emotion': _emotion,
       'microsoft': {
         'apiKey': await _kv.getString(VoiceProviderSettings.microsoftApiKey) ?? '',
@@ -897,7 +910,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         voiceName: _voiceId.text.trim().isEmpty ? null : _voiceId.text.trim(),
         speed: _speed,
         pitch: _pitch,
-        volume: _voiceVolume,
+        volume: 1.0,
       );
     }
     if (_provider == 'minimax') {
@@ -1005,6 +1018,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'mode': _mode,
       'frequency': _frequency,
       'weekdays': _effectiveWeekdays().toList()..sort(),
+      // Credentials live only in the Android Keystore-backed connection store.
+      'aiWakeupEnabled': _aiWakeupEnabled,
       'voiceVolume': _voiceVolume,
       'musicVolume': _musicVolume,
       'stability': _stability,
@@ -1025,6 +1040,69 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     if (_frequency == 'daily') return {1, 2, 3, 4, 5, 6, 7};
     return _weekdays;
   }
+
+  Future<void> _loadWakeupConnection() async {
+    try {
+      final value = await _native.invokeMapMethod<String, dynamic>('getAiWakeupSettings');
+      if (!mounted || value == null) return;
+      setState(() {
+        _wakeupUrl.text = (value['baseUrl'] ?? _wakeupUrl.text).toString();
+        _hasWakeupDeviceToken = value['hasDeviceToken'] == true;
+        _hasWakeupServiceToken = value['hasServiceToken'] == true;
+      });
+    } catch (_) { /* Other platforms and older native builds retain the original alarm. */ }
+  }
+
+  Future<void> _saveWakeupConnection({bool test = false, bool clear = false}) async {
+    if (_testingWakeup || _saving) return;
+    setState(() => _testingWakeup = true);
+    try {
+      final result = await _native.invokeMapMethod<String, dynamic>(test ? 'testAiWakeupConnection' : 'saveAiWakeupSettings', {
+        'baseUrl': _wakeupUrl.text.trim(),
+        'deviceToken': _wakeupDeviceToken.text.trim(),
+        'serviceToken': _wakeupServiceToken.text.trim(),
+        'clear': clear,
+      });
+      _wakeupDeviceToken.clear();
+      _wakeupServiceToken.clear();
+      await _loadWakeupConnection();
+      _toast(test ? (result?['message'] ?? '连接完成').toString() : clear ? '连接凭据已清除' : '连接设置已安全保存');
+    } on PlatformException catch (e) {
+      _toast(e.message ?? 'AI Wakeup 连接未完成');
+    } catch (_) {
+      _toast('AI Wakeup 连接未完成，请检查站点地址和凭据');
+    } finally {
+      if (mounted) setState(() => _testingWakeup = false);
+    }
+  }
+
+  Widget _wakeupConnectionCard() => Card(
+    child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('使用 AI Wakeup 云端提醒'),
+        subtitle: const Text('关闭时完全使用原闹钟模式。开启后到点读取今日正式提醒并用系统语音播报；连接失败使用原闹钟内容。保存设置后同步到当前模式的已有闹钟。'),
+        value: _aiWakeupEnabled,
+        onChanged: _saving ? null : (value) => setState(() => _aiWakeupEnabled = value),
+      ),
+      if (_aiWakeupEnabled) ...[
+        TextField(controller: _wakeupUrl, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'AI Wakeup HTTPS 站点地址')),
+        const SizedBox(height: 12),
+        TextField(controller: _wakeupDeviceToken, obscureText: true, enableSuggestions: false, autocorrect: false,
+          decoration: InputDecoration(labelText: '设备访问令牌', hintText: _hasWakeupDeviceToken ? '已安全保存，留空保留' : '在 AI Wakeup 的 Android 接入页创建')),
+        const SizedBox(height: 12),
+        TextField(controller: _wakeupServiceToken, obscureText: true, enableSuggestions: false, autocorrect: false,
+          decoration: InputDecoration(labelText: '私有站点服务凭据', hintText: _hasWakeupServiceToken ? '已安全保存，留空保留' : '私有站点的平台访问凭据')),
+        const SizedBox(height: 10),
+        const Text('两种凭据分别用于设备权限和私有站点访问；不会写入闹钟负载或源码。网页登录 Cookie 不可替代设备令牌。首次解锁前无法读取安全存储时使用原闹钟。', style: TextStyle(fontSize: 12, color: Colors.black54)),
+        Wrap(spacing: 8, children: [
+          TextButton.icon(onPressed: _testingWakeup || _saving ? null : () => _saveWakeupConnection(), icon: const Icon(Icons.save_outlined), label: const Text('保存连接')),
+          TextButton.icon(onPressed: _testingWakeup || _saving ? null : () => _saveWakeupConnection(test: true), icon: const Icon(Icons.wifi_tethering), label: Text(_testingWakeup ? '连接中…' : '保存并测试连接')),
+          TextButton(onPressed: _testingWakeup || _saving ? null : () => _saveWakeupConnection(clear: true), child: const Text('清除连接凭据')),
+        ]),
+      ],
+    ])),
+  );
 
   Future<void> _generateAiText() async {
     if (_saving || _loading) return;
@@ -1125,6 +1203,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
               ]),
             ),
           ),
+          const SizedBox(height: 12),
+          _wakeupConnectionCard(),
           const SizedBox(height: 12),
           Card(
             child: Padding(

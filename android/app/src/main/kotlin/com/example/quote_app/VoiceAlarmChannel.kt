@@ -11,6 +11,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 object VoiceAlarmChannel {
+  private val wakeupIo = java.util.concurrent.Executors.newSingleThreadExecutor()
+  private val main = android.os.Handler(android.os.Looper.getMainLooper())
   private const val CHANNEL = "com.example.quote_app/voice_alarm"
 
   @JvmStatic
@@ -18,6 +20,27 @@ object VoiceAlarmChannel {
     MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
       try {
         when (call.method) {
+          "getAiWakeupSettings" -> result.success(VoiceAlarmWakeupStore.publicSettings(context))
+          "saveAiWakeupSettings", "testAiWakeupConnection" -> {
+            val base = call.argument<String>("baseUrl") ?: VoiceAlarmWakeupClient.DEFAULT_URL
+            val device = call.argument<String>("deviceToken") ?: ""
+            val service = call.argument<String>("serviceToken") ?: ""
+            val clear = call.argument<Boolean>("clear") == true
+            val test = call.method == "testAiWakeupConnection"
+            wakeupIo.execute {
+              try {
+                VoiceAlarmWakeupStore.update(context, base, device, service, clear)
+                val output = if (test) {
+                  val access = VoiceAlarmWakeupStore.access(context) ?: error("请先配置连接")
+                  val content = VoiceAlarmWakeupClient.fetch(access)
+                  mapOf("connected" to true, "date" to content.date, "message" to "连接成功，今日正式提醒已就绪")
+                } else VoiceAlarmWakeupStore.publicSettings(context)
+                main.post { result.success(output) }
+              } catch (_: Exception) {
+                main.post { result.error("AI_WAKEUP_CONNECTION", "连接未完成：请检查 HTTPS 地址、设备令牌和私有站点服务凭据，以及今日是否已有正式提醒", null) }
+              }
+            }
+          }
           "schedule" -> {
             val at = call.argument<Number>("atMs")?.toLong() ?: 0L
             val payload = call.argument<String>("payload") ?: "{}"

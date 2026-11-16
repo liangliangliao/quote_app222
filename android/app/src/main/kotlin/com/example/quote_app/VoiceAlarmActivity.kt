@@ -63,6 +63,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -90,6 +91,7 @@ class VoiceAlarmActivity : Activity() {
   private var tts: TextToSpeech? = null
   // 云端 TTS（讯飞，复用 STT 凭据）播放 AI 回复音频；失败回退系统本地 TTS。
   private var aiTtsPlayer: MediaPlayer? = null
+  private var closingAlarm = false
   private val replyGate = VoiceAlarmReplyGate()
   private var replyToken = 0L
   private var cloudTtsDeadline: Runnable? = null
@@ -238,7 +240,9 @@ class VoiceAlarmActivity : Activity() {
   @Volatile private var lastDraftTextNormalized = ""
   private val alarmPlaybackReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
+      if (closingAlarm || destroyed) return
       when (intent?.action) {
+        VoiceAlarmRingingService.ACTION_DISMISSED -> closeAlarmWindow(notifyService = false)
         VoiceAlarmRingingService.ACTION_SIGNAL_PLAYBACK_START -> {
           alarmSignalPlaying = true
           logVoice("alarm.signal.start", "alarm signal/music playback start broadcast received", mapOf("hasMusic" to (intent?.getBooleanExtra("hasMusic", false) ?: false), "pipeline" to batchChatPipelineVersion))
@@ -280,6 +284,7 @@ class VoiceAlarmActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     payload = intent?.getStringExtra("payload") ?: "{}"
+    updateVolumeKeyStream()
     logVoice("activity.onCreate", "VoiceAlarmActivity created", mapOf("mode" to selectedSttMode(), "provider" to selectedSttProvider(), "logPath" to VoiceAlarmDebugLog.latestLogPath(this)))
     resetVoiceRuntimeForFreshAlarm("activity_onCreate")
     if (Build.VERSION.SDK_INT >= 27) {
@@ -338,6 +343,8 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onResume() {
     super.onResume()
+    if (closingAlarm || destroyed) { finishAndRemoveTask(); return }
+    updateVolumeKeyStream()
     VoiceAlarmRingingService.enableVoiceInteraction(this)
     restoreFullScreenRunnable?.let { speechHandler.removeCallbacks(it) }
     restoreFullScreenRunnable = null
@@ -365,6 +372,7 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onNewIntent(intent: Intent?) {
     super.onNewIntent(intent)
+    if (closingAlarm || destroyed) { finishAndRemoveTask(); return }
     if (intent != null) setIntent(intent)
     val nextPayload = intent?.getStringExtra("payload")
     if (!nextPayload.isNullOrBlank() && nextPayload != payload) {
@@ -613,24 +621,77 @@ class VoiceAlarmActivity : Activity() {
       textSize = 18f
       setOnClickListener {
         VoiceAlarmScheduler.snooze(this@VoiceAlarmActivity, payload, 5)
-        VoiceAlarmRingingService.stop(this@VoiceAlarmActivity)
-        finishAndRemoveTask()
+        closeAlarmWindow()
       }
     }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 24 })
     panel.addView(Button(this).apply {
       text = "停止闹钟"
       textSize = 18f
       setOnClickListener {
-        VoiceAlarmRingingService.stop(this@VoiceAlarmActivity)
-        finishAndRemoveTask()
+        closeAlarmWindow()
       }
     }, LinearLayout.LayoutParams(-1, -2))
+    addVolumeControl(panel, "语音音量", "voiceVolume", 1f)
+    addVolumeControl(panel, "背景音乐音量", "musicVolume", 0.4f)
     val scroll = ScrollView(this).apply {
       isFillViewport = true
       addView(panel, FrameLayout.LayoutParams(-1, -2))
     }
     root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
     return root
+  }
+
+  private fun updateVolumeKeyStream() {
+    volumeControlStream = if (VoiceAlarmAudioRoute.hasHeadsetOutput(this)) AudioManager.STREAM_MUSIC else AudioManager.STREAM_ALARM
+  }
+
+  private fun playbackGain(key: String, default: Float): Float = try {
+    JSONObject(payload).optDouble(key, default.toDouble()).toFloat().let { if (it.isFinite()) it.coerceIn(0f, 1f) else default }
+  } catch (_: Exception) { default }
+
+  private fun addVolumeControl(panel: LinearLayout, label: String, key: String, default: Float) {
+    val title = TextView(this).apply { text = "$label ${(playbackGain(key, default) * 100).toInt()}%"; setTextColor(Color.WHITE); textSize = 15f }
+    panel.addView(title)
+    panel.addView(SeekBar(this).apply {
+      max = 100; progress = (playbackGain(key, default) * 100).toInt()
+      setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) { if (fromUser) title.text = "$label $value%" }
+        override fun onStartTrackingTouch(bar: SeekBar?) {}
+        override fun onStopTrackingTouch(bar: SeekBar?) {
+          if (closingAlarm || destroyed) return
+          val gain = ((bar?.progress ?: 0) / 100f).coerceIn(0f, 1f)
+          payload = JSONObject(payload).put(key, gain).toString()
+          val voice = playbackGain("voiceVolume", 1f); val music = playbackGain("musicVolume", 0.4f)
+          try { aiTtsPlayer?.setVolume(voice, voice) } catch (_: Exception) {}
+          VoiceAlarmRingingService.setPlaybackVolumes(this@VoiceAlarmActivity, voice, music)
+          if (key == "voiceVolume" && speaking && aiTtsPlayer == null && lastAssistantSpokenText.isNotBlank()) {
+            val restart = synchronized(ttsRestartByUtterance) { ttsRestartByUtterance[currentAppTtsUtteranceId] ?: true }
+            speak(lastAssistantSpokenText, "volume_changed_${System.currentTimeMillis()}", restart, allowCloudTts = false)
+          }
+        }
+      })
+    }, LinearLayout.LayoutParams(-1, -2))
+  }
+
+  /** One terminal path for voice, buttons, notification actions and Flutter stopRing. */
+  private fun closeAlarmWindow(notifyService: Boolean = true) {
+    if (closingAlarm) return
+    closingAlarm = true
+    destroyed = true
+    invalidateReply()
+    aiRequestSeq++
+    aiBusy = false
+    pendingAiUserText = ""
+    speechHandler.removeCallbacksAndMessages(null)
+    try { recognizer?.cancel() } catch (_: Exception) {}
+    try { tts?.stop() } catch (_: Exception) {}
+    stopCloudAiTtsPlayback()
+    stopCloudStt()
+    VoiceAlarmRingingService.appReplySpeaking = false
+    if (notifyService) VoiceAlarmRingingService.stop(this)
+    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+    finishAndRemoveTask()
+    if (!isFinishing) finish()
   }
 
   private fun createSpeechRecognizerCompat(): SpeechRecognizer {
@@ -714,6 +775,7 @@ class VoiceAlarmActivity : Activity() {
    * ahead of time; wired headset mics are picked up automatically by AudioRecord.setPreferredDevice.
    */
   private fun ensureHeadsetMicRouting() {
+    updateVolumeKeyStream()
     // 故意不再启动蓝牙 SCO。SCO 与 A2DP 在多数设备上互斥：一旦为“耳机麦克风”开启 SCO，
     // 系统会挂起 A2DP，导致闹钟提示语只播几个字就断、背景音乐完全不出声、且 SCO 电话通道
     // 声音很小。闹钟场景手机通常就在身边，改用手机内置麦克风采集，把 A2DP 留给高音量立体声播放。
@@ -3698,6 +3760,7 @@ class VoiceAlarmActivity : Activity() {
   private fun registerAlarmPlaybackReceiver() {
     if (alarmPlaybackReceiverRegistered) return
     val filter = IntentFilter().apply {
+      addAction(VoiceAlarmRingingService.ACTION_DISMISSED)
       addAction(VoiceAlarmRingingService.ACTION_SIGNAL_PLAYBACK_START)
       addAction(VoiceAlarmRingingService.ACTION_SIGNAL_PLAYBACK_END)
       addAction(VoiceAlarmRingingService.ACTION_VOICE_PLAYBACK_START)
@@ -4548,9 +4611,7 @@ class VoiceAlarmActivity : Activity() {
     }
     when {
       isStop -> {
-        speak("好的，已关闭闹钟。", "alarm_stop", restart = false, allowCloudTts = false)
-        VoiceAlarmRingingService.stop(this)
-        transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
+        closeAlarmWindow()
       }
       isSnooze -> {
         val minutes = parseSnoozeMinutes(text)
@@ -4559,10 +4620,8 @@ class VoiceAlarmActivity : Activity() {
           return
         }
         logVoice("command.snooze", "voice snooze command recognized", mapOf("text" to logPreview(text), "minutes" to minutes))
-        speak("好的，${minutes}分钟后再次提醒。", "alarm_snooze", restart = false, allowCloudTts = false)
         VoiceAlarmScheduler.snooze(this, payload, minutes)
-        VoiceAlarmRingingService.stop(this)
-        transcriptView?.postDelayed({ finishAndRemoveTask() }, 5000)
+        closeAlarmWindow()
       }
       isWakeCommand(text) -> {
         aiAwake = true
@@ -4749,6 +4808,7 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun speak(text: String, utteranceId: String, restart: Boolean = true, allowCloudTts: Boolean = true) {
+    if (closingAlarm || destroyed) return
     invalidateReply()
     try { tts?.stop() } catch (_: Throwable) {}
     stopCloudAiTtsPlayback()
@@ -4907,6 +4967,7 @@ class VoiceAlarmActivity : Activity() {
           .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
           .build(),
       )
+      player.setVolume(playbackGain("voiceVolume", 1f), playbackGain("voiceVolume", 1f))
       player.setDataSource(path)
       player.setOnPreparedListener { mp ->
         speechHandler.removeCallbacks(prepareDeadline)
@@ -4920,6 +4981,7 @@ class VoiceAlarmActivity : Activity() {
         synchronized(ttsRestartByUtterance) { ttsRestartByUtterance[utteranceId] = restart }
         // 复用既有的“播报卡死自动恢复”看门狗，避免云端播放异常导致 speaking 卡住。
         scheduleAppTtsWatchdog(utteranceId, text, restart)
+        mp.setVolume(playbackGain("voiceVolume", 1f), playbackGain("voiceVolume", 1f))
         try { mp.start() } catch (_: Throwable) { cleanupCloudAiTtsPlayer(path); speakWithLocalTts(text, utteranceId, restart) }
       }
       player.setOnCompletionListener { mp ->
@@ -5192,7 +5254,10 @@ class VoiceAlarmActivity : Activity() {
     tts?.setAudioAttributes(AudioAttributes.Builder()
       .setUsage(if (VoiceAlarmAudioRoute.hasHeadsetOutput(this)) AudioAttributes.USAGE_MEDIA else AudioAttributes.USAGE_ALARM)
       .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-    val params = Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId) }
+    val params = Bundle().apply {
+      putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+      putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, playbackGain("voiceVolume", 1f))
+    }
     val result = try { tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId) } catch (_: Throwable) { TextToSpeech.ERROR }
     if (result == null || result == TextToSpeech.ERROR) {
       ttsStartWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
