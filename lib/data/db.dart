@@ -86,9 +86,9 @@ class AppDatabase {
 
     await _db!.execute('PRAGMA foreign_keys = ON');
 
-    // AI quote generation intentionally allows the same authentic quotation to
-    // appear again over time. Older installations may still carry this legacy
-    // content index, which would otherwise reject a valid scheduled save.
+    // Keep manual imports and carousel storage compatible with older databases.
+    // AI acquisition checks its durable history before saving; a global unique
+    // index cannot detect translations or semantically equivalent quotations.
     try {
       await _db!.execute('DROP INDEX IF EXISTS uq_quotes_content');
     } catch (_) {}

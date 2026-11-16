@@ -2288,6 +2288,7 @@ Future<String?> _saveAvatarTemp(File file) async {
     bool quoteAiAutoEnabled = initialQuoteAiConfig.autoEnabled;
     bool quoteAiSaveLocally = initialQuoteAiConfig.saveLocally;
     bool quoteAiDownloadAvatar = initialQuoteAiConfig.downloadAvatar;
+    bool quoteAiTranslateToChinese = initialQuoteAiConfig.translateToChinese;
     final selectedQuoteFigures = <String>{
       ...initialQuoteAiConfig.selectedFigures,
     };
@@ -2651,6 +2652,16 @@ Future<String?> _saveAvatarTemp(File file) async {
                                 ),
                                 const SizedBox(height: 6),
                                 SwitchListTile.adaptive(
+                                  key: const ValueKey('quote-translate-to-chinese'),
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('名言正文翻译成中文'),
+                                  subtitle: const Text('默认关闭，保留作者原句；思想分析仍使用中文'),
+                                  value: quoteAiTranslateToChinese,
+                                  onChanged: (v) => setStateDialog(
+                                    () => quoteAiTranslateToChinese = v,
+                                  ),
+                                ),
+                                SwitchListTile.adaptive(
                                   contentPadding: EdgeInsets.zero,
                                   title: const Text('自动下载人物头像'),
                                   subtitle: const Text(
@@ -2664,7 +2675,7 @@ Future<String?> _saveAvatarTemp(File file) async {
                                 SwitchListTile.adaptive(
                                   contentPadding: EdgeInsets.zero,
                                   title: const Text('自动保存到本地'),
-                                  subtitle: const Text('保存名言、出处与思想分析'),
+                                  subtitle: const Text('保存名言、出处与思想分析；关闭后仅保留去重记录'),
                                   value: quoteAiSaveLocally,
                                   onChanged: (v) => setStateDialog(
                                     () => quoteAiSaveLocally = v,
@@ -3097,6 +3108,7 @@ Future<String?> _saveAvatarTemp(File file) async {
                                       autoEnabled: quoteAiAutoEnabled,
                                       saveLocally: quoteAiSaveLocally,
                                       downloadAvatar: quoteAiDownloadAvatar,
+                                      translateToChinese: quoteAiTranslateToChinese,
                                       selectedFigures:
                                           QuoteAiTaskConfig.normalizeFigures(
                                             selectedQuoteFigures,

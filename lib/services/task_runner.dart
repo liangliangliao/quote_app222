@@ -49,7 +49,7 @@ class TaskRunner {
     }
 
     try {
-      // Generation uses one structured request and no unrelated quote history.
+      // Generation validates quotation history before saving or notifying.
       // A separate durable classification job runs after notification delivery.
       final generated = await QuoteAiService().generate(t);
       String? quoteUid;
@@ -83,7 +83,7 @@ class TaskRunner {
 
       // A monotonically increasing cursor gives deterministic ordered cycling
       // for multiple people and also supplies a tiny variation seed for a
-      // single person, without transmitting previous quotes to the model.
+      // single person. Duplicate checking is handled by QuoteAiService.
       await TaskDao().update(uid, <String, dynamic>{'cursor': generated.nextCursor});
 
       final taskTitle = (t['name'] ?? 'AI 名人名言').toString().trim();

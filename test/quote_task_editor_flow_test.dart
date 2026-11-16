@@ -76,6 +76,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('AI 自动获取').last);
     await tester.pumpAndSettle();
+    final translationSwitch = find.byKey(
+        const ValueKey('quote-translate-to-chinese'));
+    await tester.ensureVisible(translationSwitch);
+    expect(tester.widget<SwitchListTile>(translationSwitch).value, isFalse);
+    await tester.tap(translationSwitch);
+    await tester.pump();
     await tester.ensureVisible(
       find.byKey(const ValueKey('quote-figure-search')),
     );
@@ -119,10 +125,15 @@ void main() {
     expect(config.customFigures, ['我的导师']);
     expect(config.theme, '重新开始');
     expect(config.userDescription, '寻找面对变化的勇气');
+    expect(config.translateToChinese, isTrue);
 
     final editEditor = key.currentState!.openTaskEditor(tasks.single);
     await tester.pumpAndSettle();
     expect(find.text('编辑任务'), findsOneWidget);
+    expect(tester.widget<SwitchListTile>(translationSwitch).value, isTrue);
+    await tester.ensureVisible(translationSwitch);
+    await tester.tap(translationSwitch);
+    await tester.pump();
     expect(tester.widget<TextField>(field('自定义人物')).controller?.text, '我的导师');
     expect(tester.widget<TextField>(field('自定义主题')).controller?.text, '重新开始');
     await tester.ensureVisible(field('想表达或面对的内容'));
@@ -135,6 +146,7 @@ void main() {
     );
     expect(QuoteAiTaskConfig.fromTask(edited!).userDescription, '给自己更多耐心');
     expect(QuoteAiTaskConfig.fromTask(edited).customFigures, ['我的导师']);
+    expect(QuoteAiTaskConfig.fromTask(edited).translateToChinese, isFalse);
 
     final foreignUid = await TaskDao().create(
       name: '向己目标',
