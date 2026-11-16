@@ -22,6 +22,7 @@ on:
       - 'test/cognitive_*test.dart'
       - 'lib/models/quote_insight.dart'
       - 'lib/data/quote_insight_store.dart'
+      - 'lib/data/quote_generation_history.dart'
       - 'lib/data/dao.dart'
       - 'lib/data/db.dart'
       - 'lib/pages/home_page.dart'
@@ -31,6 +32,7 @@ on:
       - 'lib/widgets/quote_comparison_sheet.dart'
       - 'lib/services/quote_*service.dart'
       - 'lib/services/quote_insight_settings.dart'
+      - 'lib/services/quote_duplicate_guard.dart'
       - 'lib/services/task_runner.dart'
       - 'lib/services/unified_ai_service.dart'
       - 'lib/services/semantic_json_transport.dart'
@@ -40,6 +42,7 @@ on:
       - 'lib/widgets/ai_budget_panel.dart'
       - 'test/semantic_*test.dart'
       - 'test/quote_*test.dart'
+      - 'test/fixtures/quote_generation_fakes.dart'
       - 'pubspec.*'
       - '.github/workflows/quote_insight_ci.yml'
   push:
@@ -64,6 +67,7 @@ on:
       - 'test/cognitive_*test.dart'
       - 'lib/models/quote_insight.dart'
       - 'lib/data/quote_insight_store.dart'
+      - 'lib/data/quote_generation_history.dart'
       - 'lib/data/dao.dart'
       - 'lib/data/db.dart'
       - 'lib/pages/home_page.dart'
@@ -73,6 +77,7 @@ on:
       - 'lib/widgets/quote_comparison_sheet.dart'
       - 'lib/services/quote_*service.dart'
       - 'lib/services/quote_insight_settings.dart'
+      - 'lib/services/quote_duplicate_guard.dart'
       - 'lib/services/task_runner.dart'
       - 'lib/services/unified_ai_service.dart'
       - 'lib/services/semantic_json_transport.dart'
@@ -82,6 +87,7 @@ on:
       - 'lib/widgets/ai_budget_panel.dart'
       - 'test/semantic_*test.dart'
       - 'test/quote_*test.dart'
+      - 'test/fixtures/quote_generation_fakes.dart'
       - 'pubspec.*'
       - '.github/workflows/quote_insight_ci.yml'
   workflow_dispatch:
@@ -134,6 +140,9 @@ jobs:
           test/services/unified_ai_service_azure_claude_test.dart
           test/cognitive_widgets_test.dart test/cognitive_flags_test.dart
           lib/models/quote_insight.dart lib/data/quote_insight_store.dart
+          lib/data/quote_generation_history.dart lib/services/quote_duplicate_guard.dart
+          lib/services/quote_ai_service.dart test/quote_ai_service_test.dart
+          test/quote_generation_dedup_test.dart test/fixtures/quote_generation_fakes.dart
           lib/services/quote_comparison_service.dart lib/services/quote_insight_settings.dart
           lib/widgets/quote_reading_insights.dart lib/widgets/quote_comparison_sheet.dart
           test/quote_insight_test.dart test/quote_comparison_test.dart
@@ -158,6 +167,8 @@ jobs:
           test/quote_insight_store_test.dart test/quote_insight_widgets_test.dart
           test/quote_insight_flags_test.dart test/quote_insight_delivery_test.dart
           test/quote_ai_service_test.dart test/quote_paper_layout_test.dart
+          test/quote_generation_dedup_test.dart test/quote_task_editor_flow_test.dart
+          test/quote_author_signature_test.dart
           test/quote_history_avatar_test.dart test/quote_ai_integration_compile_test.dart
           test/quote_visual_script_test.dart test/quote_frame_theme_test.dart
       - name: Test existing module behavior

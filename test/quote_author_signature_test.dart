@@ -6,6 +6,7 @@ import 'package:quote_app/data/kv_dao.dart';
 import 'package:quote_app/services/quote_ai_service.dart';
 import 'package:quote_app/services/quote_author_signature_service.dart';
 import 'package:quote_app/services/unified_ai_service.dart';
+import 'fixtures/quote_generation_fakes.dart';
 
 class _MemoryStorage extends KeyValueDao {
   final values = <String, String>{};
@@ -157,6 +158,7 @@ void main() {
       final ai = _Ai(
         (_) async => jsonEncode({
           'quote': '真正的旅程是归返。',
+          'original_quote': 'The true voyage is return.',
           'author': '乌尔苏拉·勒古恩',
           'author_original_name': 'Ursula K. Le Guin',
           'practice_activities': [
@@ -169,7 +171,8 @@ void main() {
       );
       final storage = _MemoryStorage();
       final signatures = QuoteAuthorSignatureService(ai: ai, storage: storage);
-      final service = QuoteAiService(ai: ai, signatures: signatures);
+      final service = QuoteAiService(ai: ai, signatures: signatures,
+          history: MemoryQuoteHistory());
       const config = QuoteAiTaskConfig(
         selectedFigures: ['乌尔苏拉·勒古恩'],
         downloadAvatar: false,

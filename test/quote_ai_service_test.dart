@@ -15,6 +15,7 @@ void main() {
         theme: '勇气与行动',
         userDescription: '在不确定中仍然行动',
         intervalMinutes: 120,
+        translateToChinese: true,
       );
       final decoded = QuoteAiTaskConfig.fromTask(<String, dynamic>{
         'freq_custom': config.encode(),
@@ -26,6 +27,18 @@ void main() {
       expect(decoded.figureForCursor(3), '孔子');
       expect(decoded.intervalMinutes, 120);
       expect(decoded.userDescription, '在不确定中仍然行动');
+      expect(decoded.translateToChinese, isTrue);
+    });
+
+    test('new and legacy tasks keep original quotation language by default', () {
+      expect(const QuoteAiTaskConfig().translateToChinese, isFalse);
+      for (final raw in ['', '{"version":2}', 'legacy custom value']) {
+        expect(QuoteAiTaskConfig.fromTask({'freq_custom': raw})
+            .translateToChinese, isFalse);
+      }
+      expect(QuoteAiTaskConfig.fromTask({
+        'freq_custom': '{"translate_to_chinese":true}',
+      }).translateToChinese, isTrue);
     });
 
     test(
@@ -41,7 +54,7 @@ void main() {
 
   group('QuoteAiService prompt and parser', () {
     test(
-      'prompt carries semantic intent and never needs local quote history',
+      'prompt carries semantic intent and the original-language default',
       () {
         const config = QuoteAiTaskConfig(
           theme: '成长与改变',
@@ -57,13 +70,45 @@ void main() {
         expect(prompt, contains('卡尔·荣格'));
         expect(prompt, contains('我害怕改变，但也不想停在原地'));
         expect(prompt, contains('语义匹配优先级最高'));
-        expect(prompt, contains('应用不会发送历史名言正文'));
+        expect(prompt, contains('保留作者原文，不翻译成中文'));
+        expect(prompt, contains('分析、主题、实践说明等其他文字字段始终使用中文'));
+        expect(prompt, contains('跨语言版本'));
         expect(prompt, contains('practice_activities'));
         expect(prompt, contains('现实中亲自完成、观察和感受'));
         expect(prompt, contains('历史事件或典故'));
         expect(prompt, contains('用户应可随时暂停'));
       },
     );
+
+    test('translation prompt explicitly requests Chinese quote text', () {
+      final prompt = QuoteAiService.buildPrompt(
+        taskUid: 'translation', config: const QuoteAiTaskConfig(
+          translateToChinese: true,
+        ), selectedFigure: '尼采', cursor: 0,
+      );
+      expect(prompt, contains('quote 返回忠实的中文译文'));
+      expect(prompt, contains('original_quote 始终返回可靠的作者原句'));
+    });
+
+    test('parser selects original or translation and retains original identity', () {
+      final raw = jsonEncode({
+        'quote': '凡不能毁灭我的，必使我更强大。',
+        'original_quote': 'Was mich nicht umbringt, macht mich stärker.',
+        'author': '尼采',
+        'practice_applicable': false,
+        'practice_limitation': '不应主动制造伤害以验证此句。',
+      });
+      final original = QuoteAiService.parseResponse(raw, selectedFigure: '尼采',
+          fallbackTheme: '', nextCursor: 1, requireOriginal: true);
+      final translated = QuoteAiService.parseResponse(raw, selectedFigure: '尼采',
+          fallbackTheme: '', nextCursor: 1, translateToChinese: true);
+      expect(original.content, 'Was mich nicht umbringt, macht mich stärker.');
+      expect(translated.content, '凡不能毁灭我的，必使我更强大。');
+      expect(original.originalContent, translated.originalContent);
+      expect(translated.withAvatarPath('avatar.jpg').originalContent,
+          original.originalContent);
+      expect(original.practiceActivities, isEmpty);
+    });
 
     test('parses fenced JSON and builds the complete local explanation', () {
       const raw = '''```json
