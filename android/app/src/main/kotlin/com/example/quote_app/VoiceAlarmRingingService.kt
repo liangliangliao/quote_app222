@@ -303,6 +303,7 @@ class VoiceAlarmRingingService : Service() {
     }
     if (intent?.action == ACTION_SET_VOLUMES) {
       if (activePayload == null) { stopSelf(startId); return START_NOT_STICKY }
+      val previousVoiceVolume = currentVoiceVolume
       currentVoiceVolume = intent.getFloatExtra("voice", currentVoiceVolume).coerceIn(0f, 1f)
       currentMusicVolume = intent.getFloatExtra("music", currentMusicVolume).coerceIn(0f, 1f)
       val data = try { JSONObject(currentPayload) } catch (_: Exception) { JSONObject() }
@@ -311,7 +312,7 @@ class VoiceAlarmRingingService : Service() {
       try { voicePlayer?.setVolume(currentVoiceVolume, currentVoiceVolume) } catch (_: Exception) {}
       if (musicRestoreRunnable == null) try { musicPlayer?.setVolume(currentMusicVolume, currentMusicVolume) } catch (_: Exception) {}
       // Android TTS gain is per utterance; apply the new gain now by replaying the prompt.
-      if (alarmVoicePlaybackActive && voicePlayer == null && !appReplySpeaking) speakAlarmTextOnce(currentVoiceText, currentVoiceVolume)
+      if (currentVoiceVolume != previousVoiceVolume && alarmVoicePlaybackActive && voicePlayer == null && !appReplySpeaking) speakAlarmTextOnce(currentVoiceText, currentVoiceVolume)
       return START_STICKY
     }
     if (intent?.action == ACTION_ENABLE_MICROPHONE) {
