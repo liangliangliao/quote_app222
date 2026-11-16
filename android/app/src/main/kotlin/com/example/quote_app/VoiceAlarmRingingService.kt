@@ -42,6 +42,14 @@ class VoiceAlarmRingingService : Service() {
     // 服务在播放任何提醒语音（初次或周期复读）前会检查它，避免与 AI 回复同时出声。
     @Volatile @JvmStatic var appReplySpeaking: Boolean = false
 
+    const val ACTION_DISMISSED = "com.example.quote_app.VOICE_ALARM_DISMISSED"
+    private const val ACTION_SET_VOLUMES = "com.example.quote_app.VOICE_ALARM_SET_VOLUMES"
+    @JvmStatic fun setPlaybackVolumes(context: Context, voice: Float, music: Float) {
+      if (activePayload == null) return
+      try { context.startService(Intent(context, VoiceAlarmRingingService::class.java).apply {
+        action = ACTION_SET_VOLUMES; putExtra("voice", voice); putExtra("music", music)
+      }) } catch (_: Exception) {}
+    }
     private const val ACTION_START = "com.example.quote_app.VOICE_ALARM_START"
     private const val ACTION_STOP = "com.example.quote_app.VOICE_ALARM_STOP"
     private const val ACTION_ENABLE_MICROPHONE = "com.example.quote_app.VOICE_ALARM_ENABLE_MICROPHONE"
@@ -97,6 +105,8 @@ class VoiceAlarmRingingService : Service() {
       // is safe and prevents stale activePayload from re-opening the full-screen
       // alarm after the user has dismissed it.
       clearActivePayload(context)
+      activeSignalPlayback = false
+      context.sendBroadcast(Intent(ACTION_DISMISSED).setPackage(context.packageName))
       try { (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_: Throwable) {}
       val intent = Intent(context, VoiceAlarmRingingService::class.java).apply { action = ACTION_STOP }
       try { context.startService(intent) } catch (_: Throwable) {}
@@ -247,17 +257,21 @@ class VoiceAlarmRingingService : Service() {
     }
   }
 
+  private val wakeupGate = VoiceAlarmReplyGate()
+  private val ttsInitGate = VoiceAlarmReplyGate()
+  private var stopping = false
+  private var currentVoiceVolume = 1f
   private var voicePlayer: MediaPlayer? = null
   private var musicPlayer: MediaPlayer? = null
   private var alarmSignalPlaybackActive = false
   private var alarmTts: TextToSpeech? = null
   private var alarmTtsReady = false
+  private var alarmTtsSequence = 0L
+  @Volatile private var alarmTtsPrefix = ""
+  @Volatile private var alarmTtsLastId = ""
   private var pendingAlarmTts: Pair<String, Float>? = null
   private var vibrator: Vibrator? = null
   private var wakeLock: PowerManager.WakeLock? = null
-  private var originalAlarmVolume: Int? = null
-  private var originalVolumeStream: Int = AudioManager.STREAM_ALARM
-  private var originalVoiceCallVolume: Int? = null
   private var headsetPlaybackModeActive = false
   private var currentMusicVolume = 0.4f
   private var musicRestoreRunnable: Runnable? = null
@@ -280,9 +294,26 @@ class VoiceAlarmRingingService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     logVoice("onStartCommand", "service command", mapOf("action" to (intent?.action ?: ""), "startId" to startId))
     if (intent?.action == ACTION_STOP) {
+      stopping = true
+      wakeupGate.next()
       clearActivePayload(this)
+      stopSignals()
       stopSelf()
       return START_NOT_STICKY
+    }
+    if (intent?.action == ACTION_SET_VOLUMES) {
+      if (activePayload == null) { stopSelf(startId); return START_NOT_STICKY }
+      val previousVoiceVolume = currentVoiceVolume
+      currentVoiceVolume = intent.getFloatExtra("voice", currentVoiceVolume).coerceIn(0f, 1f)
+      currentMusicVolume = intent.getFloatExtra("music", currentMusicVolume).coerceIn(0f, 1f)
+      val data = try { JSONObject(currentPayload) } catch (_: Exception) { JSONObject() }
+      data.put("voiceVolume", currentVoiceVolume).put("musicVolume", currentMusicVolume)
+      currentPayload = data.toString()
+      try { voicePlayer?.setVolume(currentVoiceVolume, currentVoiceVolume) } catch (_: Exception) {}
+      if (musicRestoreRunnable == null) try { musicPlayer?.setVolume(currentMusicVolume, currentMusicVolume) } catch (_: Exception) {}
+      // Android TTS gain is per utterance; apply the new gain now by replaying the prompt.
+      if (currentVoiceVolume != previousVoiceVolume && alarmVoicePlaybackActive && voicePlayer == null && !appReplySpeaking) speakAlarmTextOnce(currentVoiceText, currentVoiceVolume)
+      return START_STICKY
     }
     if (intent?.action == ACTION_ENABLE_MICROPHONE) {
       val payload = activePayload ?: readActivePayload(this)
@@ -304,6 +335,7 @@ class VoiceAlarmRingingService : Service() {
     val payload = intent?.getStringExtra(EXTRA_PAYLOAD) ?: activePayload ?: readActivePayload(this) ?: "{}"
     val alreadyRingingSamePayload = hasActiveSignalsFor(payload)
     logVoice("start", "alarm service starting", mapOf("alreadyRingingSamePayload" to alreadyRingingSamePayload, "textLen" to (try { JSONObject(payload).optString("text", "").length } catch (_: Throwable) { 0 })))
+    stopping = false
     persistActivePayload(this, payload)
     startForegroundAlarm(payload)
     acquireWakeLock()
@@ -322,6 +354,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   override fun onTaskRemoved(rootIntent: Intent?) {
+    if (stopping || activePayload == null) { super.onTaskRemoved(rootIntent); return }
     // Some launchers call this when the user swipes the full-screen alarm task
     // away.  The service is declared stopWithTask=false, but re-post the
     // foreground alarm notification and keep the audio/vibration alive as an
@@ -332,6 +365,8 @@ class VoiceAlarmRingingService : Service() {
   }
 
   override fun onDestroy() {
+    stopping = true
+    wakeupGate.next()
     activePayload = null
     stopSignals()
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
@@ -340,7 +375,6 @@ class VoiceAlarmRingingService : Service() {
     musicRestoreRunnable = null
     try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Throwable) {}
     wakeLock = null
-    restoreAlarmVolume()
     unregisterHeadsetRouteCallback()
     super.onDestroy()
   }
@@ -514,6 +548,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun notifyVoicePlaybackStart() {
+    if (stopping || !alarmSignalPlaybackActive || activePayload == null) return
     if (alarmVoicePlaybackActive) return
     alarmVoicePlaybackActive = true
     persistVoicePlaybackState(this, true, currentVoiceText)
@@ -553,7 +588,7 @@ class VoiceAlarmRingingService : Service() {
     sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_START).setPackage(packageName).putExtra("hasMusic", data.optBoolean("systemMusic", true) || data.optString("musicPath", "").isNotBlank() || data.optJSONArray("musicPaths")?.length()?.let { it > 0 } == true))
     logVoice("signals.start", "starting alarm signals", mapOf("hasVoicePath" to data.optString("voicePath", "").isNotBlank(), "textLen" to data.optString("text", "").length, "systemMusic" to data.optBoolean("systemMusic", true), "vibrate" to data.optBoolean("vibrate", true)))
     requestAlarmAudioFocus()
-    ensureAudibleAlarmVolume()
+    // Respect manually selected system alarm/media volume; never raise it behind the user.
     if (data.optBoolean("vibrate", true)) {
       vibrator = if (Build.VERSION.SDK_INT >= 31) {
         (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
@@ -584,9 +619,25 @@ class VoiceAlarmRingingService : Service() {
         ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
       if (alarmUri != null) musicPlayer = createPlayer(alarmUri, true, currentMusicVolume)
     }
-    if (hasVoicePrompt(data)) {
-      playVoiceOnce(data)
-      scheduleVoiceReplay(data)
+    currentVoiceVolume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f)
+    if (!data.optBoolean("aiWakeupEnabled", false)) {
+      if (hasVoicePrompt(data)) { playVoiceOnce(data); scheduleVoiceReplay(data) }
+    } else {
+      val token = wakeupGate.next()
+      // Music/vibration start immediately; no network operation blocks the main thread.
+      Thread {
+        val remote = try { VoiceAlarmWakeupStore.fetchToday(this) } catch (_: Exception) { null }
+        replayHandler.post {
+          if (!wakeupGate.isCurrent(token) || stopping || activePayload == null || !alarmSignalPlaybackActive) return@post
+          val latest = JSONObject(currentPayload)
+          if (remote != null) {
+            latest.put("text", remote.text).put("voicePath", "")
+            currentPayload = latest.toString()
+            logVoice("aiWakeup.ready", "Today's AI Wakeup content ready")
+          } else logVoice("aiWakeup.fallback", "AI Wakeup unavailable; retained original alarm content")
+          if (hasVoicePrompt(latest)) { playVoiceOnce(latest); scheduleVoiceReplay(latest) }
+        }
+      }.apply { name = "ai-wakeup-content"; isDaemon = true }.start()
     }
   }
 
@@ -599,7 +650,7 @@ class VoiceAlarmRingingService : Service() {
     currentVoiceText = data.optString("text", "").trim()
     val voicePath = data.optString("voicePath", "")
     logVoice("voice.playOnce", "playing voice prompt", mapOf("hasVoicePath" to voicePath.isNotBlank(), "textLen" to data.optString("text", "").length))
-    val volume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f)
+    val volume = data.optDouble("voiceVolume", currentVoiceVolume.toDouble()).toFloat().coerceIn(0f, 1f)
     if (voicePath.isNotBlank() && File(voicePath).isFile) {
       try { voicePlayer?.stop() } catch (_: Throwable) {}
       try { voicePlayer?.release() } catch (_: Throwable) {}
@@ -616,6 +667,7 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun speakAlarmTextOnce(text: String, volume: Float) {
+    if (stopping || !alarmSignalPlaybackActive || activePayload == null) return
     val cleanText = text.trim().ifBlank { "语音闹钟时间到了" }
     currentVoiceText = cleanText
     logVoice("voice.tts.speak", "platform alarm TTS requested", mapOf("textLen" to cleanText.length, "volume" to volume))
@@ -630,11 +682,15 @@ class VoiceAlarmRingingService : Service() {
             .build(),
         )
       } catch (_: Throwable) {}
-      val utteranceId = "alarm_tts_${System.currentTimeMillis()}"
+      val parts = VoiceAlarmTextChunks.split(cleanText, TextToSpeech.getMaxSpeechInputLength())
+      alarmTtsPrefix = "alarm_tts_${++alarmTtsSequence}_"
+      alarmTtsLastId = "${alarmTtsPrefix}${parts.lastIndex}"
       val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f)) }
       try {
-        val result = alarmTts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
-        if (result == null || result == TextToSpeech.ERROR) notifyVoicePlaybackEnd()
+        for ((index, part) in parts.withIndex()) {
+          val result = alarmTts?.speak(part, if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, params, "${alarmTtsPrefix}$index")
+          if (result == null || result == TextToSpeech.ERROR) { alarmTts?.stop(); notifyVoicePlaybackEnd(); break }
+        }
       } catch (_: Throwable) {
         notifyVoicePlaybackEnd()
       }
@@ -642,7 +698,9 @@ class VoiceAlarmRingingService : Service() {
     }
     pendingAlarmTts = cleanText to volume
     if (alarmTts != null) return
+    val initToken = ttsInitGate.next()
     alarmTts = TextToSpeech(this) { status ->
+      if (!ttsInitGate.isCurrent(initToken) || stopping || !alarmSignalPlaybackActive) return@TextToSpeech
       if (status == TextToSpeech.SUCCESS) {
         alarmTtsReady = true
         try { alarmTts?.language = Locale.CHINA } catch (_: Throwable) {}
@@ -658,19 +716,23 @@ class VoiceAlarmRingingService : Service() {
         }
         alarmTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) {
+            if (alarmTtsPrefix.isEmpty() || utteranceId?.startsWith(alarmTtsPrefix) != true) return
             logVoice("voice.tts.onStart", "alarm TTS started", mapOf("utteranceId" to (utteranceId ?: "")))
             notifyVoicePlaybackStart()
           }
           override fun onDone(utteranceId: String?) {
+            if (utteranceId != alarmTtsLastId) return
             logVoice("voice.tts.onDone", "alarm TTS completed", mapOf("utteranceId" to (utteranceId ?: "")))
             notifyVoicePlaybackEnd()
           }
           @Deprecated("Deprecated in Java")
           override fun onError(utteranceId: String?) {
+            if (alarmTtsPrefix.isEmpty() || utteranceId?.startsWith(alarmTtsPrefix) != true) return
             logVoice("voice.tts.onError", "alarm TTS error", mapOf("utteranceId" to (utteranceId ?: "")))
             notifyVoicePlaybackEnd()
           }
           override fun onError(utteranceId: String?, errorCode: Int) {
+            if (alarmTtsPrefix.isEmpty() || utteranceId?.startsWith(alarmTtsPrefix) != true) return
             logVoice("voice.tts.onError", "alarm TTS error", mapOf("utteranceId" to (utteranceId ?: ""), "errorCode" to errorCode))
             notifyVoicePlaybackEnd()
           }
@@ -678,7 +740,7 @@ class VoiceAlarmRingingService : Service() {
         val pending = pendingAlarmTts
         pendingAlarmTts = null
         if (pending != null) {
-          Handler(Looper.getMainLooper()).post { speakAlarmTextOnce(pending.first, pending.second) }
+          replayHandler.post { speakAlarmTextOnce(pending.first, currentVoiceVolume) }
         }
       } else {
         alarmTtsReady = false
@@ -703,7 +765,7 @@ class VoiceAlarmRingingService : Service() {
       }
       // AI 回复正在播报时，不要让提醒语音（早上好…/晚上好…）同时响起；
       // 稍后再查，等这条 AI 回复播完再复读。
-      if (appReplySpeaking) {
+      if (appReplySpeaking || alarmVoicePlaybackActive) {
         replayHandler.postDelayed(replayRunnable!!, 1500L)
         return@Runnable
       }
@@ -809,6 +871,8 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun stopSignals() {
+    wakeupGate.next()
+    ttsInitGate.next()
     val shouldNotifySignalEnd = alarmSignalPlaybackActive
     alarmSignalPlaybackActive = false
     activeSignalPlayback = false
@@ -826,6 +890,8 @@ class VoiceAlarmRingingService : Service() {
     alarmTts = null
     alarmTtsReady = false
     pendingAlarmTts = null
+    alarmTtsPrefix = ""
+    alarmTtsLastId = ""
     musicPlayer = null
     currentMusicVolume = 0.4f
     vibrator = null
@@ -867,45 +933,4 @@ class VoiceAlarmRingingService : Service() {
     audioFocusRequest = null
   }
 
-  @Suppress("DEPRECATION")
-  private fun ensureAudibleAlarmVolume() {
-    try {
-      val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-      // When routed through a headset via USAGE_MEDIA, STREAM_ALARM's volume is irrelevant -
-      // raise STREAM_MUSIC instead so a forgotten-low media volume doesn't make the alarm
-      // effectively silent in the user's ears. Most users already keep STREAM_ALARM near max,
-      // but STREAM_MUSIC is usually left at an everyday-listening level, so push it much closer
-      // to max here (rather than the 70% floor used for the speaker/ALARM case) to restore the
-      // loudness users expect from the alarm once it is only audible through the headset.
-      val stream = playbackStream()
-      val current = audio.getStreamVolume(stream)
-      originalVolumeStream = stream
-      originalAlarmVolume = current
-      val targetRatio = if (headsetOutputConnected()) 0.95f else 0.7f
-      val target = maxOf(1, (audio.getStreamMaxVolume(stream) * targetRatio).toInt())
-      if (current < target) audio.setStreamVolume(stream, target, 0)
-      // 蓝牙耳机若通过 SCO（电话通道）出声，其音量由 STREAM_VOICE_CALL 控制，
-      // STREAM_MUSIC 的提升对它无效——这正是“蓝牙耳机时播报/音乐很小”的原因。
-      // 因此 SCO 生效时把通话流也拉到接近最大，并在结束后恢复。
-      // 正常情况下已不再启用 SCO（会挂起 A2DP）。这里仅在系统确实处于 SCO 出声时兜底：
-      // 此时音量由 STREAM_VOICE_CALL 控制，一并拉高并在结束后恢复。
-      if (audio.isBluetoothScoOn) {
-        val callStream = AudioManager.STREAM_VOICE_CALL
-        val callCurrent = audio.getStreamVolume(callStream)
-        if (originalVoiceCallVolume == null) originalVoiceCallVolume = callCurrent
-        val callTarget = maxOf(1, (audio.getStreamMaxVolume(callStream) * 0.95f).toInt())
-        if (callCurrent < callTarget) audio.setStreamVolume(callStream, callTarget, 0)
-      }
-    } catch (_: Throwable) {}
-  }
-
-  private fun restoreAlarmVolume() {
-    try {
-      val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-      originalAlarmVolume?.let { audio.setStreamVolume(originalVolumeStream, it, 0) }
-      originalVoiceCallVolume?.let { audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, it, 0) }
-    } catch (_: Throwable) {}
-    originalAlarmVolume = null
-    originalVoiceCallVolume = null
-  }
 }
