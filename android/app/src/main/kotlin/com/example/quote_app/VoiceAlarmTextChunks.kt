@@ -9,6 +9,10 @@ object VoiceAlarmTextChunks {
     while (start < text.length) {
       var end = (start + limit).coerceAtMost(text.length)
       if (end < text.length && text[end - 1].isHighSurrogate() && text[end].isLowSurrogate()) end--
+      if (end < text.length) {
+        val boundary = (end - 1 downTo start + limit / 3).firstOrNull { text[it] in "。！？；.!?;\n" }
+        if (boundary != null) end = boundary + 1
+      }
       parts.add(text.substring(start, end))
       start = end
     }

@@ -105,6 +105,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   List<Map<String, dynamic>> _scheduledAlarms = <Map<String, dynamic>>[];
   bool _showAdvanced = false;
   bool _aiWakeupEnabled = false;
+  bool _aiWebSearchEnabled = true;
   bool _testingWakeup = false;
   bool _hasWakeupDeviceToken = false;
   bool _hasWakeupServiceToken = false;
@@ -269,6 +270,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     setState(() {
       _voiceProfiles = profiles;
       _aiWakeupEnabled = data['aiWakeupEnabled'] == true;
+      _aiWebSearchEnabled = data['aiWebSearchEnabled'] != false;
       _generatedVoice = data['voicePath']?.toString();
       _text.text = (data['text'] ?? (mode == 'morning' ? _morningDefault : _nightDefault)).toString();
       _provider = (data['provider'] ?? 'microsoft').toString();
@@ -1020,6 +1022,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'weekdays': _effectiveWeekdays().toList()..sort(),
       // Credentials live only in the Android Keystore-backed connection store.
       'aiWakeupEnabled': _aiWakeupEnabled,
+      'aiWebSearchEnabled': _aiWebSearchEnabled,
       'voiceVolume': _voiceVolume,
       'musicVolume': _musicVolume,
       'stability': _stability,
@@ -1519,6 +1522,16 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                         },
                       ),
                     )),
+              SwitchListTile(
+                title: const Text('语音 AI 联网搜索'),
+                subtitle: const Text('按需查询实时资料并显示来源。支持官方 OpenAI、xAI 和 OpenRouter 的搜索模型，沿用全局 AI 配置；服务商可能收取搜索费用。保存后同步当前模式的已有闹钟。'),
+                value: _aiWebSearchEnabled,
+                onChanged: (value) => setState(() => _aiWebSearchEnabled = value),
+              ),
+              const ListTile(
+                title: Text('支持说“关闭背景音乐”或“播放背景音乐”'),
+                subtitle: Text('播报时可直接插话，也可点击全屏页的“打断播报，我来说”。识别失败的录音可重试。'),
+              ),
               ListTile(
                 title: Text('闹钟语音重播间隔 $_replayIntervalSeconds 秒'),
                 subtitle: Slider(value: _replayIntervalSeconds.toDouble(), min: 15, max: 300, divisions: 19, onChanged: (value) => setState(() => _replayIntervalSeconds = value.round())),

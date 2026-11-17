@@ -1,0 +1,125 @@
+package com.example.quote_app
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+fun main() {
+  var passed = 0
+  fun scenario(name: String, test: () -> Unit) { test(); passed++; println("PASS $name") }
+  scenario("long reminder preserves all characters and requires acknowledgements") {
+    val text = "这是一段虚构提醒。🙂请坐起，双脚落地。\n".repeat(400)
+    val queue = VoiceAlarmPlaybackQueue(); queue.start(text)
+    val spoken = StringBuilder()
+    while (queue.pending) {
+      val item = queue.current!!; check(item.text.length <= 180); spoken.append(item.text)
+      check(!queue.done("stale")); check(queue.done(item.id)); check(!queue.done(item.id))
+    }
+    check(spoken.toString() == text)
+  }
+  scenario("pause and volume changes keep unread chunks and invalidate old callbacks") {
+    val q = VoiceAlarmPlaybackQueue(); q.start("abc".repeat(300)); q.done(q.current!!.id)
+    val old = q.current!!; val next = q.resume()!!
+    check(old.text == next.text && old.id != next.id && !q.done(old.id) && q.done(next.id))
+  }
+  scenario("TTS retry is bounded and does not discard unread text") {
+    val q = VoiceAlarmPlaybackQueue(); q.start("测试")
+    repeat(2) { check(q.retry(q.current!!.id) != null) }
+    check(q.retry(q.current!!.id) == null && q.current!!.text == "测试")
+  }
+  scenario("dismiss prevents late callbacks reviving output") {
+    val q = VoiceAlarmPlaybackQueue(); val old = q.start("测试")!!; q.cancel()
+    check(!q.pending && !q.done(old.id) && q.resume() == null && !q.done(null))
+  }
+  scenario("sentence splitting preserves whitespace and surrogate pairs") {
+    val text = "啊🙂。\n你好！  世界\n最后一句"
+    for (n in 2..12) {
+      val parts = VoiceAlarmTextChunks.split(text, n)
+      check(parts.joinToString("") == text)
+      check(parts.all { it.length <= n && !it.first().isLowSurrogate() && !it.last().isHighSurrogate() })
+    }
+  }
+  scenario("music commands do not dismiss alarm") {
+    for (text in listOf("请关闭背景音乐", "请帮我关掉背景音乐", "暂停播放音乐", "把背景音乐关掉", "不要播放背景音乐")) {
+      check(VoiceAlarmCommands.music(text) == VoiceAlarmCommands.Music.STOP); check(!VoiceAlarmCommands.isStop(text))
+    }
+    for (text in listOf("播放背景音乐", "请打开背景音乐", "恢复播放音乐", "把背景音乐打开")) check(VoiceAlarmCommands.music(text) == VoiceAlarmCommands.Music.PLAY)
+  }
+  scenario("negations questions and discussion do not change music") {
+    for (text in listOf("不要关闭背景音乐", "别关掉音乐", "为什么关闭背景音乐", "我刚才说播放背景音乐了吗", "如果关闭背景音乐", "不要停止音乐")) check(VoiceAlarmCommands.music(text) == null)
+  }
+  scenario("music OFF survives restore timers and manual gain changes") {
+    val state = VoiceAlarmMusicState(); state.duck(1000, 3000); check(state.gain(1500, .7f) == 0f)
+    state.choose(false); check(state.gain(5000, 1f) == 0f)
+    state.choose(true); check(state.gain(5000, .35f) == .35f)
+    state.duck(5000, 2000); state.duck(6000, 3000)
+    check(state.gain(8000, 1f) == 0f && state.gain(9000, 1f) == 1f)
+  }
+  scenario("pre-roll and first syllables survive byte for byte") {
+    val turn = VoiceAlarmTurnBuffer(800, 10000)
+    val frames = (1..20).map { ByteArray(640) { _ -> it.toByte() } }
+    frames.forEachIndexed { i, frame -> turn.add(frame, i >= 14) }
+    check(turn.started && turn.audio().contentEquals(frames.flatMap { it.toList() }.toByteArray()))
+  }
+  scenario("sentence pauses retained and endpoint waits for full silence") {
+    val turn = VoiceAlarmTurnBuffer(800, 10000)
+    repeat(10) { check(!turn.add(ByteArray(640) { 1 }, true)) }
+    repeat(20) { check(!turn.add(ByteArray(640), false)) }
+    repeat(10) { check(!turn.add(ByteArray(640) { 2 }, true)) }
+    repeat(39) { check(!turn.add(ByteArray(640), false)) }
+    check(turn.add(ByteArray(640), false)); check(turn.audio().size == 80 * 640)
+  }
+  scenario("idle time never consumes user turn duration") {
+    val turn = VoiceAlarmTurnBuffer(800, 2000)
+    repeat(4000) { check(!turn.add(ByteArray(640), false)) }
+    repeat(50) { check(!turn.add(ByteArray(640) { 2 }, true)) }
+    check(turn.started && turn.audio().size > 32000)
+  }
+  scenario("consonant gaps preserve complete onset") {
+    val turn = VoiceAlarmTurnBuffer(800, 10000)
+    listOf(true,false,true,true,false,true,true,true).forEachIndexed { i,v -> turn.add(ByteArray(640) { i.toByte() },v) }
+    check(turn.started && turn.audio().size == 8 * 640)
+  }
+  scenario("manual submit keeps unconfirmed soft speech") {
+    val turn = VoiceAlarmTurnBuffer(800,10000); repeat(12) { turn.add(ByteArray(640) { 1 },false) }
+    check(turn.audio().isEmpty() && turn.audio(true).size == 12 * 640)
+  }
+  scenario("delayed echo uses capture snapshot while user quotations survive") {
+    val text = "这是一条虚构的完整唤醒提醒"
+    check(VoiceAlarmSpeechPolicy.isEcho(text, listOf(text), true))
+    check(!VoiceAlarmSpeechPolicy.isEcho(text + "是什么意思", listOf(text), true))
+  }
+  fun config(provider: String, endpoint: String) = JSONObject().put("provider",provider).put("endpoint",endpoint).put("model","fictional")
+  scenario("three providers send actual native search tools with same origin") {
+    for ((p,h,prefix) in listOf(Triple("openai","api.openai.com","/v1"),Triple("xgrok","api.x.ai","/v1"),Triple("openrouter","openrouter.ai","/api/v1"))) {
+      val plan = VoiceAlarmWebSearch.plan(config(p,"https://$h$prefix/chat/completions"), JSONArray(),true)
+      check(plan.enabled && plan.error == null && plan.endpoint == "https://$h$prefix/responses")
+      check(plan.body.has("input") && !plan.body.has("messages") && !plan.body.has("temperature"))
+      check(plan.body.getJSONArray("tools").getJSONObject(0).getString("type") == if (p == "openrouter") "openrouter:web_search" else "web_search")
+      check(!plan.body.getBoolean("store"))
+    }
+  }
+  scenario("search OFF preserves existing ordinary conversation") {
+    val plan = VoiceAlarmWebSearch.plan(config("deepseek","https://api.deepseek.com/chat/completions"),JSONArray(),false)
+    check(!plan.enabled && plan.error == null && plan.body.has("messages") && !plan.body.has("tools"))
+  }
+  scenario("unsupported or custom endpoints never silently migrate credentials") {
+    for (c in listOf(config("deepseek","https://api.deepseek.com/chat/completions"),config("openai","https://custom.example/v1/chat/completions"),config("openai","http://api.openai.com/v1/chat/completions"))) {
+      val plan = VoiceAlarmWebSearch.plan(c,JSONArray(),true)
+      check(!plan.enabled && plan.error != null && plan.endpoint == c.getString("endpoint"))
+    }
+  }
+  scenario("sources need structured evidence and unsafe URLs are rejected") {
+    val obj = JSONObject("""{"output":[{"type":"message","content":[{"type":"output_text","annotations":[{"type":"url_citation","url":"https://example.org/source"},{"type":"url_citation","url":"javascript:alert(1)"}]}]}],"citations":["https://example.org/source","https://user:secret@example.org/secret"]}""")
+    check(VoiceAlarmWebSearch.sources(obj) == listOf("https://example.org/source"))
+    check(VoiceAlarmWebSearch.searched(obj)); check(!VoiceAlarmWebSearch.searched(JSONObject("""{"output_text":"I searched online"}""")))
+  }
+  scenario("xAI chunk finals retain prior words and full correction wins") {
+    val t = VoiceAlarmXaiTranscript()
+    check(t.apply(JSONObject("""{"type":"transcript.partial","text":"第一句话。","start":0,"is_final":true}""")) == "第一句话。")
+    check(t.apply(JSONObject("""{"type":"transcript.partial","text":"第二","start":3}""")) == "第一句话。第二")
+    check(t.apply(JSONObject("""{"type":"transcript.partial","text":"第二句话。","start":3,"is_final":true}""")) == "第一句话。第二句话。")
+    check(t.apply(JSONObject("""{"type":"transcript.partial","text":"修正后的完整句。","speech_final":true,"is_final":true}""")) == "修正后的完整句。")
+    check(t.apply(JSONObject("""{"type":"transcript.done","duration":6}""")) == "修正后的完整句。")
+  }
+  println("$passed live voice regression scenarios passed")
+}
