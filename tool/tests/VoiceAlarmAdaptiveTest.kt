@@ -22,6 +22,37 @@ fun main() {
     check(turn.finish("") == "明天的计划"); check(turn.finish() == null)
     turn.begin(); turn.partial("不能带到下次"); turn.cancel(); turn.begin(); check(turn.finish() == "")
   }
+  scenario("a new noise onset cannot hold the previous finalized user sentence") {
+    val turn = VoiceAlarmNativeTurn()
+    turn.begin(); turn.ready(); turn.speechStarted()
+    check(!turn.shouldWaitForFinal(true))
+    check(turn.shouldWaitForFinal(false))
+  }
+  scenario("lost final can recover an existing draft without cutting off live speech") {
+    val turn = VoiceAlarmNativeTurn()
+    turn.begin(); turn.ready(); turn.partial("虚构的完整问题")
+    check(turn.timeoutMs(20000) >= 65000)
+    turn.endSpeech()
+    check(turn.timeoutMs(20000) == 2500L)
+    check(turn.finish() == "虚构的完整问题")
+    check(turn.finish("迟到的最终结果") == null)
+    check(VoiceAlarmNativeTurn.bestCandidate(listOf("", " 首个可用结果 ", "另一个")) == "首个可用结果")
+  }
+  scenario("a delayed native final uses only speech overlapping this capture") {
+    val turn = VoiceAlarmNativeTurn()
+    val prompt = listOf("愿你专注、充满力量。")
+    check(turn.begin())
+    turn.notePlayback(prompt)
+    check(turn.playbackSources.isEmpty()) // Microphone idle during playback.
+    turn.speechStarted()
+    turn.notePlayback(prompt)
+    turn.endSpeech()
+    turn.notePlayback(listOf("另一条提醒"))
+    val final = turn.finish("专注充满力量")!!
+    check(turn.playbackSources == prompt)
+    check(VoiceAlarmSpeechPolicy.isEcho(final, turn.playbackSources, true))
+    check(turn.begin() && turn.playbackSources.isEmpty()) // User may now quote the reminder.
+  }
   scenario("first Wakeup body is exact and bypasses generation") {
     val s = VoiceAlarmWakeSession("固定朗读。"); val original = "  当日正式提醒。\n先坐起。  "
     val p = s.prepare(listOf("虚构目标"), original) { error("First round must not generate") }

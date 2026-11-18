@@ -42,6 +42,19 @@ fun main() {
     check(!VoiceAlarmSpeechPolicy.isVoice(180, 650, 40, 360, 60, 100.0))
     check(VoiceAlarmSpeechPolicy.isVoice(360, 1250, 40, 347, 60, 100.0))
   }
+  scenario("speaker fragment transcribed without punctuation must not stop TTS") {
+    // Synthetic prompt containing the six-character fragment from the bug report.
+    val playing = listOf("测试提醒。愿你专注、充满力量。现在站起来。")
+    check(VoiceAlarmSpeechPolicy.isEcho("专注充满力量", playing, true))
+    check(VoiceAlarmSpeechPolicy.isEcho("充满力量", playing, true))
+    check(VoiceAlarmSpeechPolicy.isEcho("专注", listOf("愿你平静、专注、充满力量。"), true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("起来", playing, true)) // Only part of a longer clause.
+    check(!VoiceAlarmSpeechPolicy.isEcho("ring", listOf("bringing coffee"), true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("专注充满力量是什么意思", playing, true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("请关闭背景音乐", playing, true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("关闭闹钟", playing, true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("专注充满力量", playing, false))
+  }
   scenario("clean reply can quote or repeat the assistant") {
     check(!VoiceAlarmSpeechPolicy.isEcho("新的一天开始了", listOf("早上好，新的一天开始了"), false))
     check(!VoiceAlarmSpeechPolicy.isEcho("早上好，新的一天开始了", listOf("早上好，新的一天开始了"), false))

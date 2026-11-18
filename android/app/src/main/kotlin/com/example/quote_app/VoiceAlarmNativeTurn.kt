@@ -7,8 +7,30 @@ class VoiceAlarmNativeTurn {
   var hasSpeech = false; private set
   var awaitingFinal = false; private set
   private var draft = ""
+  private val overlappingSources = linkedSetOf<String>()
+  val playbackSources: List<String> get() = overlappingSources.toList()
+
+  fun notePlayback(sources: List<String>) {
+    if (active && hasSpeech && !awaitingFinal) overlappingSources.addAll(sources.filter { it.isNotBlank() })
+  }
+  // A new capture must never postpone delivery of the preceding confirmed result.
+  fun shouldWaitForFinal(bufferIsFinal: Boolean): Boolean = active && hasSpeech && !bufferIsFinal
+
+  fun timeoutMs(maxUtteranceMs: Long): Long = when {
+    awaitingFinal && draft.isNotBlank() -> 2500L
+    awaitingFinal || !ready -> 8000L
+    hasSpeech -> maxOf(65000L, maxUtteranceMs + 5000L)
+    else -> 18000L
+  }
+
+  companion object {
+    fun bestCandidate(candidates: List<String>?): String =
+      candidates?.firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+  }
+
   fun begin(): Boolean {
     if (active) return false
+    overlappingSources.clear()
     active = true; ready = false; hasSpeech = false; awaitingFinal = false; draft = ""; return true
   }
   fun ready() { if (active) ready = true }
@@ -20,5 +42,5 @@ class VoiceAlarmNativeTurn {
     active = false; ready = false; hasSpeech = false; awaitingFinal = false
     return text.takeIf { it.isNotBlank() } ?: draft
   }
-  fun cancel() { active = false; ready = false; hasSpeech = false; awaitingFinal = false; draft = "" }
+  fun cancel() { overlappingSources.clear(); active = false; ready = false; hasSpeech = false; awaitingFinal = false; draft = "" }
 }

@@ -28,16 +28,23 @@ object VoiceAlarmSpeechPolicy {
 
   fun normalized(text: String): String = text.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
 
+  private val phraseBoundary = Regex("[，。！？、；：,.!?;:\\s]+")
+
   // Only near-verbatim playback captured during playback can be echo. Do not delete
   // matching phrases from a user's sentence: "不要关闭闹钟" must retain its negation.
   fun isEcho(text: String, sources: List<String>, overlapsPlayback: Boolean): Boolean {
     if (!overlapsPlayback) return false
     val candidate = normalized(text)
-    if (candidate.length < 4) return false
+    if (candidate.length < 2) return false
+    val containsHan = candidate.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
     return sources.any { source ->
       val spoken = normalized(source)
-      spoken.length >= 4 && (spoken == candidate ||
-        (candidate.length >= 8 && spoken.contains(candidate)))
+      when {
+        spoken == candidate -> true
+        candidate.length >= 8 || (containsHan && candidate.length >= 4) -> spoken.contains(candidate)
+        containsHan -> source.split(phraseBoundary).any { normalized(it) == candidate }
+        else -> false
+      }
     }
   }
 }

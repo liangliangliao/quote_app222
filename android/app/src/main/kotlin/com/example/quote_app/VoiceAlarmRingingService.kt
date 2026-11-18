@@ -631,10 +631,9 @@ class VoiceAlarmRingingService : Service() {
     musicState.choose(true)
     val data = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
     alarmSignalPlaybackActive = true
-    activeSignalPlayback = true
+    activeSignalPlayback = false
     headsetPlaybackModeActive = headsetOutputConnected()
     registerHeadsetRouteCallback()
-    sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_START).setPackage(packageName).putExtra("hasMusic", data.optBoolean("systemMusic", true) || data.optString("musicPath", "").isNotBlank() || data.optJSONArray("musicPaths")?.length()?.let { it > 0 } == true))
     logVoice("signals.start", "starting alarm signals", mapOf("hasVoicePath" to data.optString("voicePath", "").isNotBlank(), "textLen" to data.optString("text", "").length, "systemMusic" to data.optBoolean("systemMusic", true), "vibrate" to data.optBoolean("vibrate", true)))
     requestAlarmAudioFocus()
     // Respect manually selected system alarm/media volume; never raise it behind the user.
@@ -916,6 +915,7 @@ class VoiceAlarmRingingService : Service() {
     val safePostponeMs = postponeMs.coerceIn(1000L, 180_000L)
     voiceReplayBlockedUntil = maxOf(voiceReplayBlockedUntil, System.currentTimeMillis() + safePostponeMs)
     if (!interrupt) return // postpone next repeat without cutting off this prompt
+    logVoice("voice.interrupt", "stopping playback for barge-in", mapOf("voiceActive" to alarmVoicePlaybackActive))
     if (alarmVoicePlaybackActive || voiceQueue.pending) wakeSession?.markPlayback("用户插话中断，未保证听完")
     if (wakeSession != null) voiceQueue.cancel()
     voiceQueue.resume()
@@ -932,8 +932,11 @@ class VoiceAlarmRingingService : Service() {
   private fun applyMusicGain() {
     val gain = musicState.gain(System.currentTimeMillis(), currentMusicVolume)
     try { musicPlayer?.setVolume(gain, gain) } catch (_: Throwable) {}
-    activeSignalPlayback = alarmSignalPlaybackActive && gain > 0f && musicPlayer != null
-    sendBroadcast(Intent(if (activeSignalPlayback) ACTION_SIGNAL_PLAYBACK_START else ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName))
+    val audible = alarmSignalPlaybackActive && gain > 0f && runCatching { musicPlayer?.isPlaying == true }.getOrDefault(false)
+    if (activeSignalPlayback == audible) return
+    activeSignalPlayback = audible
+    sendBroadcast(Intent(if (audible) ACTION_SIGNAL_PLAYBACK_START else ACTION_SIGNAL_PLAYBACK_END)
+      .setPackage(packageName).putExtra("hasMusic", audible))
   }
 
   private fun duckMusicFor(durationMs: Long) {
