@@ -51,6 +51,8 @@ class VoiceAlarmRingingService : Service() {
         action = ACTION_MUSIC; putExtra("enabled", enabled)
       })
     }
+    const val ACTION_ROUND_STATUS = "com.example.quote_app.VOICE_ALARM_ROUND_STATUS"
+    @Volatile var roundStatus: String = ""; private set
     const val ACTION_DISMISSED = "com.example.quote_app.VOICE_ALARM_DISMISSED"
     private const val ACTION_SET_VOLUMES = "com.example.quote_app.VOICE_ALARM_SET_VOLUMES"
     @JvmStatic fun setPlaybackVolumes(context: Context, voice: Float, music: Float) {
@@ -274,6 +276,10 @@ class VoiceAlarmRingingService : Service() {
   private val musicState = VoiceAlarmMusicState()
   private var voiceChunkWatchdog: Runnable? = null
   private val wakeupGate = VoiceAlarmReplyGate()
+  private var wakeSession: VoiceAlarmWakeSession? = null
+  private var roundBusy = false
+  @Volatile private var roundClient: VoiceAlarmAiClient? = null
+  private var readyRoundRunnable: Runnable? = null
   private val ttsInitGate = VoiceAlarmReplyGate()
   private var stopping = false
   private var currentVoiceVolume = 1f
@@ -473,7 +479,16 @@ class VoiceAlarmRingingService : Service() {
     // player/TTS engine/audio-focus request is (re)created, so rebuild playback from scratch
     // with the attributes that match the new state instead of trying to hot-swap them.
     logVoice("audioRoute.modeChanged", "headset presence changed mid-ring; rebuilding playback with matching audio attributes", mapOf("headsetNow" to headsetNow))
-    startSignals(currentPayload)
+    if (wakeSession == null) { startSignals(currentPayload); return }
+    headsetPlaybackModeActive = headsetNow
+    requestAlarmAudioFocus()
+    try { alarmTts?.setAudioAttributes(AudioAttributes.Builder().setUsage(playbackUsage()).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()) } catch (_: Throwable) {}
+    if (voiceQueue.pending) { try { alarmTts?.stop() } catch (_: Throwable) {}; resumeAlarmChunk() }
+    val data = latestVoiceReplayPayload(JSONObject())
+    val musicPath = randomExistingPath(data, "musicPaths", "musicPath")
+    val uri = if (musicPath.isNotBlank()) Uri.fromFile(File(musicPath)) else if (data.optBoolean("systemMusic", true)) RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM) else null
+    try { musicPlayer?.release() } catch (_: Throwable) {}
+    musicPlayer = uri?.let { createPlayer(it, true, musicState.gain(System.currentTimeMillis(), currentMusicVolume)) }
   }
 
   private fun startForegroundAlarm(payload: String, openActivity: Boolean = true) {
@@ -581,6 +596,7 @@ class VoiceAlarmRingingService : Service() {
     if (stopping || !alarmSignalPlaybackActive || activePayload == null) return
     if (alarmVoicePlaybackActive) return
     alarmVoicePlaybackActive = true
+    wakeSession?.markPlayback("已开始播报")
     liveVoiceText = currentVoiceText
     persistVoicePlaybackState(this, true, currentVoiceText)
     logVoice("voicePlayback.start", "voice prompt playback started", mapOf("textLen" to currentVoiceText.length))
@@ -653,6 +669,11 @@ class VoiceAlarmRingingService : Service() {
       if (alarmUri != null) musicPlayer = createPlayer(alarmUri, true, currentMusicVolume)
     }
     currentVoiceVolume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f)
+    if (data.optBoolean("adaptiveWakeupEnabled", data.optString("mode") != "night")) {
+      wakeSession = VoiceAlarmWakeSession(data.optString("text"))
+      requestWakeRound(data)
+      return
+    }
     if (!data.optBoolean("aiWakeupEnabled", false)) {
       if (hasVoicePrompt(data)) { playVoiceOnce(data); scheduleVoiceReplay(data) }
     } else {
@@ -672,6 +693,60 @@ class VoiceAlarmRingingService : Service() {
         }
       }.apply { name = "ai-wakeup-content"; isDaemon = true }.start()
     }
+  }
+
+  private fun reportRoundStatus(value: String) {
+    roundStatus = value
+    sendBroadcast(Intent(ACTION_ROUND_STATUS).setPackage(packageName).putExtra("status", value))
+  }
+
+  private fun requestWakeRound(data: JSONObject) {
+    val session = wakeSession ?: return
+    if (roundBusy || !session.active || stopping || activePayload == null) return
+    roundBusy = true
+    val token = wakeupGate.next()
+    val client = VoiceAlarmAiClient()
+    roundClient = client
+    reportRoundStatus("正在准备第 ${session.nextNumber} 轮起床提醒…")
+    Thread {
+      val goals = VoiceAlarmGoalReader.read(this)
+      var source = "ai"
+      var status = ""
+      var motivation = ""
+      try {
+        val remote = if (session.firstRound && data.optBoolean("aiWakeupEnabled", false))
+          try { VoiceAlarmWakeupStore.fetchToday(this) } catch (_: Exception) { null } else null
+        val cfg = data.optJSONObject("aiConfig") ?: JSONObject()
+        val prepared = session.prepare(goals, remote?.text) { messages -> client.request(cfg, messages, false).text }
+        motivation = prepared.motivation
+        source = prepared.source
+      } catch (_: Exception) {
+        source = "local_fallback"
+        status = "AI 暂不可用，本轮使用本地动作提示"
+        motivation = listOf("先不要求自己精神饱满。现在坐起，把双脚放到地上。", "你仍然可以选择从很小的一步开始：离开枕头，坐到床边。", "把今天的决定落到一个动作：站起来，走向水杯。")[((session.nextNumber - 1) % 3)]
+      }
+      replayHandler.post {
+        if (!wakeupGate.isCurrent(token) || !session.active || stopping || activePayload == null) return@post
+        roundClient = null
+        // A late model response must not talk over an ongoing user conversation.
+        readyRoundRunnable = object : Runnable {
+          override fun run() {
+            if (!wakeupGate.isCurrent(token) || !session.active || stopping || activePayload == null) return
+            val remaining = voiceReplayBlockedUntil - System.currentTimeMillis()
+            if (appReplySpeaking || alarmVoicePlaybackActive || remaining > 0) {
+              replayHandler.postDelayed(this, if (remaining > 0) remaining else 500L); return
+            }
+            readyRoundRunnable = null; roundBusy = false
+            val round = session.accept(motivation, goals, source)
+            val latest = latestVoiceReplayPayload(data).put("text", round.body).put("voicePath", "")
+            reportRoundStatus("第 ${round.number} 轮 · ${when (source) { "ai_wakeup" -> "AI Wakeup 当日原文"; "ai" -> "AI 调整起床策略"; else -> status }}")
+            playVoiceOnce(latest)
+            scheduleVoiceReplay(data)
+          }
+        }
+        readyRoundRunnable!!.run()
+      }
+    }.apply { name = "voice-wake-round"; isDaemon = true }.start()
   }
 
   private fun hasVoicePrompt(data: JSONObject): Boolean {
@@ -749,6 +824,7 @@ class VoiceAlarmRingingService : Service() {
               if (voiceQueue.pending) playAlarmChunk() else {
                 voiceChunkWatchdog?.let { replayHandler.removeCallbacks(it) }
                 voiceChunkWatchdog = null
+                wakeSession?.markPlayback("完整播报完成")
                 notifyVoicePlaybackEnd()
               }
             }
@@ -797,6 +873,7 @@ class VoiceAlarmRingingService : Service() {
       replayHandler.postDelayed({ if (!stopping && voiceQueue.current?.id == retryId) playAlarmChunk() }, 500L)
     } else {
       voiceQueue.resume()
+      wakeSession?.markPlayback("语音引擎失败，未播完")
       notifyVoicePlaybackEnd()
       sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_ERROR).setPackage(packageName))
     }
@@ -815,12 +892,18 @@ class VoiceAlarmRingingService : Service() {
       }
       // AI 回复正在播报时，不要让提醒语音（早上好…/晚上好…）同时响起；
       // 稍后再查，等这条 AI 回复播完再复读。
-      if (appReplySpeaking || alarmVoicePlaybackActive) {
+      if (appReplySpeaking || alarmVoicePlaybackActive || pendingAlarmTts != null) {
         replayHandler.postDelayed(replayRunnable!!, 1500L)
         return@Runnable
       }
-      playVoiceOnce(latest)
-      scheduleVoiceReplay(latest)
+      if (wakeSession != null && voiceQueue.pending) {
+        resumeAlarmChunk(); scheduleVoiceReplay(latest)
+      } else if (wakeSession != null) {
+        requestWakeRound(latest)
+      } else {
+        playVoiceOnce(latest)
+        scheduleVoiceReplay(latest)
+      }
     }
     replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
   }
@@ -833,6 +916,8 @@ class VoiceAlarmRingingService : Service() {
     val safePostponeMs = postponeMs.coerceIn(1000L, 180_000L)
     voiceReplayBlockedUntil = maxOf(voiceReplayBlockedUntil, System.currentTimeMillis() + safePostponeMs)
     if (!interrupt) return // postpone next repeat without cutting off this prompt
+    if (alarmVoicePlaybackActive || voiceQueue.pending) wakeSession?.markPlayback("用户插话中断，未保证听完")
+    if (wakeSession != null) voiceQueue.cancel()
     voiceQueue.resume()
     voiceChunkWatchdog?.let { replayHandler.removeCallbacks(it) }; voiceChunkWatchdog = null
     try { voicePlayer?.stop() } catch (_: Throwable) {}
@@ -909,6 +994,11 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun stopSignals() {
+    wakeSession?.close(); wakeSession = null
+    roundClient?.cancel(); roundClient = null; roundBusy = false
+    readyRoundRunnable?.let { replayHandler.removeCallbacks(it) }; readyRoundRunnable = null
+    replayRunnable?.let { replayHandler.removeCallbacks(it) }; replayRunnable = null
+    roundStatus = ""
     wakeupGate.next()
     ttsInitGate.next()
     val shouldNotifySignalEnd = alarmSignalPlaybackActive

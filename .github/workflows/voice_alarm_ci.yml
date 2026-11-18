@@ -6,6 +6,7 @@ on:
       - 'tool/tests/VoiceAlarmSpeechTest.kt'
       - 'tool/tests/VoiceAlarmWakeupTest.kt'
       - 'tool/tests/VoiceAlarmLiveTest.kt'
+      - 'tool/tests/VoiceAlarmAdaptiveTest.kt'
       - 'tool/voice_alarm_regression.sh'
       - 'tool/voice_alarm_wakeup_regression.sh'
       - '.github/workflows/voice_alarm_ci.yml'

@@ -61,8 +61,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   final _aiSettings = GlobalAiSettings();
   static const _native = MethodChannel('com.example.quote_app/voice_alarm');
   TimeOfDay _time = TimeOfDay.now();
-  String _provider = 'microsoft';
-  String _sttProvider = 'microsoft';
+  String _provider = 'native';
+  String _sttProvider = 'native';
   String _sttMode = 'realtime';
   bool _batchAutoSubmit = true;
   double _batchAutoSubmitSilenceMs = 1200;
@@ -106,6 +106,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   bool _showAdvanced = false;
   bool _aiWakeupEnabled = false;
   bool _aiWebSearchEnabled = true;
+  bool _adaptiveWakeupEnabled = true;
+  final _azureSearchDeployment = TextEditingController();
   bool _testingWakeup = false;
   bool _hasWakeupDeviceToken = false;
   bool _hasWakeupServiceToken = false;
@@ -216,6 +218,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
 
   @override
   void dispose() {
+    _azureSearchDeployment.dispose();
     _text.dispose();
     _voiceId.dispose();
     _wakeupUrl.dispose();
@@ -271,11 +274,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _voiceProfiles = profiles;
       _aiWakeupEnabled = data['aiWakeupEnabled'] == true;
       _aiWebSearchEnabled = data['aiWebSearchEnabled'] != false;
+      _adaptiveWakeupEnabled = data['adaptiveWakeupEnabled'] as bool? ?? mode != 'night';
+      _azureSearchDeployment.text = (data['azureSearchDeployment'] ?? '').toString();
       _generatedVoice = data['voicePath']?.toString();
       _text.text = (data['text'] ?? (mode == 'morning' ? _morningDefault : _nightDefault)).toString();
-      _provider = (data['provider'] ?? 'microsoft').toString();
-      final loadedSttProvider = (data['sttProvider'] ?? 'microsoft').toString();
-      _sttProvider = ['microsoft', 'iflytek', 'xai'].contains(loadedSttProvider) ? loadedSttProvider : 'microsoft';
+      final loadedProvider = (data['provider'] ?? 'native').toString();
+      _provider = ['microsoft', 'iflytek', 'elevenlabs', 'resemble', 'minimax'].contains(loadedProvider) ? loadedProvider : 'native';
+      final loadedSttProvider = (data['sttProvider'] ?? 'native').toString();
+      _sttProvider = ['microsoft', 'iflytek', 'xai'].contains(loadedSttProvider) ? loadedSttProvider : 'native';
       final loadedSttMode = (data['sttMode'] ?? 'realtime').toString();
       _sttMode = ['realtime', 'batch'].contains(loadedSttMode) ? loadedSttMode : 'realtime';
       final batchStt = data['batchStt'] is Map ? Map<String, dynamic>.from(data['batchStt'] as Map) : <String, dynamic>{};
@@ -451,6 +457,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
           : await _aiSettings.getVoiceAlarmMorningAssistantPrompt();
       _alarmAiConfig = <String, dynamic>{
         'provider': cfg.provider,
+        'searchDeployment': _azureSearchDeployment.text.trim(),
         // Azure 的请求体要下发部署名，而 cfg.model 是设置页展示用的“资源名/部署名”。
         'model': cfg.deployment,
         'displayModel': cfg.displayModel,
@@ -672,7 +679,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       await _refreshAlarmAiConfig();
       try {
         _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-        if (_selectedSavedVoicePath == null && _generatedVoice != null) await _rememberGeneratedVoice(_generatedVoice!);
+        if (_selectedSavedVoicePath == null && _generatedVoice?.isNotEmpty == true) await _rememberGeneratedVoice(_generatedVoice!);
       } catch (e) {
         // Voice file generation depends on third-party TTS credentials/network.
         // Do not let that prevent the native alarm from being registered; the
@@ -817,7 +824,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       await _refreshAlarmAiConfig();
       try {
         _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-        if (_selectedSavedVoicePath == null && _generatedVoice != null) await _rememberGeneratedVoice(_generatedVoice!);
+        if (_selectedSavedVoicePath == null && _generatedVoice?.isNotEmpty == true) await _rememberGeneratedVoice(_generatedVoice!);
       } catch (e) {
         _generatedVoice = null;
         _toast('语音文件生成失败，将用系统兜底播报：$e');
@@ -871,6 +878,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   }
 
   Future<String> _generateVoiceFile() async {
+    if (_provider == 'native' || _adaptiveWakeupEnabled) return '';
     final text = _text.text.trim();
     if (_provider == 'microsoft') {
       return _tts.synthesizeMicrosoftToFile(
@@ -974,7 +982,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       await _refreshAlarmAiConfig();
       try {
         _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-        if (_selectedSavedVoicePath == null && _generatedVoice != null) await _rememberGeneratedVoice(_generatedVoice!);
+        if (_selectedSavedVoicePath == null && _generatedVoice?.isNotEmpty == true) await _rememberGeneratedVoice(_generatedVoice!);
       } catch (e) {
         // Voice file generation depends on third-party TTS credentials/network.
         // Do not let that prevent the native alarm from being registered; the
@@ -1001,7 +1009,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'sttProvider': _sttProvider,
       'sttMode': _sttMode,
       'batchStt': _batchSttMap(),
-      'voicePath': _generatedVoice ?? '',
+      'voicePath': _provider == 'native' ? '' : (_generatedVoice ?? ''),
       'alarmId': alarmId ?? '',
       'musicPath': (_customMusics.isEmpty ? null : _customMusics.first) ?? _customMusic ?? '',
       'musicPaths': _customMusics,
@@ -1023,6 +1031,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       // Credentials live only in the Android Keystore-backed connection store.
       'aiWakeupEnabled': _aiWakeupEnabled,
       'aiWebSearchEnabled': _aiWebSearchEnabled,
+      'adaptiveWakeupEnabled': _adaptiveWakeupEnabled,
+      'azureSearchDeployment': _azureSearchDeployment.text.trim(),
       'voiceVolume': _voiceVolume,
       'musicVolume': _musicVolume,
       'stability': _stability,
@@ -1235,7 +1245,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   value: _provider,
                   decoration: const InputDecoration(labelText: '文字转语音服务商', border: OutlineInputBorder()),
                   items: const [
-                    DropdownMenuItem(value: 'microsoft', child: Text('Microsoft Azure Speech（默认）')),
+                    DropdownMenuItem(value: 'native', child: Text('系统默认语音（无需服务商）')),
+                    DropdownMenuItem(value: 'microsoft', child: Text('Microsoft Azure Speech')),
                     DropdownMenuItem(value: 'elevenlabs', child: Text('ElevenLabs')),
                     DropdownMenuItem(value: 'resemble', child: Text('Resemble AI')),
                     DropdownMenuItem(value: 'minimax', child: Text('MiniMax')),
@@ -1243,7 +1254,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   ],
                   onChanged: (value) {
                     setState(() {
-                      _provider = value ?? 'microsoft';
+                      _provider = value ?? 'native';
+                      _generatedVoice = null;
                       final recommendations = _recommendedVoices(_provider, _mode);
                       _voiceId.text = recommendations.isEmpty ? '' : recommendations.first['id'] ?? '';
                       _selectedSavedVoicePath = null;
@@ -1254,14 +1266,16 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 const SizedBox(height: 8),
                 const Text('服务商参数复用“设置 → 语音与美好的祝福配置”。支持 Microsoft、ElevenLabs、Resemble、MiniMax 与讯飞语音预生成闹钟语音。', style: TextStyle(color: Colors.black54)),
                 const SizedBox(height: 12),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'microsoft', label: Text('微软识别'), icon: Icon(Icons.cloud_outlined)),
-                    ButtonSegment(value: 'iflytek', label: Text('讯飞识别'), icon: Icon(Icons.record_voice_over_outlined)),
-                    ButtonSegment(value: 'xai', label: Text('xAI 识别'), icon: Icon(Icons.auto_awesome_outlined)),
+                DropdownButtonFormField<String>(
+                  value: _sttProvider,
+                  decoration: const InputDecoration(labelText: '语音识别服务', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'native', child: Text('系统默认识别（无需服务商）')),
+                    DropdownMenuItem(value: 'microsoft', child: Text('Microsoft Speech')),
+                    DropdownMenuItem(value: 'iflytek', child: Text('讯飞识别')),
+                    DropdownMenuItem(value: 'xai', child: Text('xAI 识别')),
                   ],
-                  selected: {_sttProvider},
-                  onSelectionChanged: (value) => setState(() => _sttProvider = value.first),
+                  onChanged: (value) => setState(() => _sttProvider = value ?? 'native'),
                 ),
                 const SizedBox(height: 8),
                 SegmentedButton<String>(
@@ -1274,7 +1288,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _sttMode == 'batch'
+                  _sttProvider == 'native'
+                      ? '使用手机系统默认中文识别服务；准备好后显示正在聆听。系统未安装识别服务时会提示，不会自动调用其他云服务。'
+                      : _sttMode == 'batch'
                       ? '非实时模式采用自动待命的聊天输入框逻辑：无需手动开启录音，空闲时自动监听；确认你开始说话后才保存本轮 utterance，说完静音或手动发送后只上传这一条完整录音。'
                       : '实时模式会持续收音并边识别边显示候选文本；xAI 使用 WebSocket 流式 STT，讯飞支持动态修正，微软使用短句连续识别。',
                   style: const TextStyle(color: Colors.black54),
@@ -1524,9 +1540,23 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     )),
               SwitchListTile(
                 title: const Text('语音 AI 联网搜索'),
-                subtitle: const Text('按需查询实时资料并显示来源。支持官方 OpenAI、xAI 和 OpenRouter 的搜索模型，沿用全局 AI 配置；服务商可能收取搜索费用。保存后同步当前模式的已有闹钟。'),
+                subtitle: const Text('按需查询实时资料并显示来源。支持 Azure／Microsoft Foundry、官方 OpenAI、xAI 和 OpenRouter；实际能力取决于部署。沿用全局 AI 配置；服务商可能收取搜索费用。保存后同步当前模式的已有闹钟。'),
                 value: _aiWebSearchEnabled,
                 onChanged: (value) => setState(() => _aiWebSearchEnabled = value),
+              ),
+              TextField(
+                controller: _azureSearchDeployment,
+                decoration: const InputDecoration(
+                  labelText: 'Azure 搜索部署名（可选）',
+                  helperText: '其他模型不支持搜索时，填写同一资源内支持 web_search 的 GPT 部署；搜索结果再交给当前模型回答。',
+                  helperMaxLines: 3,
+                ),
+              ),
+              SwitchListTile(
+                title: const Text('逐轮调整起床提醒'),
+                subtitle: const Text('固定朗读＋近期目标/待办＋新的起床提醒。首轮优先使用已启用的 AI Wakeup 当日原文，后续按重播间隔结合前轮内容调整策略。未关闭按规则推定未起床；关闭即停止。最多读取3条近期未完成目标或待办，随本轮上下文交给已配置的 AI。动态提醒使用系统语音。'),
+                value: _adaptiveWakeupEnabled,
+                onChanged: (value) => setState(() => _adaptiveWakeupEnabled = value),
               ),
               const ListTile(
                 title: Text('支持说“关闭背景音乐”或“播放背景音乐”'),

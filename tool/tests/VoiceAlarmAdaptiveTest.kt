@@ -1,0 +1,152 @@
+package com.example.quote_app
+
+import org.json.JSONObject
+import org.json.JSONArray
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
+fun main() {
+  var passed = 0
+  fun scenario(name: String, body: () -> Unit) { body(); passed++; println("PASS $name") }
+  fun rejects(body: () -> Unit) { check(runCatching(body).isFailure) }
+  scenario("native end-of-speech cannot prematurely begin another recognition") {
+    val turn = VoiceAlarmNativeTurn(); check(turn.begin()); turn.ready(); turn.speechStarted()
+    turn.partial("请关闭背景"); turn.endSpeech(); check(!turn.begin() && turn.active && turn.awaitingFinal)
+    check(turn.finish("请关闭背景音乐") == "请关闭背景音乐"); check(!turn.hasSpeech)
+    check(turn.begin() && !turn.hasSpeech)
+  }
+  scenario("empty final/error retains partial and duplicate callback is ignored") {
+    val turn = VoiceAlarmNativeTurn(); turn.begin(); turn.partial("明天的计划")
+    check(turn.finish("") == "明天的计划"); check(turn.finish() == null)
+    turn.begin(); turn.partial("不能带到下次"); turn.cancel(); turn.begin(); check(turn.finish() == "")
+  }
+  scenario("first Wakeup body is exact and bypasses generation") {
+    val s = VoiceAlarmWakeSession("固定朗读。"); val original = "  当日正式提醒。\n先坐起。  "
+    val p = s.prepare(listOf("虚构目标"), original) { error("First round must not generate") }
+    check(p.motivation == original && p.source == "ai_wakeup")
+    val round = s.accept(p.motivation, listOf("虚构目标"), p.source)
+    check(round.body == "固定朗读。\n\n你最近设定的目标或待办：虚构目标。\n\n$original")
+  }
+  scenario("subsequent round has original and failure context and changes strategy") {
+    val s = VoiceAlarmWakeSession("固定内容")
+    val first = s.accept("首轮测试", listOf("虚构计划"), "ai_wakeup"); s.markPlayback("完整播报完成")
+    val next = s.prepare(listOf("更新计划"), "不可再次用作首轮") { messages ->
+      val user = JSONObject(messages.getJSONObject(1).getString("content"))
+      check(user.getInt("round") == 2 && user.getJSONArray("recentUserGoals").getString(0) == "更新计划")
+      val previous = user.getJSONArray("previousAttempts").getJSONObject(0)
+      check(previous.getString("motivation") == first.motivation)
+      check(previous.getString("feedback").contains("推定仍未起床"))
+      check(user.getString("suggestedStrategy") != first.strategy)
+      "换个动作：坐到床边。"
+    }
+    check(next.source == "ai" && next.motivation != first.motivation)
+  }
+  scenario("no Wakeup invokes configured model; absent goals never fabricated") {
+    val s = VoiceAlarmWakeSession("早上好"); var calls = 0
+    val p = s.prepare(emptyList(), null) { calls++; "测试生成" }
+    check(calls == 1 && s.accept(p.motivation, emptyList(), p.source).body == "早上好\n\n测试生成")
+  }
+  scenario("repeated model output retries once then fails honestly") {
+    val s = VoiceAlarmWakeSession(""); s.accept("相同正文", emptyList(), "ai")
+    var calls = 0; rejects { s.prepare(emptyList(), null) { calls++; "相同正文" } }; check(calls == 2)
+  }
+  scenario("closing rejects late generation and no later acceptance") {
+    val s = VoiceAlarmWakeSession("")
+    rejects { s.prepare(emptyList(), null) { s.close(); "迟到回复" } }
+    rejects { s.accept("迟到回复", emptyList(), "ai") }
+  }
+  scenario("interrupted rounds are not described as fully heard") {
+    val s = VoiceAlarmWakeSession(""); s.accept("测试", emptyList(), "ai"); s.markPlayback("用户插话中断，未保证听完")
+    check(s.messages(emptyList()).toString().contains("用户插话中断"))
+  }
+  scenario("long session retains first text and evidence from every attempt") {
+    val s = VoiceAlarmWakeSession(""); repeat(40) { s.accept("虚构提醒$it".repeat(50), emptyList(), "ai") }
+    val past = JSONObject(s.messages(emptyList()).getJSONObject(1).getString("content")).getJSONArray("previousAttempts")
+    check(past.length() == 40 && !past.getJSONObject(0).getBoolean("isExcerpt"))
+    check(past.getJSONObject(1).getBoolean("isExcerpt") && !past.getJSONObject(39).getBoolean("isExcerpt"))
+  }
+  fun cfg(endpoint: String, model: String = "custom-deployment") = JSONObject().put("provider", "azure").put("endpoint", endpoint).put("model", model).put("apiKey", "fictional")
+  scenario("Azure legacy and Foundry inference routes use same-origin v1") {
+    for (e in listOf("https://fictional.openai.azure.com/openai/deployments/custom/chat/completions?api-version=2024-10-21", "https://fictional.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview")) {
+      val p = VoiceAlarmWebSearch.plan(cfg(e), JSONArray(), true)
+      check(p.error == null && p.enabled && p.endpoint.endsWith("/openai/v1/responses") && !p.endpoint.contains("api-version"))
+      check(p.body.getString("model") == "custom-deployment")
+    }
+  }
+  scenario("no model-name whitelist rejects non-OpenAI Foundry deployments") {
+    val p = VoiceAlarmWebSearch.plan(cfg("https://fictional.services.ai.azure.com/openai/v1/chat/completions", "custom-deepseek"), JSONArray(), true)
+    check(p.error == null && p.body.getString("model") == "custom-deepseek")
+  }
+  scenario("optional Azure search model never changes origin or leaks Anthropic headers") {
+    val c = cfg("https://fictional.services.ai.azure.com/anthropic/v1/messages", "claude-test")
+      .put("searchDeployment", "gpt-search-test").put("authHeaders", JSONObject().put("x-api-key", "fictional").put("anthropic-version", "2023-06-01"))
+    val search = VoiceAlarmAiClient.searchConfiguration(c)
+    check(search.getString("model") == "gpt-search-test" && !search.has("searchDeployment"))
+    check(search.getString("endpoint") == "https://fictional.services.ai.azure.com/openai/v1/responses")
+    check(search.getJSONObject("authHeaders").getString("api-key") == "fictional" && !search.getJSONObject("authHeaders").has("x-api-key"))
+    rejects { VoiceAlarmAiClient.searchConfiguration(c.put("endpoint", "https://evil.example/anthropic/v1/messages")) }
+  }
+  scenario("Foundry Claude messages and output retain actual text") {
+    val c = cfg("https://fictional.services.ai.azure.com/anthropic/v1/messages", "claude-test")
+    val p = VoiceAlarmWebSearch.plan(c, JSONArray("""[{"role":"system","content":"规则"},{"role":"user","content":"你好"}]"""), false)
+    check(p.body.getString("system") == "规则" && p.body.getJSONArray("messages").length() == 1 && p.body.getInt("max_tokens") > 0)
+    check(VoiceAlarmAiClient.responseText(JSONObject("""{"content":[{"type":"text","text":"完整回答"}]}""")) == "完整回答")
+  }
+  scenario("Bing connection requires project route") {
+    val c = cfg("https://fictional.services.ai.azure.com/openai/v1/responses").put("bingConnectionId", "fictional-connection")
+    check(VoiceAlarmWebSearch.plan(c, JSONArray(), true).error != null)
+    c.put("endpoint", "https://fictional.services.ai.azure.com/api/projects/test/openai/v1/responses")
+    val p = VoiceAlarmWebSearch.plan(c, JSONArray(), true)
+    check(p.error == null && p.body.getJSONArray("tools").getJSONObject(0).getString("type") == "bing_grounding")
+  }
+  scenario("HTTP request preserves messages, authentication and full response") {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/chat/completions") { e ->
+      check(e.requestHeaders.getFirst("Authorization") == "Bearer fictional")
+      val body = JSONObject(e.requestBody.reader().readText()); check(body.getJSONArray("messages").getJSONObject(0).getString("content") == "虚构完整请求")
+      val bytes = JSONObject().put("choices", JSONArray().put(JSONObject().put("message", JSONObject().put("content", "完整测试回答")))).toString().toByteArray()
+      e.sendResponseHeaders(200, bytes.size.toLong()); e.responseBody.use { it.write(bytes) }
+    }; server.start()
+    try {
+      val c = JSONObject().put("provider", "openai").put("endpoint", "http://127.0.0.1:${server.address.port}/chat/completions").put("model", "fictional").put("apiKey", "fictional")
+      val answer = VoiceAlarmAiClient().request(c, JSONArray().put(JSONObject().put("role", "user").put("content", "虚构完整请求")), false)
+      check(answer.text == "完整测试回答" && answer.webStatus == "联网已关闭")
+      val cancelled = VoiceAlarmAiClient(); cancelled.cancel(); rejects { cancelled.request(c, JSONArray(), false) }
+    } finally { server.stop(0) }
+  }
+  scenario("Foundry other-model search runs retrieval then grounded answer over HTTP") {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    var searchCalls = 0; var answerCalls = 0
+    server.createContext("/openai/v1/responses") { e ->
+      searchCalls++
+      val body = JSONObject(e.requestBody.reader().readText())
+      check(body.getString("model") == "search-test" && body.has("tools"))
+      check(e.requestHeaders.getFirst("api-key") == "fictional" && e.requestHeaders.getFirst("x-api-key") == null)
+      val bytes = """{"output":[{"type":"message","content":[{"type":"output_text","text":"虚构检索资料","annotations":[{"type":"url_citation","url":"https://example.org/fictional"}]}]}]}""".toByteArray()
+      e.sendResponseHeaders(200, bytes.size.toLong()); e.responseBody.use { it.write(bytes) }
+    }
+    server.createContext("/anthropic/v1/messages") { e ->
+      answerCalls++
+      val body = JSONObject(e.requestBody.reader().readText())
+      check(body.getString("model") == "claude-test" && !body.has("tools") && body.toString().contains("https://example.org/fictional"))
+      check(e.requestHeaders.getFirst("x-api-key") == "fictional")
+      val bytes = """{"content":[{"type":"text","text":"基于检索资料的虚构回答"}]}""".toByteArray()
+      e.sendResponseHeaders(200, bytes.size.toLong()); e.responseBody.use { it.write(bytes) }
+    }
+    server.start()
+    try {
+      val c = cfg("https://fictional.services.ai.azure.com/anthropic/v1/messages", "claude-test")
+        .put("searchDeployment", "search-test").put("authHeaders", JSONObject().put("x-api-key", "fictional"))
+      val client = VoiceAlarmAiClient { url ->
+        check(url.host == "fictional.services.ai.azure.com")
+        java.net.URL("http://127.0.0.1:${server.address.port}${url.path}").openConnection() as java.net.HttpURLConnection
+      }
+      val result = client.request(c, JSONArray().put(JSONObject().put("role", "user").put("content", "虚构实时问题")), true)
+      check(searchCalls == 1 && answerCalls == 1 && result.sources == listOf("https://example.org/fictional"))
+      check(result.text == "基于检索资料的虚构回答" && result.webStatus.contains("已通过"))
+    } finally { server.stop(0) }
+  }
+  println("$passed adaptive alarm regression scenarios passed")
+}

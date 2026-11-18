@@ -25,9 +25,15 @@ voice_classpath="$voice_deps/okhttp.jar:$voice_deps/okio.jar:$voice_deps/json.ja
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmTurnBuffer.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmWebSearch.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmXaiTranscript.kt \
+  android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmNativeTurn.kt \
+  android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmAiClient.kt \
+  android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmWakeSession.kt \
+  tool/tests/VoiceAlarmAdaptiveTest.kt \
   tool/tests/VoiceAlarmLiveTest.kt \
   tool/tests/VoiceAlarmWakeupTest.kt \
   -classpath "$voice_classpath" -include-runtime -d "$voice_test_dir/wakeup-tests.jar"
 java -cp "$voice_test_dir/wakeup-tests.jar:$voice_classpath" com.example.quote_app.VoiceAlarmWakeupTestKt
 
 java -cp "$voice_test_dir/wakeup-tests.jar:$voice_classpath" com.example.quote_app.VoiceAlarmLiveTestKt
+
+java -cp "$voice_test_dir/wakeup-tests.jar:$voice_classpath" com.example.quote_app.VoiceAlarmAdaptiveTestKt
