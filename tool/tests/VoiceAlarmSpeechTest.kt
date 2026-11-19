@@ -75,8 +75,8 @@ fun main() {
   val send = VoiceAlarmConversationGate.Route.SEND
   val mic = VoiceAlarmConversationGate.Route.OPEN_MIC
   fun route(text: String, sources: List<String> = emptyList(), mixed: Boolean = false,
-            final: Boolean = true, reliable: Boolean = true, armed: Boolean = false) =
-    VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = false)
+            final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed) =
+    VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = false, passive = passive)
 
   scenario("v44 incident replay cannot interrupt TTS or enter correction or conversation") {
     val source = listOf("测试。平静、专注、充满力量。每周专注一项、每天检查行为。")
@@ -98,9 +98,25 @@ fun main() {
     check(route("闹钟助手，我今天该先做什么？").let { it.route == send && it.text == "我今天该先做什么？" })
     check(route("我已经坐起来了", armed = true).route == send)
     check(route("专注一下每天检查行为", armed = true).route == send)
-    check(route("隔壁说了什么").route == review)
     check(route("刚才听到闹钟助手这个词").route == review)
-    check(route("助手这个词是什么意思").route == review)
+    check(route("助手这个词是什么意思").let { it.route == send && it.text == "助手这个词是什么意思" })
+  }
+  scenario("a complete question in quiet standby goes directly to AI even without punctuation") {
+    for (question in listOf("他有几个兄弟", "这件事的动力是什么", "能不能解释一下", "今天有安排吗", "Are you there?")) {
+      check(route(question).let { it.route == send && it.text == question })
+    }
+    check(route("我记得他有几个兄弟").route == review)
+    check(route("我不知道他有几个兄弟").route == review)
+    check(route("随便选哪一个都行").route == review)
+    check(route("我已经回来了").route == review)
+  }
+  scenario("question-shaped words cannot bypass echo, partial, or playback overlap checks") {
+    val question = "他有几个兄弟"
+    val reminder = listOf("读完故事后想想，他有几个兄弟？")
+    check(route(question, reminder, mixed = true).route == echo)
+    check(route(question, mixed = true).reviewReason == VoiceAlarmConversationGate.ReviewReason.PLAYBACK_OVERLAP)
+    check(route(question, final = false).route == VoiceAlarmConversationGate.Route.DRAFT)
+    check(route(question, reliable = false).reviewReason == VoiceAlarmConversationGate.ReviewReason.INCOMPLETE)
   }
   scenario("an intentional reply window never authorizes a previous cloud job or joined captures") {
     val old = VoiceAlarmCapture(2, false, windowId = 3).finish(2, false)
@@ -109,6 +125,11 @@ fun main() {
     check(!current.belongsTo(0) && current.belongsTo(4))
     check(route("我还想再问一句", armed = current.belongsTo(4)).route == send)
     check(route("我还想再问一句", armed = old.belongsTo(4)).route == review)
+    val standby = VoiceAlarmCapture(2, false).finish(2, false)
+    for (capture in listOf(old, old.merge(current), old.merge(standby))) {
+      check(capture.windowId != 0L)
+      check(route("还有什么安排", armed = capture.belongsTo(4), passive = capture.windowId == 0L).route == review)
+    }
     val echo = listOf("下一步整理桌面")
     check(route("整理桌面", echo, mixed = true, armed = true).route == VoiceAlarmConversationGate.Route.ECHO)
   }

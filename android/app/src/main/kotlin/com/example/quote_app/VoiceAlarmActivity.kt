@@ -74,7 +74,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "voice_turn_reliability_v46"
+  private val batchChatPipelineVersion = "voice_turn_reliability_v47"
   private val batchChatPipelineSummary = "连续人声窗口、完整转写、可恢复失败与过期播报隔离"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
@@ -643,7 +643,7 @@ class VoiceAlarmActivity : Activity() {
       }
     }
     panel.addView(reviewButton, LinearLayout.LayoutParams(-1, -2))
-    showReview(reviewText)
+    showReview(reviewText, reviewReason)
     panel.addView(Button(this).apply {
       text = "输入文字继续对话"
       setOnClickListener {
@@ -752,6 +752,7 @@ class VoiceAlarmActivity : Activity() {
 
   private var reviewButton: Button? = null
   private var reviewText = ""
+  private var reviewReason = ""
   private var alarmGeneration = 0L
   private var requestedTurn = false
   private var listenWindow = VoiceAlarmListenWindow(25000L)
@@ -775,7 +776,8 @@ class VoiceAlarmActivity : Activity() {
     micStatus(when {
       requestedFollowUp -> "可以直接追问"
       requestedTurn -> "可以说话了"
-      else -> "麦克风已就绪 · 说“闹钟助手”开始对话"
+      VoiceAlarmRingingService.outputOrTailActive() -> "麦克风已就绪 · 说“闹钟助手”暂停播放后提问"
+      else -> "麦克风已就绪 · 可以直接提问"
     })
   }
 
@@ -787,7 +789,7 @@ class VoiceAlarmActivity : Activity() {
       if (remaining > 0) { speechHandler.postDelayed(this, remaining); return }
       val needsRestart = waitingForQuiet
       endRequestedTurn()
-      micStatus("语音待命 · 说“闹钟助手”可再次提问")
+      micStatus("语音待命 · 安静时可以直接提问")
       if (needsRestart && !destroyed && !closingAlarm) startVoiceAssistant()
     }
   }
@@ -834,11 +836,13 @@ class VoiceAlarmActivity : Activity() {
     speechHandler.post(startQuietCapture)
   }
 
-  private fun showReview(text: String) {
+  private fun showReview(text: String, reason: String = "") {
     reviewText = text
+    reviewReason = reason
     reviewButton?.apply {
       visibility = if (text.isBlank()) View.GONE else View.VISIBLE
-      this.text = if (text.isBlank()) "核对并发送语音" else "已听到「${text.take(36)}${if (text.length > 36) "…" else ""}」· 核对并发送"
+      val preview = text.take(36) + if (text.length > 36) "…" else ""
+      this.text = if (text.isBlank()) "核对并发送语音" else "$reason\n确认发送「$preview」"
     }
   }
 
@@ -3868,17 +3872,23 @@ class VoiceAlarmActivity : Activity() {
     if (destroyed || closingAlarm) return
     val text = chunk.trim()
     val local = isStopCommand(text) || isSnoozeCommand(text) || VoiceAlarmCommands.music(text) != null
+    val armed = evidence.belongsTo(captureWindowId)
     val decision = VoiceAlarmConversationGate.decide(text, evidence.sources, evidence.mixed, finalChunk,
-      reliable, armed = evidence.belongsTo(captureWindowId), localCommand = local)
+      reliable, armed = armed, localCommand = local, passive = evidence.windowId == 0L && !requestedTurn)
     logVoice("stt.route", "capture admission", mapOf("route" to decision.route.name, "mixed" to evidence.mixed,
-      "sources" to evidence.sources.size, "mixCause" to evidence.mixCause, "armed" to evidence.belongsTo(captureWindowId), "chars" to text.length, "final" to finalChunk, "pipeline" to batchChatPipelineVersion))
+      "sources" to evidence.sources.size, "mixCause" to evidence.mixCause, "armed" to armed,
+      "reviewReason" to decision.reviewReason?.name, "chars" to text.length, "final" to finalChunk, "pipeline" to batchChatPipelineVersion))
     batchAwaitingAiCommit = false
     when (decision.route) {
       VoiceAlarmConversationGate.Route.ECHO, VoiceAlarmConversationGate.Route.DRAFT -> return
       VoiceAlarmConversationGate.Route.REVIEW -> {
-        micStatus("已识别 ${text.length} 个字，待核对")
-        showReview(text)
-        transcriptView?.text = "待核对：$text"
+        val reason = when (decision.reviewReason) {
+          VoiceAlarmConversationGate.ReviewReason.INCOMPLETE -> "识别服务只返回了转写草稿"
+          VoiceAlarmConversationGate.ReviewReason.PLAYBACK_OVERLAP -> "录音可能混入播放声"
+          VoiceAlarmConversationGate.ReviewReason.NO_ACTIVE_CONVERSATION, null -> "未确认这句话是在对闹钟助手说"
+        }
+        showReview(text, reason)
+        transcriptView?.text = "$reason，请确认是否发送。\n$text"
         return
       }
       VoiceAlarmConversationGate.Route.OPEN_MIC -> { startRequestedTurn(); return }

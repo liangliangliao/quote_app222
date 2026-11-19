@@ -92,17 +92,32 @@ object VoiceAlarmSpeechPolicy {
   }
 }
 
-/** Only a final, clean, explicitly addressed or user-armed turn may enter automatic dialogue. */
+/** Accept a clean final from an open conversation or a direct question during alarm standby. */
 object VoiceAlarmConversationGate {
   enum class Route { ECHO, DRAFT, REVIEW, OPEN_MIC, LOCAL, SEND }
-  data class Decision(val route: Route, val text: String)
+  enum class ReviewReason { INCOMPLETE, PLAYBACK_OVERLAP, NO_ACTIVE_CONVERSATION }
+  data class Decision(val route: Route, val text: String, val reviewReason: ReviewReason? = null)
   private val interruptPhrases = setOf("打断一下", "请打断一下", "先听我说", "请先听我说", "先暂停播报", "请暂停播报")
   private val address = Regex("""^(小名小名|闹钟助手|你好AI|AI助手|(?:小名|助手)(?=$|[\s，。！？、：,:.!?]))[\s，。！？、：,:.!?]*""", RegexOption.IGNORE_CASE)
+  // Android recognition often omits question marks. Use grammatical cues, keeping the original transcript.
+  private val questionStart = Regex("^(?:为什么|为何|怎么|怎样|如何|能不能|可不可以|是不是|要不要|有没有).+")
+  private val questionWords = Regex("(?:什么|谁|哪里|哪儿|哪[个位种些天年本条项部]|多少|几[个位种天点分次岁条件篇项名本部]|为什么|为何|怎么|怎样|如何)")
+  private val reportedSpeech = Regex("^(?:[我你他她您]们?|大家|有人|别人)?(?:已经|早就|也)?(?:不知道|知道|记得|听说|在讨论|问过|告诉过|说过|想知道)")
+  private val indefinite = Regex("^(?:无论|不管|随便).+|.+(?:都可以|都行|都一样|都没关系)$")
+
+  private fun isDirectQuestion(text: String): Boolean {
+    val normalized = VoiceAlarmSpeechPolicy.normalized(text)
+    if (normalized.length < 3) return false
+    if (text.endsWith('？') || text.endsWith('?')) return true
+    if (indefinite.matches(normalized)) return false
+    return questionStart.matches(normalized) || normalized.endsWith('吗') ||
+      (!reportedSpeech.containsMatchIn(normalized) && questionWords.containsMatchIn(normalized))
+  }
 
   fun isInterruption(text: String) = VoiceAlarmSpeechPolicy.normalized(text) in interruptPhrases
 
   fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
-             armed: Boolean, localCommand: Boolean): Decision {
+             armed: Boolean, localCommand: Boolean, passive: Boolean): Decision {
     val text = raw.trim()
     val prefix = address.find(text)
     val question = prefix?.let { text.substring(it.range.last + 1).trim() }
@@ -112,15 +127,15 @@ object VoiceAlarmConversationGate {
       text.isEmpty() -> Route.DRAFT
       VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
       !final -> Route.DRAFT
-      !reliable -> Route.REVIEW
+      !reliable -> return Decision(Route.REVIEW, text, ReviewReason.INCOMPLETE)
       opensMic && sources.any {
         VoiceAlarmSpeechPolicy.normalized(it).contains(VoiceAlarmSpeechPolicy.normalized(text))
       } -> Route.ECHO
       opensMic -> Route.OPEN_MIC
       localCommand -> Route.LOCAL
-      mixed || sources.isNotEmpty() -> Route.REVIEW
-      armed || question != null -> Route.SEND
-      else -> Route.REVIEW
+      mixed || sources.isNotEmpty() -> return Decision(Route.REVIEW, text, ReviewReason.PLAYBACK_OVERLAP)
+      armed || question != null || (passive && isDirectQuestion(text)) -> Route.SEND
+      else -> return Decision(Route.REVIEW, text, ReviewReason.NO_ACTIVE_CONVERSATION)
     }
     return Decision(route, if (route == Route.SEND && question != null) question else text)
   }
@@ -136,7 +151,8 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
   private var sealed = false
   data class Evidence(val sources: List<String>, val mixed: Boolean, val mixCause: String = if (mixed) "unknown" else "none", val windowId: Long = 0L) {
     fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
-    fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed, if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else 0L)
+    // Audio merged across conversation windows is neither from the active window nor from standby.
+    fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed, if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else -1L)
   }
   private var pendingCue = ""
   private var cueAt = 0L
