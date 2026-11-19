@@ -50,7 +50,7 @@ fun main() {
   scenario("music resumes only after all overlapping speakers end") {
     val mix = VoiceAlarmMusicState()
     val owner = Any()
-    for (speaker in VoiceAlarmMusicState.Speaker.values()) mix.setSpeaking(speaker, owner, true)
+    for (speaker in listOf(VoiceAlarmMusicState.Speaker.USER, VoiceAlarmMusicState.Speaker.REMINDER, VoiceAlarmMusicState.Speaker.ASSISTANT)) mix.setSpeaking(speaker, owner, true)
     for (speaker in listOf(VoiceAlarmMusicState.Speaker.REMINDER, VoiceAlarmMusicState.Speaker.ASSISTANT)) {
       mix.setSpeaking(speaker, owner, false)
       check(mix.gain(.35f) == 0f)

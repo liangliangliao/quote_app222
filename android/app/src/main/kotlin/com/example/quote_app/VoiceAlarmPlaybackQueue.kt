@@ -27,7 +27,7 @@ class VoiceAlarmPlaybackQueue {
 
 /** The foreground service and its activity update this mixer on the main thread. */
 class VoiceAlarmMusicState {
-  enum class Speaker { REMINDER, ASSISTANT, USER }
+  enum class Speaker { REMINDER, ASSISTANT, USER, LISTEN_REQUEST }
   private val speakers = mutableMapOf<Speaker, Any>()
   var enabled = true
     private set

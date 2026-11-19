@@ -70,6 +70,59 @@ fun main() {
     }
     check(!VoiceAlarmSpeechPolicy.isEcho("扶着站起来停三秒", listOf("扶着桌边喝水之后再站起来停三秒"), true))
   }
+  val echo = VoiceAlarmConversationGate.Route.ECHO
+  val review = VoiceAlarmConversationGate.Route.REVIEW
+  val send = VoiceAlarmConversationGate.Route.SEND
+  val mic = VoiceAlarmConversationGate.Route.OPEN_MIC
+  fun route(text: String, sources: List<String> = emptyList(), mixed: Boolean = false,
+            final: Boolean = true, reliable: Boolean = true, armed: Boolean = false) =
+    VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = false)
+
+  scenario("v44 incident replay cannot interrupt TTS or enter correction or conversation") {
+    val source = listOf("测试。平静、专注、充满力量。每周专注一项、每天检查行为。")
+    val capture = VoiceAlarmCapture(2, true)
+    capture.note(source)
+    val atEnd = capture.finish(3, false)
+    val routes = listOf("平静专注充满力量", "专注一下每天检查行为").map {
+      route(it, atEnd.sources, atEnd.mixed, armed = true).route
+    }
+    check(routes == listOf(echo, echo))
+  }
+  scenario("unrelated or heavily mangled playback goes to review even if it sounds like a question") {
+    for (candidate in listOf("怎么整理测试记录", "闹钟助手我今天要做什么", "我已经起来了")) {
+      check(route(candidate, listOf("虚构测试播报"), true, armed = true).route == review)
+      check(route(candidate, emptyList(), true, armed = true).route == review)
+    }
+  }
+  scenario("clean intentional voice accepts questions and ordinary conversation without dropping words") {
+    check(route("闹钟助手，我今天该先做什么？").let { it.route == send && it.text == "我今天该先做什么？" })
+    check(route("我已经坐起来了", armed = true).route == send)
+    check(route("专注一下每天检查行为", armed = true).route == send)
+    check(route("隔壁说了什么").route == review)
+    check(route("刚才听到闹钟助手这个词").route == review)
+    check(route("助手这个词是什么意思").route == review)
+  }
+  scenario("only a final standalone wake cue can open a fresh microphone turn") {
+    check(route("闹钟助手", mixed = true).route == mic)
+    check(route("小名", listOf("请把小名写在这里"), mixed = true).route == echo)
+    check(route("闹钟助手", final = false).route == VoiceAlarmConversationGate.Route.DRAFT)
+    check(route("闹钟助手", reliable = false).route == review)
+    check(route("我想继续", armed = true, reliable = false).route == review)
+  }
+  scenario("capture retains music-only or missed playback across online recognition delays") {
+    val mixed = VoiceAlarmCapture(5, false)
+    val result = mixed.finish(7, false)
+    check(result.mixed && result.sources.isEmpty())
+    val clean = VoiceAlarmCapture(8, false)
+    check(!clean.finish(8, false).mixed)
+    clean.note(listOf("晚到的新播报"))
+    check(!clean.finish(10, true).mixed && clean.finish(10, true).sources.isEmpty())
+    check(result.merge(clean.finish(10, true)).mixed)
+  }
+  scenario("substitutions changing intent stay available for review or as a clean question") {
+    check(!VoiceAlarmSpeechPolicy.isEcho("请告诉我停几秒再走", listOf("请告诉我停三秒再走"), true))
+    check(route("请告诉我停几秒再走", listOf("请告诉我停三秒再走"), mixed = true).route == review)
+  }
   scenario("clean reply can quote or repeat the assistant") {
     check(!VoiceAlarmSpeechPolicy.isEcho("新的一天开始了", listOf("早上好，新的一天开始了"), false))
     check(!VoiceAlarmSpeechPolicy.isEcho("早上好，新的一天开始了", listOf("早上好，新的一天开始了"), false))

@@ -54,6 +54,22 @@ object VoiceAlarmSpeechPolicy {
     return false
   }
 
+  // One ASR substitution inside a longer audible passage, with exact anchors on both sides.
+  // Preserve question words, quantities and negations that change what the user meant.
+  private fun hasInternalSubstitution(spoken: String, candidate: String): Boolean {
+    if (candidate.length < 8) return false
+    val protected = "不是没别勿几谁怎啥哪吗么多少零一二三四五六七八九十两"
+    var start = spoken.indexOf(candidate.take(2))
+    while (start >= 0 && start + candidate.length <= spoken.length) {
+      var i = 2
+      while (i < candidate.length && spoken[start + i] == candidate[i]) i++
+      if (i in 2..candidate.length - 3 && candidate[i] !in protected && spoken[start + i] !in protected &&
+          spoken.regionMatches(start + i + 1, candidate, i + 1, candidate.length - i - 1)) return true
+      start = spoken.indexOf(candidate.take(2), start + 1)
+    }
+    return false
+  }
+
   // Only near-verbatim playback captured during playback can be echo. Do not delete
   // matching phrases from a user's sentence: "不要关闭闹钟" must retain its negation.
   fun isEcho(text: String, sources: List<String>, overlapsPlayback: Boolean, partial: Boolean = false): Boolean {
@@ -65,6 +81,7 @@ object VoiceAlarmSpeechPolicy {
       val spoken = normalized(source)
       when {
         spoken == candidate -> true
+        containsHan && hasInternalSubstitution(spoken, candidate) -> true
         containsHan && hasInternalOmission(spoken, candidate, partial) -> true
         partial -> spoken.contains(candidate)
         candidate.length >= 8 || (containsHan && candidate.length >= 4) -> spoken.contains(candidate)
@@ -72,6 +89,50 @@ object VoiceAlarmSpeechPolicy {
         else -> false
       }
     }
+  }
+}
+
+/** Only a final, clean, explicitly addressed or user-armed turn may enter automatic dialogue. */
+object VoiceAlarmConversationGate {
+  enum class Route { ECHO, DRAFT, REVIEW, OPEN_MIC, LOCAL, SEND }
+  data class Decision(val route: Route, val text: String)
+  private val address = Regex("""^(小名小名|闹钟助手|你好AI|AI助手|(?:小名|助手)(?=$|[\s，。！？、：,:.!?]))[\s，。！？、：,:.!?]*""", RegexOption.IGNORE_CASE)
+
+  fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
+             armed: Boolean, localCommand: Boolean): Decision {
+    val text = raw.trim()
+    val prefix = address.find(text)
+    val question = prefix?.let { text.substring(it.range.last + 1).trim() }
+    val route = when {
+      text.isEmpty() -> Route.DRAFT
+      VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
+      !final -> Route.DRAFT
+      !reliable -> Route.REVIEW
+      question != null && question.isEmpty() && sources.any {
+        VoiceAlarmSpeechPolicy.normalized(it).contains(VoiceAlarmSpeechPolicy.normalized(text))
+      } -> Route.ECHO
+      question != null && question.isEmpty() -> Route.OPEN_MIC
+      localCommand -> Route.LOCAL
+      mixed || sources.isNotEmpty() -> Route.REVIEW
+      armed || question != null -> Route.SEND
+      else -> Route.REVIEW
+    }
+    return Decision(route, if (route == Route.SEND && question != null) question else text)
+  }
+}
+
+/** Immutable at the microphone endpoint. Network delays cannot erase a playback overlap. */
+class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean) {
+  private val sources = linkedSetOf<String>()
+  private var mixed = initiallyMixed
+  private var sealed = false
+  data class Evidence(val sources: List<String>, val mixed: Boolean) {
+    fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed)
+  }
+  @Synchronized fun note(texts: List<String>) { if (!sealed) sources.addAll(texts.filter { it.isNotBlank() }) }
+  @Synchronized fun finish(epoch: Long, audible: Boolean): Evidence {
+    if (!sealed) { mixed = mixed || epoch != initialEpoch || audible; sealed = true }
+    return Evidence(sources.toList(), mixed)
   }
 }
 
