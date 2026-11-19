@@ -56,6 +56,8 @@ class VoiceAlarmRingingService : Service() {
     }
     private var service: VoiceAlarmRingingService? = null
     val appReplySpeaking: Boolean get() = musicState.speaking(VoiceAlarmMusicState.Speaker.ASSISTANT)
+    private val microphoneInUse: Boolean get() = musicState.speaking(VoiceAlarmMusicState.Speaker.LISTEN_REQUEST) ||
+      musicState.speaking(VoiceAlarmMusicState.Speaker.USER)
 
     fun setSpeaking(speaker: VoiceAlarmMusicState.Speaker, owner: Any, active: Boolean) {
       if (musicState.setSpeaking(speaker, owner, active)) {
@@ -620,7 +622,7 @@ class VoiceAlarmRingingService : Service() {
     sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_START).setPackage(packageName).putExtra("text", currentVoiceText))
   }
 
-  private fun notifyVoicePlaybackEnd() {
+  private fun notifyVoicePlaybackEnd(completed: Boolean = false) {
     setSpeaking(VoiceAlarmMusicState.Speaker.REMINDER, this, false)
     if (!alarmVoicePlaybackActive) return
     try { vibrator?.cancel() } catch (_: Throwable) {}
@@ -628,7 +630,8 @@ class VoiceAlarmRingingService : Service() {
     liveVoiceText = null
     persistVoicePlaybackState(this, false, currentVoiceText)
     logVoice("voicePlayback.end", "voice prompt playback ended", mapOf("textLen" to currentVoiceText.length))
-    sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName).putExtra("text", currentVoiceText))
+    sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName)
+      .putExtra("text", currentVoiceText).putExtra("completed", completed))
   }
 
   private fun randomExistingPath(data: JSONObject, listKey: String, legacyKey: String): String {
@@ -752,7 +755,7 @@ class VoiceAlarmRingingService : Service() {
           override fun run() {
             if (!wakeupGate.isCurrent(token) || !session.active || stopping || activePayload == null) return
             val remaining = voiceReplayBlockedUntil - System.currentTimeMillis()
-            if (appReplySpeaking || alarmVoicePlaybackActive || remaining > 0) {
+            if (appReplySpeaking || microphoneInUse || alarmVoicePlaybackActive || remaining > 0) {
               replayHandler.postDelayed(this, if (remaining > 0) remaining else 500L); return
             }
             readyRoundRunnable = null; roundBusy = false
@@ -844,7 +847,7 @@ class VoiceAlarmRingingService : Service() {
                 voiceChunkWatchdog?.let { replayHandler.removeCallbacks(it) }
                 voiceChunkWatchdog = null
                 wakeSession?.markPlayback("完整播报完成")
-                notifyVoicePlaybackEnd()
+                notifyVoicePlaybackEnd(completed = true)
               }
             }
           } }
@@ -912,7 +915,7 @@ class VoiceAlarmRingingService : Service() {
       }
       // AI 回复正在播报时，不要让提醒语音（早上好…/晚上好…）同时响起；
       // 稍后再查，等这条 AI 回复播完再复读。
-      if (appReplySpeaking || alarmVoicePlaybackActive || pendingAlarmTts != null) {
+      if (appReplySpeaking || microphoneInUse || alarmVoicePlaybackActive || pendingAlarmTts != null) {
         replayHandler.postDelayed(replayRunnable!!, 1500L)
         return@Runnable
       }
@@ -1001,7 +1004,7 @@ class VoiceAlarmRingingService : Service() {
         }
         setOnCompletionListener { player ->
           logVoice("media.completion", "MediaPlayer completed", mapOf("notifyVoice" to notifyVoice))
-          if (notifyVoice && player === voicePlayer) notifyVoicePlaybackEnd()
+          if (notifyVoice && player === voicePlayer) notifyVoicePlaybackEnd(completed = true)
         }
         setOnErrorListener { player, what, extra ->
           if (looping && player === musicPlayer) { musicPrepared = false; musicPlayer = null; applyMusicGain() }

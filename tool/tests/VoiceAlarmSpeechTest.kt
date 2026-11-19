@@ -71,12 +71,13 @@ fun main() {
     check(!VoiceAlarmSpeechPolicy.isEcho("扶着站起来停三秒", listOf("扶着桌边喝水之后再站起来停三秒"), true))
   }
   val echo = VoiceAlarmConversationGate.Route.ECHO
-  val review = VoiceAlarmConversationGate.Route.REVIEW
+  val relisten = VoiceAlarmConversationGate.Route.RELISTEN
+  val ignore = VoiceAlarmConversationGate.Route.IGNORE
   val send = VoiceAlarmConversationGate.Route.SEND
   val mic = VoiceAlarmConversationGate.Route.OPEN_MIC
   fun route(text: String, sources: List<String> = emptyList(), mixed: Boolean = false,
-            final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed) =
-    VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = false, passive = passive)
+            final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed, local: Boolean = false) =
+    VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = local, passive = passive)
 
   scenario("v44 incident replay cannot interrupt TTS or enter correction or conversation") {
     val source = listOf("测试。平静、专注、充满力量。每周专注一项、每天检查行为。")
@@ -88,35 +89,35 @@ fun main() {
     }
     check(routes == listOf(echo, echo))
   }
-  scenario("unrelated or heavily mangled playback goes to review even if it sounds like a question") {
+  scenario("overlapping utterances are re-recorded instead of sent or placed in manual review") {
     for (candidate in listOf("怎么整理测试记录", "闹钟助手我今天要做什么", "我已经起来了")) {
-      check(route(candidate, listOf("虚构测试播报"), true, armed = true).route == review)
-      check(route(candidate, emptyList(), true, armed = true).route == review)
+      check(route(candidate, listOf("虚构测试播报"), true, armed = true).route == relisten)
+      check(route(candidate, emptyList(), true, armed = true).route == relisten)
     }
   }
   scenario("clean intentional voice accepts questions and ordinary conversation without dropping words") {
     check(route("闹钟助手，我今天该先做什么？").let { it.route == send && it.text == "我今天该先做什么？" })
     check(route("我已经坐起来了", armed = true).route == send)
     check(route("专注一下每天检查行为", armed = true).route == send)
-    check(route("刚才听到闹钟助手这个词").route == review)
+    check(route("刚才听到闹钟助手这个词").route == ignore)
     check(route("助手这个词是什么意思").let { it.route == send && it.text == "助手这个词是什么意思" })
   }
   scenario("a complete question in quiet standby goes directly to AI even without punctuation") {
     for (question in listOf("他有几个兄弟", "这件事的动力是什么", "能不能解释一下", "今天有安排吗", "Are you there?")) {
       check(route(question).let { it.route == send && it.text == question })
     }
-    check(route("我记得他有几个兄弟").route == review)
-    check(route("我不知道他有几个兄弟").route == review)
-    check(route("随便选哪一个都行").route == review)
-    check(route("我已经回来了").route == review)
+    check(route("我记得他有几个兄弟").route == ignore)
+    check(route("我不知道他有几个兄弟").route == ignore)
+    check(route("随便选哪一个都行").route == ignore)
+    check(route("我已经回来了").route == ignore)
   }
   scenario("question-shaped words cannot bypass echo, partial, or playback overlap checks") {
     val question = "他有几个兄弟"
     val reminder = listOf("读完故事后想想，他有几个兄弟？")
     check(route(question, reminder, mixed = true).route == echo)
-    check(route(question, mixed = true).reviewReason == VoiceAlarmConversationGate.ReviewReason.PLAYBACK_OVERLAP)
+    check(route(question, mixed = true).retryReason == VoiceAlarmConversationGate.RetryReason.PLAYBACK_OVERLAP)
     check(route(question, final = false).route == VoiceAlarmConversationGate.Route.DRAFT)
-    check(route(question, reliable = false).reviewReason == VoiceAlarmConversationGate.ReviewReason.INCOMPLETE)
+    check(route(question, reliable = false).retryReason == VoiceAlarmConversationGate.RetryReason.INCOMPLETE)
   }
   scenario("an intentional reply window never authorizes a previous cloud job or joined captures") {
     val old = VoiceAlarmCapture(2, false, windowId = 3).finish(2, false)
@@ -124,11 +125,11 @@ fun main() {
     check(!old.belongsTo(4) && !old.merge(current).belongsTo(4))
     check(!current.belongsTo(0) && current.belongsTo(4))
     check(route("我还想再问一句", armed = current.belongsTo(4)).route == send)
-    check(route("我还想再问一句", armed = old.belongsTo(4)).route == review)
+    check(route("我还想再问一句", armed = old.belongsTo(4)).route == ignore)
     val standby = VoiceAlarmCapture(2, false).finish(2, false)
     for (capture in listOf(old, old.merge(current), old.merge(standby))) {
       check(capture.windowId != 0L)
-      check(route("还有什么安排", armed = capture.belongsTo(4), passive = capture.windowId == 0L).route == review)
+      check(route("还有什么安排", armed = capture.belongsTo(4), passive = capture.windowId == 0L).route == ignore)
     }
     val echo = listOf("下一步整理桌面")
     check(route("整理桌面", echo, mixed = true, armed = true).route == VoiceAlarmConversationGate.Route.ECHO)
@@ -145,20 +146,42 @@ fun main() {
     capture.finish(2, false)
     check(!capture.confirmedPause("先听我说", 900, source))
   }
-  scenario("music-only and tail overlap remain reviewable and preserve the reason when results arrive late") {
+  scenario("music-only and tail overlap require a fresh quiet recording even when results arrive late") {
     val bed = VoiceAlarmCapture(1, true, "music", 12)
     val held = bed.finish(2, false)
     check(held.sources.isEmpty() && held.mixCause == "start_music")
-    check(route("五字测试句", held.sources, held.mixed, armed = held.belongsTo(12)).route == review)
+    check(route("五字测试句", held.sources, held.mixed, armed = held.belongsTo(12)).route == relisten)
     check(VoiceAlarmCapture(2, false).finish(3, false).mixCause == "output_changed")
     check(VoiceAlarmCapture(2, false).finish(2, true, "tail").mixCause == "end_tail")
+  }
+  scenario("a stable novel partial requests a quiet microphone without using mixed words") {
+    val music = VoiceAlarmCapture(1, true, "music", 3)
+    check(!music.confirmedPause("这是谁的", 100, emptyList()))
+    check(music.confirmedPause("这是谁的书", 300, emptyList()))
+    val before = music.finish(2, false)
+    val quiet = VoiceAlarmCapture(2, false, windowId = 4).finish(2, false)
+    val actual = "这是谁的书"
+    val retry = route(actual, before.sources, before.mixed)
+    check(retry.route == relisten && retry.text.isEmpty())
+    check(!before.belongsTo(4) && quiet.belongsTo(4))
+    check(route(actual, quiet.sources, quiet.mixed, armed = true).let { it.route == send && it.text == actual })
+    val reading = VoiceAlarmCapture(1, true, "voice")
+    val echoed = listOf("今天的问题是：这是谁的书？")
+    check(!reading.confirmedPause("这是谁的", 100, echoed))
+    check(!reading.confirmedPause("这是谁的书", 300, echoed))
+    check(route("今天的测试已经做完", mixed = true).route == ignore)
+  }
+  scenario("an unverified alarm command during music cannot act until a clean retry") {
+    check(route("关闭闹钟", mixed = true, local = true).route == relisten)
+    check(route("关闭闹钟", listOf("请勿跟着说：关闭闹钟。"), mixed = true, local = true).route == echo)
+    check(route("关闭闹钟", local = true).route == VoiceAlarmConversationGate.Route.LOCAL)
   }
   scenario("only a final standalone wake cue can open a fresh microphone turn") {
     check(route("闹钟助手", mixed = true).route == mic)
     check(route("小名", listOf("请把小名写在这里"), mixed = true).route == echo)
     check(route("闹钟助手", final = false).route == VoiceAlarmConversationGate.Route.DRAFT)
-    check(route("闹钟助手", reliable = false).route == review)
-    check(route("我想继续", armed = true, reliable = false).route == review)
+    check(route("闹钟助手", reliable = false).route == relisten)
+    check(route("我想继续", armed = true, reliable = false).route == relisten)
   }
   scenario("capture retains music-only or missed playback across online recognition delays") {
     val mixed = VoiceAlarmCapture(5, false)
@@ -170,9 +193,9 @@ fun main() {
     check(!clean.finish(10, true).mixed && clean.finish(10, true).sources.isEmpty())
     check(result.merge(clean.finish(10, true)).mixed)
   }
-  scenario("substitutions changing intent stay available for review or as a clean question") {
+  scenario("a changed question during playback gets a fresh recording without being called echo") {
     check(!VoiceAlarmSpeechPolicy.isEcho("请告诉我停几秒再走", listOf("请告诉我停三秒再走"), true))
-    check(route("请告诉我停几秒再走", listOf("请告诉我停三秒再走"), mixed = true).route == review)
+    check(route("请告诉我停几秒再走", listOf("请告诉我停三秒再走"), mixed = true).route == relisten)
   }
   scenario("clean reply can quote or repeat the assistant") {
     check(!VoiceAlarmSpeechPolicy.isEcho("新的一天开始了", listOf("早上好，新的一天开始了"), false))

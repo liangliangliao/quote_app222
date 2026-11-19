@@ -17,10 +17,11 @@ class VoiceAlarmNativeTurn {
   // A new capture must never postpone delivery of the preceding confirmed result.
   fun shouldWaitForFinal(bufferIsFinal: Boolean): Boolean = active && hasSpeech && !bufferIsFinal
 
-  fun timeoutMs(maxUtteranceMs: Long): Long = when {
+  fun timeoutMs(maxUtteranceMs: Long, hasLevelCallbacks: Boolean = true): Long = when {
     awaitingFinal && draft.isNotBlank() -> 2500L
     awaitingFinal || !ready -> 8000L
     hasSpeech -> maxOf(65000L, maxUtteranceMs + 5000L)
+    !hasLevelCallbacks -> 10000L
     else -> 18000L
   }
 
@@ -146,12 +147,30 @@ class VoiceAlarmNativeSignal {
 class VoiceAlarmListenWindow(private val idleMs: Long) {
   private var readyAt: Long? = null
   private var openedAt = 0L
+  private var finalGraceUsed = false
+  private var recoveryGraceUsed = false
   var expiresAt = 0L; private set
-  fun open(now: Long) { openedAt = now; readyAt = null; expiresAt = now + 12000L }
+  fun open(now: Long) {
+    openedAt = now
+    readyAt = null
+    expiresAt = now + 12000L
+    finalGraceUsed = false
+    recoveryGraceUsed = false
+  }
   fun ready(now: Long) {
     if (readyAt == null) { readyAt = now; expiresAt = now + idleMs }
   }
   fun activity(now: Long) {
     if (readyAt != null) expiresAt = maxOf(expiresAt, minOf(openedAt + 75000L, now + 8000L))
+  }
+  fun awaitingFinal(now: Long) {
+    if (readyAt == null || finalGraceUsed || expiresAt - now >= 3500L) return
+    finalGraceUsed = true
+    expiresAt = maxOf(expiresAt, minOf(openedAt + 75000L, now + 3500L))
+  }
+  fun recovering(now: Long, delayMs: Long) {
+    if (readyAt == null || recoveryGraceUsed || expiresAt - now >= delayMs + 6000L) return
+    recoveryGraceUsed = true
+    expiresAt = maxOf(expiresAt, minOf(openedAt + 75000L, now + delayMs + 6000L))
   }
 }

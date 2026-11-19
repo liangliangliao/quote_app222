@@ -94,16 +94,17 @@ object VoiceAlarmSpeechPolicy {
 
 /** Accept a clean final from an open conversation or a direct question during alarm standby. */
 object VoiceAlarmConversationGate {
-  enum class Route { ECHO, DRAFT, REVIEW, OPEN_MIC, LOCAL, SEND }
-  enum class ReviewReason { INCOMPLETE, PLAYBACK_OVERLAP, NO_ACTIVE_CONVERSATION }
-  data class Decision(val route: Route, val text: String, val reviewReason: ReviewReason? = null)
+  enum class Route { ECHO, DRAFT, IGNORE, RELISTEN, OPEN_MIC, LOCAL, SEND }
+  enum class RetryReason { INCOMPLETE, PLAYBACK_OVERLAP }
+  data class Decision(val route: Route, val text: String, val retryReason: RetryReason? = null)
   private val interruptPhrases = setOf("打断一下", "请打断一下", "先听我说", "请先听我说", "先暂停播报", "请暂停播报")
   private val address = Regex("""^(小名小名|闹钟助手|你好AI|AI助手|(?:小名|助手)(?=$|[\s，。！？、：,:.!?]))[\s，。！？、：,:.!?]*""", RegexOption.IGNORE_CASE)
   // Android recognition often omits question marks. Use grammatical cues, keeping the original transcript.
   private val questionStart = Regex("^(?:为什么|为何|怎么|怎样|如何|能不能|可不可以|是不是|要不要|有没有).+")
-  private val questionWords = Regex("(?:什么|谁|哪里|哪儿|哪[个位种些天年本条项部]|多少|几[个位种天点分次岁条件篇项名本部]|为什么|为何|怎么|怎样|如何)")
+  private val questionWords = Regex("(?:什么|谁|哪里|哪儿|哪[个位种些天年本条项部]|多少|几[个位种天点分秒次岁条件篇项名本部]|为什么|为何|怎么|怎样|如何)")
   private val reportedSpeech = Regex("^(?:[我你他她您]们?|大家|有人|别人)?(?:已经|早就|也)?(?:不知道|知道|记得|听说|在讨论|问过|告诉过|说过|想知道)")
   private val indefinite = Regex("^(?:无论|不管|随便).+|.+(?:都可以|都行|都一样|都没关系)$")
+  private val directRequest = Regex("^(?:请问|能帮我|请?(?:帮我|告诉我|介绍一下|解释一下|说说|讲讲)).+|^(?:继续说|继续讲|接着说|接着讲|换一个)$")
 
   private fun isDirectQuestion(text: String): Boolean {
     val normalized = VoiceAlarmSpeechPolicy.normalized(text)
@@ -116,6 +117,10 @@ object VoiceAlarmConversationGate {
 
   fun isInterruption(text: String) = VoiceAlarmSpeechPolicy.normalized(text) in interruptPhrases
 
+  fun canPauseForSpeech(text: String): Boolean = isInterruption(text) || address.containsMatchIn(text) || looksDirected(text)
+
+  private fun looksDirected(text: String): Boolean = isDirectQuestion(text) || directRequest.matches(VoiceAlarmSpeechPolicy.normalized(text))
+
   fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
              armed: Boolean, localCommand: Boolean, passive: Boolean): Decision {
     val text = raw.trim()
@@ -123,19 +128,20 @@ object VoiceAlarmConversationGate {
     val question = prefix?.let { text.substring(it.range.last + 1).trim() }
     val normalized = VoiceAlarmSpeechPolicy.normalized(text)
     val opensMic = question?.isEmpty() == true || normalized in interruptPhrases
+    val directed = armed || question != null || looksDirected(text) || localCommand || opensMic
     val route = when {
       text.isEmpty() -> Route.DRAFT
       VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
       !final -> Route.DRAFT
-      !reliable -> return Decision(Route.REVIEW, text, ReviewReason.INCOMPLETE)
+      !reliable -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.INCOMPLETE) else Decision(Route.IGNORE, "")
       opensMic && sources.any {
         VoiceAlarmSpeechPolicy.normalized(it).contains(VoiceAlarmSpeechPolicy.normalized(text))
       } -> Route.ECHO
       opensMic -> Route.OPEN_MIC
+      mixed || sources.isNotEmpty() -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP) else Decision(Route.IGNORE, "")
       localCommand -> Route.LOCAL
-      mixed || sources.isNotEmpty() -> return Decision(Route.REVIEW, text, ReviewReason.PLAYBACK_OVERLAP)
-      armed || question != null || (passive && isDirectQuestion(text)) -> Route.SEND
-      else -> return Decision(Route.REVIEW, text, ReviewReason.NO_ACTIVE_CONVERSATION)
+      armed || question != null || (passive && directed) -> Route.SEND
+      else -> Route.IGNORE
     }
     return Decision(route, if (route == Route.SEND && question != null) question else text)
   }
@@ -157,16 +163,16 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
   private var pendingCue = ""
   private var cueAt = 0L
 
-  // Two matching partials may pause the speaker. They never grant a dialogue request.
+  // A stable, directed partial may pause the speaker. Only a new, clean final can authorize dialogue.
   @Synchronized fun confirmedPause(text: String, now: Long, currentSources: List<String>): Boolean {
     val cue = VoiceAlarmSpeechPolicy.normalized(text)
-    if (sealed || !VoiceAlarmConversationGate.isInterruption(text) ||
-        (sources + currentSources).none { it.isNotBlank() } ||
-        VoiceAlarmSpeechPolicy.isEcho(text, (sources + currentSources).toList(), true, partial = true)) {
+    val allSources = (sources + currentSources).toList()
+    if (sealed || cue.length < 4 || !VoiceAlarmConversationGate.canPauseForSpeech(text) ||
+        VoiceAlarmSpeechPolicy.isEcho(text, allSources, true, partial = true)) {
       pendingCue = ""
       return false
     }
-    if (cue != pendingCue) {
+    if (pendingCue.isEmpty() || !cue.startsWith(pendingCue)) {
       pendingCue = cue
       cueAt = now
       return false

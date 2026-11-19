@@ -82,6 +82,40 @@ fun main() {
     window.activity(75000)
     check(window.expiresAt == 76000L)
   }
+  scenario("ending a quiet utterance near the deadline leaves one bounded chance for the final result") {
+    val window = VoiceAlarmListenWindow(18000L)
+    window.open(1000)
+    window.awaitingFinal(12500)
+    check(window.expiresAt == 13000L)
+    window.ready(6000)
+    check(window.expiresAt == 24000L)
+    window.awaitingFinal(10000)
+    check(window.expiresAt == 24000L)
+    window.awaitingFinal(23750)
+    check(window.expiresAt == 27250L)
+    window.awaitingFinal(27000)
+    check(window.expiresAt == 27250L)
+  }
+  scenario("two native no-match retries leave the next result in the same conversation window") {
+    val window = VoiceAlarmListenWindow(12000L)
+    window.open(0)
+    window.ready(110)
+    window.recovering(4500, 100)
+    check(window.expiresAt == 12110L)
+    window.recovering(9250, 180)
+    check(window.expiresAt == 15430L && window.expiresAt > 13000L)
+    window.recovering(14600, 180)
+    check(window.expiresAt == 15430L)
+  }
+  scenario("a silent system recognizer with no levels is replaced sooner without cutting off observed speech") {
+    val turn = VoiceAlarmNativeTurn()
+    check(turn.begin())
+    turn.ready()
+    check(turn.timeoutMs(22000L, hasLevelCallbacks = false) == 10000L)
+    check(turn.timeoutMs(22000L, hasLevelCallbacks = true) == 18000L)
+    turn.partial("已经确认的起床问题")
+    check(turn.timeoutMs(22000L, hasLevelCallbacks = false) >= 27000L)
+  }
   scenario("native end-of-speech cannot prematurely begin another recognition") {
     val turn = VoiceAlarmNativeTurn(); check(turn.begin()); turn.ready(); turn.speechStarted()
     turn.partial("请关闭背景"); turn.endSpeech(); check(!turn.begin() && turn.active && turn.awaitingFinal)
