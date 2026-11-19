@@ -102,6 +102,36 @@ fun main() {
     check(route("刚才听到闹钟助手这个词").route == review)
     check(route("助手这个词是什么意思").route == review)
   }
+  scenario("an intentional reply window never authorizes a previous cloud job or joined captures") {
+    val old = VoiceAlarmCapture(2, false, windowId = 3).finish(2, false)
+    val current = VoiceAlarmCapture(2, false, windowId = 4).finish(2, false)
+    check(!old.belongsTo(4) && !old.merge(current).belongsTo(4))
+    check(!current.belongsTo(0) && current.belongsTo(4))
+    check(route("我还想再问一句", armed = current.belongsTo(4)).route == send)
+    check(route("我还想再问一句", armed = old.belongsTo(4)).route == review)
+    val echo = listOf("下一步整理桌面")
+    check(route("整理桌面", echo, mixed = true, armed = true).route == VoiceAlarmConversationGate.Route.ECHO)
+  }
+  scenario("two stable interruption drafts can pause speech but never send a user query") {
+    val capture = VoiceAlarmCapture(1, true)
+    val source = listOf("请看窗边的日历。")
+    check(!capture.confirmedPause("先听我说", 100, source))
+    check(!capture.confirmedPause("先听我说", 200, source))
+    check(capture.confirmedPause("先听我说", 300, source))
+    check(route("先听我说", source, mixed = true).route == mic)
+    check(route("先听我说", listOf("先听我说，再看日历"), mixed = true).route == echo)
+    check(!capture.confirmedPause("先听我说", 600, listOf("请先听我说完")))
+    capture.finish(2, false)
+    check(!capture.confirmedPause("先听我说", 900, source))
+  }
+  scenario("music-only and tail overlap remain reviewable and preserve the reason when results arrive late") {
+    val bed = VoiceAlarmCapture(1, true, "music", 12)
+    val held = bed.finish(2, false)
+    check(held.sources.isEmpty() && held.mixCause == "start_music")
+    check(route("五字测试句", held.sources, held.mixed, armed = held.belongsTo(12)).route == review)
+    check(VoiceAlarmCapture(2, false).finish(3, false).mixCause == "output_changed")
+    check(VoiceAlarmCapture(2, false).finish(2, true, "tail").mixCause == "end_tail")
+  }
   scenario("only a final standalone wake cue can open a fresh microphone turn") {
     check(route("闹钟助手", mixed = true).route == mic)
     check(route("小名", listOf("请把小名写在这里"), mixed = true).route == echo)
@@ -190,6 +220,34 @@ fun main() {
         check(frame.all { it == expected.toByte() })
       }
     } finally { pump.close(); hold.countDown() }
+  }
+  scenario("buffered TTS samples keep their capture-time provenance and the first clean syllable stays queued") {
+    val bed = VoiceAlarmFrameStamp(0, 11, "voice")
+    val live = VoiceAlarmFrameStamp(4, 12, "quiet")
+    val copied = CountDownLatch(3)
+    val stop = CountDownLatch(1)
+    var written = 0
+    var stamps = 0
+    val pump = VoiceAlarmPcmPump({ frame ->
+      if (written >= 3) stop.await()
+      frame.fill((++written).toByte())
+      copied.countDown()
+      frame.size
+    }, 6, stamp = {
+      if (Thread.currentThread().name == "voice-alarm-pcm" && stamps++ < 2) bed else live
+    })
+    try {
+      check(copied.await(2, TimeUnit.SECONDS))
+      val bytes = ByteArray(640)
+      val old = VoiceAlarmCapture(12, false)
+      val next = VoiceAlarmCapture(12, false, windowId = 4)
+      check(pump.read(bytes, old) == 640 && bytes.first() == 1.toByte())
+      check(pump.read(bytes, old) == VoiceAlarmPcmPump.NEXT_WINDOW)
+      check(old.finish(12, false).mixCause == "frame_voice")
+      for (index in 2..3) check(pump.read(bytes, next) == 640 && bytes.all { it == index.toByte() })
+      val received = next.finish(12, false)
+      check(received.belongsTo(4) && !received.mixed)
+    } finally { pump.close(); stop.countDown() }
   }
   scenario("overflow and dead microphone are explicit recoverable errors") {
     val pump = VoiceAlarmPcmPump({ frame -> frame.size }, 1)

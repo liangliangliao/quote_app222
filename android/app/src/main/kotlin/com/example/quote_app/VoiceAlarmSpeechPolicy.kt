@@ -96,22 +96,27 @@ object VoiceAlarmSpeechPolicy {
 object VoiceAlarmConversationGate {
   enum class Route { ECHO, DRAFT, REVIEW, OPEN_MIC, LOCAL, SEND }
   data class Decision(val route: Route, val text: String)
+  private val interruptPhrases = setOf("打断一下", "请打断一下", "先听我说", "请先听我说", "先暂停播报", "请暂停播报")
   private val address = Regex("""^(小名小名|闹钟助手|你好AI|AI助手|(?:小名|助手)(?=$|[\s，。！？、：,:.!?]))[\s，。！？、：,:.!?]*""", RegexOption.IGNORE_CASE)
+
+  fun isInterruption(text: String) = VoiceAlarmSpeechPolicy.normalized(text) in interruptPhrases
 
   fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
              armed: Boolean, localCommand: Boolean): Decision {
     val text = raw.trim()
     val prefix = address.find(text)
     val question = prefix?.let { text.substring(it.range.last + 1).trim() }
+    val normalized = VoiceAlarmSpeechPolicy.normalized(text)
+    val opensMic = question?.isEmpty() == true || normalized in interruptPhrases
     val route = when {
       text.isEmpty() -> Route.DRAFT
       VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
       !final -> Route.DRAFT
       !reliable -> Route.REVIEW
-      question != null && question.isEmpty() && sources.any {
+      opensMic && sources.any {
         VoiceAlarmSpeechPolicy.normalized(it).contains(VoiceAlarmSpeechPolicy.normalized(text))
       } -> Route.ECHO
-      question != null && question.isEmpty() -> Route.OPEN_MIC
+      opensMic -> Route.OPEN_MIC
       localCommand -> Route.LOCAL
       mixed || sources.isNotEmpty() -> Route.REVIEW
       armed || question != null -> Route.SEND
@@ -121,18 +126,53 @@ object VoiceAlarmConversationGate {
   }
 }
 
+data class VoiceAlarmFrameStamp(val windowId: Long, val outputEpoch: Long, val output: String)
+
 /** Immutable at the microphone endpoint. Network delays cannot erase a playback overlap. */
-class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean) {
+class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean, initialOutput: String = if (initiallyMixed) "active" else "quiet", val windowId: Long = 0L) {
   private val sources = linkedSetOf<String>()
   private var mixed = initiallyMixed
+  private var cause = if (initiallyMixed) "start_" + initialOutput else "none"
   private var sealed = false
-  data class Evidence(val sources: List<String>, val mixed: Boolean) {
-    fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed)
+  data class Evidence(val sources: List<String>, val mixed: Boolean, val mixCause: String = if (mixed) "unknown" else "none", val windowId: Long = 0L) {
+    fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
+    fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed, if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else 0L)
+  }
+  private var pendingCue = ""
+  private var cueAt = 0L
+
+  // Two matching partials may pause the speaker. They never grant a dialogue request.
+  @Synchronized fun confirmedPause(text: String, now: Long, currentSources: List<String>): Boolean {
+    val cue = VoiceAlarmSpeechPolicy.normalized(text)
+    if (sealed || !VoiceAlarmConversationGate.isInterruption(text) ||
+        (sources + currentSources).none { it.isNotBlank() } ||
+        VoiceAlarmSpeechPolicy.isEcho(text, (sources + currentSources).toList(), true, partial = true)) {
+      pendingCue = ""
+      return false
+    }
+    if (cue != pendingCue) {
+      pendingCue = cue
+      cueAt = now
+      return false
+    }
+    return now - cueAt >= 180L
+  }
+  @Synchronized fun noteFrame(before: VoiceAlarmFrameStamp, after: VoiceAlarmFrameStamp) {
+    if (sealed || mixed) return
+    val audible = if (before.output != "quiet") before.output else after.output
+    if (audible != "quiet" || before.outputEpoch != after.outputEpoch) {
+      mixed = true
+      cause = if (audible == "quiet") "frame_output_changed" else "frame_" + audible
+    }
   }
   @Synchronized fun note(texts: List<String>) { if (!sealed) sources.addAll(texts.filter { it.isNotBlank() }) }
-  @Synchronized fun finish(epoch: Long, audible: Boolean): Evidence {
-    if (!sealed) { mixed = mixed || epoch != initialEpoch || audible; sealed = true }
-    return Evidence(sources.toList(), mixed)
+  @Synchronized fun finish(epoch: Long, audible: Boolean, output: String = if (audible) "active" else "quiet"): Evidence {
+    if (!sealed) {
+      if (!mixed) cause = when { audible -> "end_" + output; epoch != initialEpoch -> "output_changed"; else -> "none" }
+      mixed = mixed || epoch != initialEpoch || audible
+      sealed = true
+    }
+    return Evidence(sources.toList(), mixed, cause, windowId)
   }
 }
 

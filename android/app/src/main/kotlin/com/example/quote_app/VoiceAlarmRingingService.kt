@@ -43,8 +43,13 @@ class VoiceAlarmRingingService : Service() {
       private set
     @Volatile private var voiceOutput = false
     @Volatile private var lastOutputChangeAt = -1000L
-    fun outputOrTailActive(): Boolean = voiceOutput || activeSignalPlayback ||
-      android.os.SystemClock.elapsedRealtime() - lastOutputChangeAt < 350L
+    fun outputKind(): String = when {
+      voiceOutput -> "voice"
+      activeSignalPlayback -> "music"
+      android.os.SystemClock.elapsedRealtime() - lastOutputChangeAt < 350L -> "tail"
+      else -> "quiet"
+    }
+    fun outputOrTailActive(): Boolean = outputKind() != "quiet"
     private fun outputChanged() {
       lastOutputChangeAt = android.os.SystemClock.elapsedRealtime()
       outputEpoch++

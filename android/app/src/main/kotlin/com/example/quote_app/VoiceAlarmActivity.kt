@@ -74,7 +74,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "voice_turn_reliability_v45"
+  private val batchChatPipelineVersion = "voice_turn_reliability_v46"
   private val batchChatPipelineSummary = "连续人声窗口、完整转写、可恢复失败与过期播报隔离"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
@@ -107,6 +107,9 @@ class VoiceAlarmActivity : Activity() {
   private var pendingSpeakRestart = true
   private var pendingSpeakAttempts = 0
   private var transcriptView: TextView? = null
+  private var micStatusView: TextView? = null
+  private var micIssue = ""
+  private var replyAllowsFollowUp = false
   private var transcriptScrollView: ScrollView? = null
   private var ttsProviderView: TextView? = null
   private var batchStatusView: TextView? = null
@@ -422,7 +425,11 @@ class VoiceAlarmActivity : Activity() {
     alarmGeneration++
     endRequestedTurn()
     showReview("")
+    micIssue = ""
+    replyAllowsFollowUp = false
     nativeRecovery = VoiceAlarmNativeRecovery()
+    defaultOfflineChinese = null
+    defaultSupportChecked = false
     nativeRetryAt = 0L
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.ASSISTANT, mixerOwner, false)
     invalidateReply()
@@ -545,6 +552,14 @@ class VoiceAlarmActivity : Activity() {
       gravity = Gravity.CENTER
       setPadding(0, 48, 0, 64)
     }, LinearLayout.LayoutParams(-1, -2))
+    micStatusView = TextView(this).apply {
+      text = "正在准备麦克风…"
+      textSize = 16f
+      setTextColor(Color.WHITE)
+      gravity = Gravity.CENTER
+      setPadding(0, 4, 0, 12)
+    }
+    panel.addView(micStatusView, LinearLayout.LayoutParams(-1, -2))
     transcriptView = TextView(this).apply {
       autoLinkMask = android.text.util.Linkify.WEB_URLS
       linksClickable = true
@@ -628,6 +643,7 @@ class VoiceAlarmActivity : Activity() {
       }
     }
     panel.addView(reviewButton, LinearLayout.LayoutParams(-1, -2))
+    showReview(reviewText)
     panel.addView(Button(this).apply {
       text = "输入文字继续对话"
       setOnClickListener {
@@ -738,11 +754,42 @@ class VoiceAlarmActivity : Activity() {
   private var reviewText = ""
   private var alarmGeneration = 0L
   private var requestedTurn = false
+  private var listenWindow = VoiceAlarmListenWindow(25000L)
+  private var requestedFollowUp = false
+  private var nextWindowId = 0L
+  @Volatile private var captureWindowId = 0L
+  private fun nowUptime() = android.os.SystemClock.uptimeMillis()
+  private fun micStatus(text: String) {
+    micStatusView?.text = if (micIssue.isEmpty()) text else "$text\n$micIssue"
+  }
+  private fun pauseOnStableCue(text: String, capture: VoiceAlarmCapture?): Boolean {
+    if (capture == null || waitingForQuiet || (!speaking && !alarmVoicePlaying && VoiceAlarmRingingService.liveVoiceText == null)) return false
+    if (!capture.confirmedPause(text, nowUptime(), currentVoiceSources())) return false
+    logVoice("stt.bargeIn", "stable local pause cue", mapOf("pipeline" to batchChatPipelineVersion))
+    startRequestedTurn()
+    return true
+  }
+
+  private fun micReady() {
+    if (requestedTurn) listenWindow.ready(nowUptime())
+    micStatus(when {
+      requestedFollowUp -> "可以直接追问"
+      requestedTurn -> "可以说话了"
+      else -> "麦克风已就绪 · 说“闹钟助手”开始对话"
+    })
+  }
+
   private var waitingForQuiet = false
-  private val closeRequestedTurn = Runnable {
-    val needsRestart = waitingForQuiet
-    endRequestedTurn()
-    if (needsRestart && !destroyed && !closingAlarm) startVoiceAssistant()
+  private val closeRequestedTurn = object : Runnable {
+    override fun run() {
+      if (!requestedTurn) return
+      val remaining = listenWindow.expiresAt - nowUptime()
+      if (remaining > 0) { speechHandler.postDelayed(this, remaining); return }
+      val needsRestart = waitingForQuiet
+      endRequestedTurn()
+      micStatus("语音待命 · 说“闹钟助手”可再次提问")
+      if (needsRestart && !destroyed && !closingAlarm) startVoiceAssistant()
+    }
   }
   private val startQuietCapture = object : Runnable {
     override fun run() {
@@ -752,7 +799,8 @@ class VoiceAlarmActivity : Activity() {
         return
       }
       waitingForQuiet = false
-      transcriptView?.text = "请说，我在听。"
+      captureWindowId = ++nextWindowId
+      micStatus("麦克风正在连接…")
       startVoiceAssistant()
     }
   }
@@ -762,21 +810,27 @@ class VoiceAlarmActivity : Activity() {
     speechHandler.removeCallbacks(startQuietCapture)
     waitingForQuiet = false
     requestedTurn = false
+    captureWindowId = 0L
+    requestedFollowUp = false
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.LISTEN_REQUEST, mixerOwner, false)
   }
 
-  private fun startRequestedTurn() {
+  private fun startRequestedTurn(followUp: Boolean = false) {
     if (destroyed || closingAlarm) return
+    micIssue = ""
     endRequestedTurn()
-    showReview("")
     requestedTurn = true
+    requestedFollowUp = followUp
     waitingForQuiet = true
+    listenWindow = VoiceAlarmListenWindow(if (followUp) 12000L else 25000L)
+    listenWindow.open(nowUptime())
+    micStatus(if (followUp) "正在准备接听追问…" else "正在准备收音…")
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.LISTEN_REQUEST, mixerOwner, true)
-    interruptPlaybackForUserSpeech("重新聆听")
-    postponeAlarmVoiceReplay(25_000L)
-    stopNativeRecognizer()
-    stopCloudStt()
-    speechHandler.postDelayed(closeRequestedTurn, 25_000L)
+    if (!followUp) interruptPlaybackForUserSpeech("重新聆听")
+    postponeAlarmVoiceReplay(if (followUp) 16000L else 28000L)
+    if (!followUp || (!nativeTurn.hasSpeech && !nativeTurn.awaitingFinal)) stopNativeRecognizer()
+    if (!followUp) stopCloudStt()
+    speechHandler.postDelayed(closeRequestedTurn, listenWindow.expiresAt - nowUptime())
     speechHandler.post(startQuietCapture)
   }
 
@@ -784,7 +838,7 @@ class VoiceAlarmActivity : Activity() {
     reviewText = text
     reviewButton?.apply {
       visibility = if (text.isBlank()) View.GONE else View.VISIBLE
-      this.text = "核对并发送语音"
+      this.text = if (text.isBlank()) "核对并发送语音" else "已听到「${text.take(36)}${if (text.length > 36) "…" else ""}」· 核对并发送"
     }
   }
 
@@ -793,14 +847,29 @@ class VoiceAlarmActivity : Activity() {
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.USER, mixerOwner, active)
 
   private fun cloudUserSpeaking(session: Int, active: Boolean) = runOnUiThread {
-    if (!destroyed && cloudSttActive && cloudSttSession == session) userSpeaking(active)
+    if (!destroyed && cloudSttActive && cloudSttSession == session) {
+      userSpeaking(active)
+      if (active && requestedTurn) listenWindow.activity(nowUptime())
+    }
   }
 
-  private fun newCapture() = VoiceAlarmCapture(VoiceAlarmRingingService.outputEpoch,
-    VoiceAlarmRingingService.outputOrTailActive()).also { it.note(currentVoiceSources()) }
+  private fun newCapture(): VoiceAlarmCapture {
+    val epoch = VoiceAlarmRingingService.outputEpoch
+    val output = VoiceAlarmRingingService.outputKind()
+    return VoiceAlarmCapture(epoch, output != "quiet", output, captureWindowId).also { it.note(currentVoiceSources()) }
+  }
 
-  private fun VoiceAlarmCapture.endpoint(): VoiceAlarmCapture.Evidence =
-    finish(VoiceAlarmRingingService.outputEpoch, VoiceAlarmRingingService.outputOrTailActive())
+  private fun VoiceAlarmCapture.endpoint(): VoiceAlarmCapture.Evidence {
+    val epoch = VoiceAlarmRingingService.outputEpoch
+    val output = VoiceAlarmRingingService.outputKind()
+    return finish(epoch, output != "quiet", output)
+  }
+
+  private fun cloudCaptureReady(session: Int, capture: VoiceAlarmCapture) {
+    runOnUiThread {
+      if (!closingAlarm && !destroyed && cloudSttSession == session && capture.windowId == captureWindowId && !waitingForQuiet) micReady()
+    }
+  }
 
   private var nativeCapture: VoiceAlarmCapture? = null
   private fun nativeEvidence(): VoiceAlarmCapture.Evidence {
@@ -825,8 +894,36 @@ class VoiceAlarmActivity : Activity() {
 
   private var nativeRecovery = VoiceAlarmNativeRecovery()
   private var nativeRetryAt = 0L
-  private var earlyNativeBegin = false
-  private var audibleNativeFrames = 0
+  private var nativeSignal = VoiceAlarmNativeSignal()
+  private var nativeStartedAt = 0L
+  private var nativeReadyAt = 0L
+  private var defaultOfflineChinese: Boolean? = null
+  private var defaultSupportChecked = false
+
+  private fun checkDefaultChinese(engine: SpeechRecognizer, epoch: Int) {
+    if (Build.VERSION.SDK_INT < 33 || nativeRecovery.onDevice || defaultSupportChecked) return
+    defaultSupportChecked = true
+    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+      putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+      putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+      putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+    }
+    runCatching {
+      engine.checkRecognitionSupport(intent, mainExecutor, object : android.speech.RecognitionSupportCallback {
+        override fun onSupportResult(support: android.speech.RecognitionSupport) {
+          if (epoch != nativeRecognizerEpoch || destroyed) return
+          defaultOfflineChinese = support.installedOnDeviceLanguages.any {
+            it.replace('_', '-').lowercase(Locale.ROOT) in setOf("zh", "zh-cn", "zh-hans", "zh-hans-cn", "cmn", "cmn-hans-cn")
+          }
+          logVoice("stt.native.capability", "default recognition service", mapOf("installedChinese" to defaultOfflineChinese))
+        }
+        override fun onError(error: Int) {
+          if (epoch == nativeRecognizerEpoch && !destroyed)
+            logVoice("stt.native.capability", "offline language support unknown", mapOf("error" to error))
+        }
+      })
+    }
+  }
   private fun nativeEngine() = if (nativeRecovery.onDevice) "android_on_device" else "android_system"
   private fun createSpeechRecognizerCompat(): SpeechRecognizer {
     if (Build.VERSION.SDK_INT >= 31 && nativeRecovery.onDevice) {
@@ -845,6 +942,7 @@ class VoiceAlarmActivity : Activity() {
       "epoch" to nativeRecognizerEpoch, "engine" to nativeEngine(), "error" to error, "chars" to chars))
   }
   private var nativeRestart: Runnable? = null
+  private var nativeRestartDue = 0L
 
   private fun isCloudSttHealthy(): Boolean {
     val recorderAlive = cloudSttThread?.isAlive == true
@@ -1003,7 +1101,9 @@ class VoiceAlarmActivity : Activity() {
       }
       logVoice("audioRecord.start", "AudioRecord started", mapOf("source" to source, "playbackGuard" to playbackGuard, "minBuffer" to minBuffer))
       sharedCaptureRecord = record
-      sharedCapturePump = VoiceAlarmPcmPump({ bytes -> record.read(bytes, 0, bytes.size) })
+      sharedCapturePump = VoiceAlarmPcmPump({ bytes -> record.read(bytes, 0, bytes.size) }, stamp = {
+        VoiceAlarmFrameStamp(captureWindowId, VoiceAlarmRingingService.outputEpoch, VoiceAlarmRingingService.outputKind())
+      })
       sharedCaptureEffects = effects
       sharedCaptureIsPlaybackGuard = playbackGuard
       sharedCaptureAudioSource = source
@@ -1012,9 +1112,9 @@ class VoiceAlarmActivity : Activity() {
     return null
   }
 
-  private fun readVoicePcm(record: AudioRecord, buffer: ByteArray): Int {
+  private fun readVoicePcm(record: AudioRecord, buffer: ByteArray, capture: VoiceAlarmCapture): Int {
     if (record !== sharedCaptureRecord) return -1
-    return sharedCapturePump?.read(buffer) ?: -1
+    return sharedCapturePump?.read(buffer, capture) ?: -1
   }
 
   @Synchronized
@@ -1116,17 +1216,22 @@ class VoiceAlarmActivity : Activity() {
         private fun current() = !destroyed && !closingAlarm && epoch == nativeRecognizerEpoch && nativeTurn.active
         override fun onReadyForSpeech(params: Bundle?) {
           if (!current()) return
+          nativeReadyAt = nowUptime()
           logNative("ready")
           nativeTurn.ready(); listening = true
-          listeningStartedAt = System.currentTimeMillis(); updateListeningStatus()
+          listeningStartedAt = System.currentTimeMillis(); micReady()
         }
         override fun onResults(results: Bundle?) {
           if (!current()) return
-          val evidence = nativeEvidence()
           val finalText = VoiceAlarmNativeTurn.bestCandidate(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION))
+          if (finalText.isBlank() && !nativeTurn.hasDraft) {
+            recoverRecognition(SpeechRecognizer.ERROR_NO_MATCH, emptyFinal = true)
+            return
+          }
+          val evidence = nativeEvidence()
           val text = nativeTurn.finish(finalText).orEmpty()
           userSpeaking(false)
-          if (text.isNotBlank()) nativeRecovery.success()
+          if (finalText.isNotBlank()) { nativeRecovery.success(); micIssue = "" }
           logNative("result", chars = text.length)
           listening = false; listeningStartedAt = 0L
           if (text.isNotBlank()) onSpeechChunk(text, finalChunk = true, evidence = evidence, reliable = finalText.isNotBlank())
@@ -1137,18 +1242,21 @@ class VoiceAlarmActivity : Activity() {
           val text = VoiceAlarmNativeTurn.bestCandidate(partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION))
           if (text.isBlank()) return
           if (!nativeTurn.awaitingFinal) userSpeaking(true)
+          if (pauseOnStableCue(text, nativeCapture)) return
           nativeTurn.partial(text)
+          if (requestedTurn) listenWindow.activity(nowUptime())
           nativeTurn.notePlayback(currentVoiceSources())
           listeningStartedAt = System.currentTimeMillis()
           if (!nativeTurn.awaitingFinal) nativeCapture?.note(currentVoiceSources())
           transcriptView?.text = "正在听写：$text"
         }
-        override fun onError(error: Int) {
+        override fun onError(error: Int) = recoverRecognition(error, emptyFinal = false)
+        private fun recoverRecognition(error: Int, emptyFinal: Boolean) {
           if (!current()) return
           val evidence = nativeEvidence()
           val retained = nativeTurn.finish().orEmpty()
           userSpeaking(false)
-          logNative("error", error, retained.length)
+          logNative(if (emptyFinal) "emptyFinal" else "error", if (emptyFinal) null else error, retained.length)
           listening = false; listeningStartedAt = 0L
           val kind = when (error) {
             SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_NETWORK -> VoiceAlarmNativeRecovery.Failure.NETWORK
@@ -1158,9 +1266,12 @@ class VoiceAlarmActivity : Activity() {
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> VoiceAlarmNativeRecovery.Failure.PERMISSION
             else -> VoiceAlarmNativeRecovery.Failure.OTHER
           }
-          val localAvailable = kind == VoiceAlarmNativeRecovery.Failure.NETWORK && Build.VERSION.SDK_INT >= 31 &&
+          val expectedSpeech = requestedTurn || (nativeSignal.detected && !evidence.mixed)
+          val checkLocal = kind == VoiceAlarmNativeRecovery.Failure.NETWORK || (expectedSpeech && kind == VoiceAlarmNativeRecovery.Failure.NO_MATCH)
+          val localAvailable = checkLocal && Build.VERSION.SDK_INT >= 31 &&
             runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(this@VoiceAlarmActivity) }.getOrDefault(false)
-          val retry = nativeRecovery.failed(kind, localAvailable)
+          val retry = nativeRecovery.failed(kind, localAvailable, expectedSpeech,
+            allowDefaultOffline = defaultOfflineChinese == true || (defaultOfflineChinese == null && (requestedTurn || kind == VoiceAlarmNativeRecovery.Failure.NETWORK)))
           nativeRetryAt = android.os.SystemClock.uptimeMillis() + (retry?.delayMs ?: 0L)
           if (retained.isNotBlank()) onSpeechChunk(retained, finalChunk = true, evidence = evidence, reliable = false)
           if (retry == null) {
@@ -1169,10 +1280,17 @@ class VoiceAlarmActivity : Activity() {
             return
           }
           logVoice("stt.native.recover", "recognition retry", mapOf("reason" to kind.name,
-            "nextEngine" to nativeEngine(), "retryMs" to retry.delayMs, "retainedChars" to retained.length))
+            "nextEngine" to nativeEngine(), "retryMs" to retry.delayMs, "retainedChars" to retained.length,
+            "preferOffline" to nativeRecovery.preferOffline, "dedicatedLocal" to localAvailable, "defaultChinese" to defaultOfflineChinese,
+            "requested" to requestedTurn, "earlyBegin" to nativeSignal.earlyBegin, "rmsSamples" to nativeSignal.rmsCallbacks,
+            "peakDb" to nativeSignal.peakDb, "signalDetected" to nativeSignal.detected, "readyDelayMs" to (nativeReadyAt.takeIf { it > 0 }?.minus(nativeStartedAt))))
           if (kind == VoiceAlarmNativeRecovery.Failure.NETWORK) {
-            transcriptView?.text = if (nativeRecovery.onDevice) "系统识别网络超时，正在尝试设备上的中文识别。"
-              else "系统语音识别网络暂不可用，正在重连。"
+            micIssue = if (retained.isBlank()) "上一轮网络超时，未返回文字。" else "上一轮网络超时，已保留转写草稿。"
+            micStatus(if (nativeRecovery.onDevice || nativeRecovery.preferOffline) "网络识别超时，正在尝试本机识别…" else "网络识别超时，正在重连…")
+          }
+          if (kind == VoiceAlarmNativeRecovery.Failure.NO_MATCH && expectedSpeech && retained.isBlank()) {
+            micIssue = if (nativeSignal.detected) "上一轮检测到了声音，识别服务未返回文字。" else "上一轮未返回文字。"
+            micStatus("正在恢复收音…")
           }
           if (retry.replaceEngine) stopNativeRecognizer()
           listenAgain(retry.delayMs)
@@ -1180,9 +1298,11 @@ class VoiceAlarmActivity : Activity() {
         override fun onBeginningOfSpeech() {
           if (!current()) return
           logNative("speechBegin")
-          earlyNativeBegin = !nativeTurn.ready
-          if (!earlyNativeBegin && !nativeTurn.awaitingFinal) userSpeaking(true)
-          nativeTurn.speechStarted()
+          if (nativeSignal.began(nativeTurn.ready) && !nativeTurn.awaitingFinal) {
+            userSpeaking(true)
+            nativeTurn.speechStarted()
+            if (requestedTurn) listenWindow.activity(nowUptime())
+          }
           nativeTurn.notePlayback(currentVoiceSources())
           listeningStartedAt = System.currentTimeMillis()
           // Only a transcribed user turn may postpone the alarm. A speech-start
@@ -1201,16 +1321,23 @@ class VoiceAlarmActivity : Activity() {
           }
         }
         override fun onRmsChanged(rmsdB: Float) {
-          // Some engines announce speech at startup, even before opening the mic.
-          if (!current() || !earlyNativeBegin || !nativeTurn.ready || nativeTurn.awaitingFinal) return
-          audibleNativeFrames = if (rmsdB >= 2f) audibleNativeFrames + 1 else 0
-          if (audibleNativeFrames >= 2) { userSpeaking(true); earlyNativeBegin = false }
+          if (!current() || nativeTurn.awaitingFinal) return
+          if (nativeSignal.sample(rmsdB, nativeTurn.ready)) {
+            nativeTurn.speechStarted()
+            nativeTurn.notePlayback(currentVoiceSources())
+            userSpeaking(true)
+          }
+          if (nativeTurn.ready && nativeSignal.detected && rmsdB >= 2f) {
+            listeningStartedAt = System.currentTimeMillis()
+            if (requestedTurn) listenWindow.activity(nowUptime())
+          }
         }
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEvent(eventType: Int, params: Bundle?) {}
       })
     }
-    listenAgain(300)
+    checkDefaultChinese(engine, epoch)
+    listenAgain(if (requestedTurn) 0 else 120)
   }
   private fun startMicrosoftCloudStt(cfg: JSONObject) {
     if (cloudSttActive && isCloudSttHealthy()) return
@@ -1756,8 +1883,11 @@ class VoiceAlarmActivity : Activity() {
     batchCurrentConfirmedSpeech = false
     batchHasSpeech = false
     try {
+      cloudCaptureReady(session, sources)
       while (!destroyed && cloudSttActive && cloudSttSession == session) {
-        val read = readVoicePcm(record, buffer)
+        if (sources.windowId != captureWindowId && !turn.started) break
+        val read = readVoicePcm(record, buffer, sources)
+        if (read == VoiceAlarmPcmPump.NEXT_WINDOW) break
         if (read < 0) throw java.io.IOException("录音中断")
         if (read == 0) continue
         val now = System.currentTimeMillis()
@@ -2109,8 +2239,11 @@ class VoiceAlarmActivity : Activity() {
       val preRoll = java.util.ArrayDeque<ByteArray>()
       var preRollBytes = 0
       val preRollLimitBytes = sampleRate * 2 * (if (playbackEchoGuard || isPostPlaybackHandoffActive()) 1200 else 900) / 1000
+      cloudCaptureReady(session, sources)
       while (!destroyed && cloudSttActive && cloudSttSession == session && System.currentTimeMillis() < deadline) {
-        val read = readVoicePcm(audioRecord, buffer)
+        if (sources.windowId != captureWindowId && !speechStarted) break
+        val read = readVoicePcm(audioRecord, buffer, sources)
+        if (read == VoiceAlarmPcmPump.NEXT_WINDOW) break
         if (read < 0) {
           // The shared recorder entered a bad state (e.g. audio focus loss).
           // Drop it so the next call rebuilds a fresh one instead of looping
@@ -2550,6 +2683,7 @@ class VoiceAlarmActivity : Activity() {
           }
           runOnUiThread {
             if (!streamActive.get() || cloudSttSession != session || destroyed) return@runOnUiThread
+            if (pauseOnStableCue(text, sources)) return@runOnUiThread
             transcriptView?.text = if (isPlaybackActiveForSpeechGate()) {
               "xAI 识别候选：$text\n（播报中，稍后先做回声过滤，再决定是否作为用户语音…）"
             } else {
@@ -2580,8 +2714,11 @@ class VoiceAlarmActivity : Activity() {
       val preRollLimitBytes = sampleRate * 2 * (if (playbackEchoGuard || isPostPlaybackHandoffActive()) 1200 else 900) / 1000
       val streamFromOpen = !playbackEchoGuard || isPostPlaybackHandoffActive()
       fun sendFrame(frame: ByteArray) { if (webSocket?.send(frame.toByteString(0, frame.size)) != true) throw java.io.IOException("xAI 语音连接已关闭") }
+      cloudCaptureReady(session, sources)
       while (!destroyed && cloudSttActive && cloudSttSession == session && !utteranceEnded.get() && closed.count > 0 && System.currentTimeMillis() < deadline) {
-        val read = readVoicePcm(audioRecord, buffer)
+        if (sources.windowId != captureWindowId && !speechStarted) break
+        val read = readVoicePcm(audioRecord, buffer, sources)
+        if (read == VoiceAlarmPcmPump.NEXT_WINDOW) break
         if (read < 0) {
           releaseContinuousAudioRecord(audioRecord)
           break
@@ -2774,6 +2911,7 @@ class VoiceAlarmActivity : Activity() {
         if (draft.isNotBlank()) {
           runOnUiThread {
             if (!streamActive.get() || cloudSttSession != session || destroyed) return@runOnUiThread
+            if (pauseOnStableCue(draft, sources)) return@runOnUiThread
             val correctionLabel = when (piece.pgs) {
               "rpl" -> "讯飞已动态修正"
               "apd" -> "讯飞实时听写"
@@ -2822,8 +2960,11 @@ class VoiceAlarmActivity : Activity() {
         if (webSocket?.send(iflytekFrame(cfg, status, frame)) != true) throw java.io.IOException("讯飞语音连接已关闭")
         status = 1
       }
+      cloudCaptureReady(session, sources)
       while (!destroyed && cloudSttActive && cloudSttSession == session && closed.count > 0 && System.currentTimeMillis() < deadline) {
-        val read = readVoicePcm(audioRecord, buffer)
+        if (sources.windowId != captureWindowId && !speechStarted) break
+        val read = readVoicePcm(audioRecord, buffer, sources)
+        if (read == VoiceAlarmPcmPump.NEXT_WINDOW) break
         if (read < 0) {
           releaseContinuousAudioRecord(audioRecord)
           break
@@ -3179,12 +3320,6 @@ class VoiceAlarmActivity : Activity() {
   }
 
 
-  private fun updateListeningStatus() {
-    val current = transcriptView?.text?.toString().orEmpty()
-    val base = current.lineSequence().filter { it.isNotBlank() && !it.contains("正在聆听") }.take(8).joinToString("\n")
-    transcriptView?.text = if (base.isBlank()) "正在聆听…" else "$base\n正在聆听…"
-  }
-
   private fun listenAgain(delayMs: Long = 0L) {
     if (waitingForQuiet) return
     recoverStuckPlaybackStateIfNeeded()
@@ -3201,9 +3336,13 @@ class VoiceAlarmActivity : Activity() {
       startVoiceAssistant()
       if (recognizer == null) return
     }
+    val due = maxOf(nowUptime() + delayMs, nativeRetryAt)
+    if (nativeRestart != null && nativeRestartDue in nativeRetryAt..due) return
+    nativeRestartDue = due
     nativeRestart?.let { speechHandler.removeCallbacks(it) }
     nativeRestart = Runnable {
       nativeRestart = null
+      if (nowUptime() < nativeRetryAt) { listenAgain(0L); return@Runnable }
       recoverStuckPlaybackStateIfNeeded()
       if (destroyed || closingAlarm || listening || nativeTurn.active) return@Runnable
       if (recognizer == null) {
@@ -3220,6 +3359,7 @@ class VoiceAlarmActivity : Activity() {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        if (nativeRecovery.preferOffline) putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
         putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, endpoint.completeSilenceMs)
         putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, endpoint.possiblyCompleteSilenceMs)
@@ -3231,11 +3371,12 @@ class VoiceAlarmActivity : Activity() {
         val r = recognizer ?: return@Runnable
         if (!nativeTurn.begin()) return@Runnable
         nativeCapture = newCapture()
-        earlyNativeBegin = false
-        audibleNativeFrames = 0
+        nativeSignal = VoiceAlarmNativeSignal()
+        nativeStartedAt = nowUptime()
+        nativeReadyAt = 0L
         nativeTurnNumber++
         logNative("start")
-        transcriptView?.text = "正在连接系统麦克风…"
+        micStatus("麦克风正在连接…")
         r.startListening(i)
         listening = true
         listeningStartedAt = System.currentTimeMillis()
@@ -3246,7 +3387,7 @@ class VoiceAlarmActivity : Activity() {
         listenAgain(800)
       }
     }
-    speechHandler.postDelayed(nativeRestart!!, maxOf(delayMs, nativeRetryAt - android.os.SystemClock.uptimeMillis()))
+    speechHandler.postAtTime(nativeRestart!!, due)
   }
 
   private fun scheduleListeningAfterSuppression(extraDelayMs: Long = 180L) {
@@ -3519,8 +3660,10 @@ class VoiceAlarmActivity : Activity() {
         markPostPlaybackHandoff()
       }
     }
+    val nativeTimeout = nativeTurn.timeoutMs(endpointingConfig().maxUtteranceMs)
+    val stalledAfterSignal = nativeTurn.ready && nativeTurn.hasSpeech && nativeSignal.rmsCallbacks >= 2 && now - listeningStartedAt > 15000L
     if (listening && nativeTurn.active && listeningStartedAt > 0L &&
-        now - listeningStartedAt >= nativeTurn.timeoutMs(endpointingConfig().maxUtteranceMs)) {
+        (now - listeningStartedAt >= nativeTimeout || stalledAfterSignal || nowUptime() - nativeStartedAt >= 75000L)) {
       val evidence = nativeEvidence()
       val retained = nativeTurn.finish().orEmpty()
       logNative("timeout", chars = retained.length)
@@ -3601,6 +3744,7 @@ class VoiceAlarmActivity : Activity() {
       runOnUiThread { interruptPlaybackForUserSpeech(text) }
       return
     }
+    replyAllowsFollowUp = false
     if (aiBusy) { aiRequestSeq++; aiBusy = false; stopAiThinkingTicker(); activeAiClient?.cancel() }
     invalidateReply()
     localSpeechParts.clear()
@@ -3721,17 +3865,18 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun onSpeechChunk(chunk: String, finalChunk: Boolean, evidence: VoiceAlarmCapture.Evidence, reliable: Boolean = true) {
-    if (destroyed || closingAlarm || waitingForQuiet) return
+    if (destroyed || closingAlarm) return
     val text = chunk.trim()
     val local = isStopCommand(text) || isSnoozeCommand(text) || VoiceAlarmCommands.music(text) != null
     val decision = VoiceAlarmConversationGate.decide(text, evidence.sources, evidence.mixed, finalChunk,
-      reliable, armed = requestedTurn, localCommand = local)
+      reliable, armed = evidence.belongsTo(captureWindowId), localCommand = local)
     logVoice("stt.route", "capture admission", mapOf("route" to decision.route.name, "mixed" to evidence.mixed,
-      "sources" to evidence.sources.size, "chars" to text.length, "final" to finalChunk, "pipeline" to batchChatPipelineVersion))
+      "sources" to evidence.sources.size, "mixCause" to evidence.mixCause, "armed" to evidence.belongsTo(captureWindowId), "chars" to text.length, "final" to finalChunk, "pipeline" to batchChatPipelineVersion))
     batchAwaitingAiCommit = false
     when (decision.route) {
       VoiceAlarmConversationGate.Route.ECHO, VoiceAlarmConversationGate.Route.DRAFT -> return
       VoiceAlarmConversationGate.Route.REVIEW -> {
+        micStatus("已识别 ${text.length} 个字，待核对")
         showReview(text)
         transcriptView?.text = "待核对：$text"
         return
@@ -4223,7 +4368,7 @@ class VoiceAlarmActivity : Activity() {
         callAi(aiConfig, query.ifBlank { userText }, history)
       } catch (t: Throwable) {
         logVoice("ai.ask.error", t.message ?: t.javaClass.simpleName, mapOf("seq" to requestSeq))
-        AiAnswer("AI 请求失败，请检查网络或服务配置。")
+        AiAnswer("AI 请求失败，请检查网络或服务配置。", success = false)
       }
       runOnUiThread {
         if (requestSeq != aiRequestSeq || destroyed) return@runOnUiThread
@@ -4241,7 +4386,7 @@ class VoiceAlarmActivity : Activity() {
         conversation.add("user" to userText)
         conversation.add("assistant" to clean)
         while (conversation.size > 12) conversation.removeAt(0)
-        speak(clean, "alarm_ai_${System.currentTimeMillis()}")
+        speak(clean, "alarm_ai_${System.currentTimeMillis()}", followUp = answer.success && answer.text.isNotBlank())
       }
     }.start()
   }
@@ -4256,8 +4401,9 @@ class VoiceAlarmActivity : Activity() {
     pendingSpeakUtteranceId = ""
   }
 
-  private fun speak(text: String, utteranceId: String, restart: Boolean = true, allowCloudTts: Boolean = true) {
+  private fun speak(text: String, utteranceId: String, restart: Boolean = true, allowCloudTts: Boolean = true, followUp: Boolean = false) {
     if (closingAlarm || destroyed) return
+    replyAllowsFollowUp = followUp
     invalidateReply()
     localSpeechParts.clear()
     try { tts?.stop() } catch (_: Throwable) {}
@@ -4746,6 +4892,10 @@ class VoiceAlarmActivity : Activity() {
       return
     }
     localSpeechParts.clear()
+    val followUp = replyAllowsFollowUp && success && restart && !aiBusy && speechBuffer.isBlank() && pendingAiUserText.isBlank()
+    replyAllowsFollowUp = false
+    // Hold the music across the TTS-to-microphone transition, including the acoustic tail.
+    if (followUp) startRequestedTurn(followUp = true)
     finishAppTtsPlaybackState(utteranceId, restart)
     if (!success) postponeAlarmVoiceReplay(3000L)
   }
@@ -4779,7 +4929,7 @@ class VoiceAlarmActivity : Activity() {
     conn.setRequestProperty("Authorization", "Bearer $apiKey")
   }
 
-  private data class AiAnswer(val text: String, val webStatus: String = "", val sources: List<String> = emptyList())
+  private data class AiAnswer(val text: String, val webStatus: String = "", val sources: List<String> = emptyList(), val success: Boolean = true)
 
   private fun callAi(cfg: JSONObject, userText: String, history: List<Pair<String, String>>): AiAnswer {
     val enabled = try { JSONObject(payload).optBoolean("aiWebSearchEnabled", true) } catch (_: Exception) { true }

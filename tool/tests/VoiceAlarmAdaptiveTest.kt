@@ -29,6 +29,59 @@ fun main() {
     check(policy.failed(network, false)!!.delayMs == 400L)
     check(policy.failed(VoiceAlarmNativeRecovery.Failure.PERMISSION, true) == null)
   }
+  scenario("early vendor speechBegin cannot invent a human onset or hold the microphone for a minute") {
+    val signal = VoiceAlarmNativeSignal()
+    val turn = VoiceAlarmNativeTurn()
+    turn.begin()
+    if (signal.began(ready = false)) turn.speechStarted()
+    check(signal.earlyBegin && !turn.hasSpeech)
+    turn.ready()
+    check(turn.timeoutMs(20000) == 18000L)
+    check(!signal.sample(3f, true) && signal.sample(3f, true))
+    check(signal.detected && signal.rmsCallbacks == 2 && signal.peakDb == 3f)
+    check(!signal.sample(Float.NaN, true))
+  }
+  scenario("empty idle turns do not change engines, repeated intentional misses do") {
+    val policy = VoiceAlarmNativeRecovery()
+    val miss = VoiceAlarmNativeRecovery.Failure.NO_MATCH
+    repeat(8) { check(!policy.failed(miss, true)!!.replaceEngine) }
+    check(!policy.failed(miss, true, expectedSpeech = true)!!.replaceEngine)
+    check(policy.failed(miss, true, expectedSpeech = true)!!.replaceEngine && policy.onDevice)
+    policy.failed(miss, true, expectedSpeech = true)
+    check(policy.failed(miss, true, expectedSpeech = true)!!.replaceEngine && !policy.onDevice)
+  }
+  scenario("a recognizer ignoring the offline preference cannot trap idle listening in an empty offline trial") {
+    val policy = VoiceAlarmNativeRecovery()
+    policy.failed(VoiceAlarmNativeRecovery.Failure.NETWORK, false, allowDefaultOffline = true)
+    check(policy.preferOffline)
+    repeat(2) { policy.failed(VoiceAlarmNativeRecovery.Failure.NO_MATCH, false) }
+    check(!policy.preferOffline && !policy.onDevice)
+    policy.failed(VoiceAlarmNativeRecovery.Failure.NETWORK, false, allowDefaultOffline = true)
+    check(!policy.preferOffline)
+  }
+  scenario("161 through 167 recover without silently forcing an unavailable offline engine") {
+    val policy = VoiceAlarmNativeRecovery()
+    val miss = VoiceAlarmNativeRecovery.Failure.NO_MATCH
+    val net = VoiceAlarmNativeRecovery.Failure.NETWORK
+    check(policy.failed(miss, false)!!.delayMs == 100L)
+    check(policy.failed(net, false, allowDefaultOffline = true) != null && policy.preferOffline)
+    policy.success()
+    repeat(3) { check(policy.failed(miss, false) != null) }
+    check(policy.failed(net, false, allowDefaultOffline = true)!!.replaceEngine && !policy.preferOffline)
+    check(!policy.failed(net, false, allowDefaultOffline = true)!!.replaceEngine && !policy.preferOffline)
+  }
+  scenario("follow-up time starts when ready, survives a long sentence, and ends after silence") {
+    val window = VoiceAlarmListenWindow(12000)
+    window.open(1000)
+    window.ready(6000)
+    check(window.expiresAt == 18000L)
+    window.ready(10000)
+    check(window.expiresAt == 18000L)
+    window.activity(17000)
+    check(window.expiresAt == 25000L)
+    window.activity(75000)
+    check(window.expiresAt == 76000L)
+  }
   scenario("native end-of-speech cannot prematurely begin another recognition") {
     val turn = VoiceAlarmNativeTurn(); check(turn.begin()); turn.ready(); turn.speechStarted()
     turn.partial("请关闭背景"); turn.endSpeech(); check(!turn.begin() && turn.active && turn.awaitingFinal)
