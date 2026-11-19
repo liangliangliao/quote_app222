@@ -21,6 +21,17 @@ object VoiceAlarmChannel {
       try {
         when (call.method) {
           "getAiWakeupSettings" -> result.success(VoiceAlarmWakeupStore.publicSettings(context))
+          "getAiWakeupHistoryDates", "getAiWakeupHistory" -> {
+            val date = call.argument<String>("date")
+            wakeupIo.execute {
+              try {
+                val value = if (date == null) VoiceAlarmWakeupStore.historyDates(context) else VoiceAlarmWakeupStore.history(context, date)
+                main.post { result.success(value) }
+              } catch (_: Exception) {
+                main.post { result.error("AI_WAKEUP_HISTORY", "无法读取本机同步记录", null) }
+              }
+            }
+          }
           "saveAiWakeupSettings", "testAiWakeupConnection" -> {
             val base = call.argument<String>("baseUrl") ?: VoiceAlarmWakeupClient.DEFAULT_URL
             val device = call.argument<String>("deviceToken") ?: ""
@@ -31,9 +42,13 @@ object VoiceAlarmChannel {
               try {
                 VoiceAlarmWakeupStore.update(context, base, device, service, clear)
                 val output = if (test) {
-                  val access = VoiceAlarmWakeupStore.access(context) ?: error("请先配置连接")
-                  val content = VoiceAlarmWakeupClient.fetch(access)
-                  mapOf("connected" to true, "date" to content.date, "message" to "连接成功，今日正式提醒已就绪")
+                  val day = VoiceAlarmWakeupStore.fetchDay(context)
+                  val message = when {
+                    day.tasks.isNotEmpty() -> "连接成功，今日有 ${day.tasks.size} 条同步任务"
+                    day.reminder != null -> "连接成功，今日正式提醒已就绪"
+                    else -> "连接成功，今日暂无同步任务或播报内容"
+                  }
+                  mapOf("connected" to true, "date" to day.date, "message" to message)
                 } else VoiceAlarmWakeupStore.publicSettings(context)
                 main.post { result.success(output) }
               } catch (_: Exception) {

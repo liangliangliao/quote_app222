@@ -4,7 +4,10 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.AtomicFile
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -30,6 +33,9 @@ object VoiceAlarmWakeupStore {
   }
   private fun read(context: Context, name: String): JSONObject? {
     val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(name, null) ?: return null
+    return decrypt(raw)
+  }
+  private fun decrypt(raw: String): JSONObject {
     val bytes = Base64.decode(raw, Base64.NO_WRAP)
     require(bytes.size > 12)
     val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key(false), GCMParameterSpec(128, bytes.copyOfRange(0, 12))) }
@@ -54,8 +60,51 @@ object VoiceAlarmWakeupStore {
       .put("serviceToken", token(serviceToken).ifBlank { if (sameOrigin) old?.serviceToken.orEmpty() else "" })
     check(prefs.edit().putString("connection", encrypt(cfg)).remove("cache").commit()) { "连接设置未保存" }
   }
-  fun fetchToday(context: Context): WakeupContent {
+  fun fetchDay(context: Context): WakeupDay {
     val cfg = access(context) ?: throw IllegalStateException("AI Wakeup 尚未配置连接")
-    return VoiceAlarmWakeupClient.fetch(cfg)
+    val day = VoiceAlarmWakeupClient.fetchDay(cfg)
+    try { saveHistory(context, day) } catch (failure: Exception) {
+      VoiceAlarmDebugLog.write(context, "aiWakeup.history.error", "本次内容未能存入本地历史", mapOf("type" to failure.javaClass.simpleName))
+    }
+    return day
+  }
+
+  private val datePattern = Regex("\\d{4}-\\d{2}-\\d{2}")
+  private fun historyFolder(context: Context) = File(context.noBackupFilesDir, "ai-wakeup-history")
+  private fun historyFile(context: Context, date: String): AtomicFile {
+    require(datePattern.matches(date)) { "日期无效" }
+    return AtomicFile(File(historyFolder(context), "$date.json"))
+  }
+  @Synchronized private fun saveHistory(context: Context, day: WakeupDay) {
+    if (day.historyItems.isEmpty()) return
+    val folder = historyFolder(context)
+    check(folder.isDirectory || folder.mkdirs())
+    val file = historyFile(context, day.date)
+    val old = if (file.baseFile.exists()) decrypt(file.readFully().toString(Charsets.UTF_8)).optJSONArray("items") else null
+    val items = (0 until (old?.length() ?: 0)).mapNotNull { old?.optJSONObject(it) }.toMutableList()
+    val fetchedAt = System.currentTimeMillis()
+    for (entry in day.historyItems) {
+      val index = items.indexOfFirst { it.optString("id") == entry.id && it.optString("text") == entry.text }
+      val item = JSONObject().put("id", entry.id).put("title", entry.title).put("scheduledTime", entry.scheduledTime)
+        .put("text", entry.text).put("fetchedAt", fetchedAt)
+      if (index < 0) items.add(item) else items[index] = item
+    }
+    val bytes = encrypt(JSONObject().put("items", JSONArray(items))).toByteArray(Charsets.UTF_8)
+    val output = file.startWrite()
+    try { output.write(bytes); file.finishWrite(output) }
+    catch (error: Exception) { file.failWrite(output); throw error }
+  }
+
+  @Synchronized fun historyDates(context: Context): List<String> = historyFolder(context).listFiles().orEmpty()
+    .map { it.nameWithoutExtension }.filter { datePattern.matches(it) }.distinct().sortedDescending()
+
+  @Synchronized fun history(context: Context, date: String): List<Map<String, Any>> {
+    val file = historyFile(context, date)
+    if (!file.baseFile.exists()) return emptyList()
+    val items = decrypt(file.readFully().toString(Charsets.UTF_8)).optJSONArray("items") ?: return emptyList()
+    return (0 until items.length()).mapNotNull { items.optJSONObject(it) }
+      .sortedWith(compareBy({ it.optString("scheduledTime").ifBlank { "99:99" } }, { -it.optLong("fetchedAt") }))
+      .map { mapOf("title" to it.optString("title"), "scheduledTime" to it.optString("scheduledTime"),
+        "text" to it.optString("text"), "fetchedAt" to it.optLong("fetchedAt")) }
   }
 }

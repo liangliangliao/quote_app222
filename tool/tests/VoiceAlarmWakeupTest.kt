@@ -5,6 +5,7 @@ import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.IOException
 import java.time.Instant
 import java.util.Date
@@ -30,6 +31,39 @@ fun main() {
   scenario("today body is preserved verbatim including whitespace") {
     val content = VoiceAlarmWakeupClient.parseToday(fixture().toString(), date)
     check(content.date == date && content.id == "fictional-1" && content.text == text)
+  }
+  scenario("task-only response preserves each original and orders by schedule time") {
+    fun item(id: String, time: String) = JSONObject().put("id", id).put("date", date).put("scheduled_time", time)
+      .put("task_title", "任务 $id").put("text", "$id\n$text").put("isDemo", false)
+    val raw = fixture().put("content", JSONObject.NULL).put("scheduledMessages", JSONArray()
+      .put(item("two", "07:00")).put(item("old", "05:00").put("date", "2026-11-15"))
+      .put(item("one", "06:00")).put(item("demo", "05:00").put("isDemo", true)).put(item("one", "06:00")))
+    val parsed = VoiceAlarmWakeupClient.parseDay(raw.toString(), date)
+    check(parsed.tasks.map { it.id } == listOf("one", "two"))
+    check(parsed.tasks.first().text == "one\n$text" && parsed.historyItems == parsed.tasks && parsed.reminder == null)
+  }
+  scenario("legacy endpoint and empty day remain available to the existing alarm fallback") {
+    check(VoiceAlarmWakeupClient.parseDay(fixture().toString(), date).historyItems.single().text == text)
+    val empty = VoiceAlarmWakeupClient.parseDay(fixture().put("content", JSONObject.NULL).toString(), date)
+    check(empty.tasks.isEmpty() && empty.historyItems.isEmpty())
+  }
+  scenario("one remote task per round, wrap in order, retain position on refresh, never cross midnight") {
+    val first = WakeupContent(date, "任务一\n正文", "a", "一", "06:00")
+    val second = WakeupContent(date, "任务二\n正文", "b", "二", "07:00")
+    val session = VoiceAlarmWakeSession("本地开场")
+    check(session.needsRemote(date, 0))
+    session.rememberRemote(date, 0, WakeupDay(date, listOf(first, second), null))
+    check(!session.needsRemote(date, 59000) && session.needsRemote(date, 60000))
+    repeat(3) { index ->
+      val next = session.remoteForRound(date) ?: error("missing task")
+      val expected = if (index == 1) second else first
+      check(next.task == expected)
+      check(session.accept(next.motivation, emptyList(), next.source, next.task?.id).body == "本地开场\n\n${expected.text}")
+      session.rememberRemote(date, (index + 1) * 60000L, WakeupDay(date, listOf(first, second), null))
+    }
+    check(session.remoteForRound("2026-11-17") == null)
+    val direct = VoiceAlarmWakeSession("本地开场", adaptive = false)
+    check(direct.accept(first.text, emptyList(), "ai_wakeup_task", first.id).body == first.text)
   }
   scenario("disabled alarm never supplies cloud content") {
     rejects { VoiceAlarmWakeupClient.parseToday(fixture().put("shouldRing", false).toString(), date) }

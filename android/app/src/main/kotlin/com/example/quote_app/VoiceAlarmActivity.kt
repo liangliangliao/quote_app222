@@ -9,7 +9,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
@@ -74,7 +73,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "voice_turn_reliability_v49"
+  private val batchChatPipelineVersion = "voice_turn_reliability_v50"
   private val batchChatPipelineSummary = "连续人声窗口、完整转写、可恢复失败与过期播报隔离"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
@@ -375,6 +374,8 @@ class VoiceAlarmActivity : Activity() {
   override fun onResume() {
     super.onResume()
     if (closingAlarm || destroyed) { finishAndRemoveTask(); return }
+    backgroundVisible = true
+    backgroundMedia?.show(true)
     updateVolumeKeyStream()
     VoiceAlarmRingingService.enableVoiceInteraction(this)
     restoreFullScreenRunnable?.let { speechHandler.removeCallbacks(it) }
@@ -392,6 +393,8 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onStop() {
     super.onStop()
+    backgroundVisible = false
+    backgroundMedia?.show(false)
     // Respect the user's choice to switch to another app.  The foreground ringing
     // service/notification keeps the alarm accessible instead of forcing the
     // full-screen Activity back to the front on every background transition.
@@ -535,26 +538,25 @@ class VoiceAlarmActivity : Activity() {
     return values.distinct().let { if (it.isEmpty()) "" else it[Random.nextInt(it.size)] }
   }
 
+  private var backgroundMedia: VoiceAlarmBackground? = null
+  private var backgroundVisible = false
+
   private fun buildContent(): View {
     val data = try { JSONObject(payload) } catch (_: Throwable) { JSONObject() }
     val root = FrameLayout(this)
-    val backgroundPath = randomExistingPayloadPath(data, "backgroundPaths", "backgroundPath")
-    if (backgroundPath.isNotBlank() && File(backgroundPath).isFile) {
-      val image = ImageView(this).apply {
-        scaleType = ImageView.ScaleType.CENTER_CROP
-        setImageDrawable(BitmapDrawable(resources, backgroundPath))
-      }
-      root.addView(image, FrameLayout.LayoutParams(-1, -1))
+    val morning = data.optString("mode", "morning") == "morning"
+    root.background = GradientDrawable(
+      GradientDrawable.Orientation.TL_BR,
+      if (morning) intArrayOf(0xFFF59E0B.toInt(), 0xFFFB7185.toInt(), 0xFF7C3AED.toInt())
+      else intArrayOf(0xFF0F172A.toInt(), 0xFF312E81.toInt(), 0xFF1D4ED8.toInt()),
+    )
+    backgroundMedia?.close()
+    val path = randomExistingPayloadPath(data, "backgroundPaths", "backgroundPath")
+    backgroundMedia = if (path.isBlank()) null else VoiceAlarmBackground(this, File(path))
+    backgroundMedia?.view?.let { media ->
+      root.addView(media, FrameLayout.LayoutParams(-1, -1))
       root.addView(View(this).apply { setBackgroundColor(0x88000000.toInt()) }, FrameLayout.LayoutParams(-1, -1))
-    } else {
-      val morning = data.optString("mode", "morning") == "morning"
-      root.background = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        if (morning)
-          intArrayOf(0xFFF59E0B.toInt(), 0xFFFB7185.toInt(), 0xFF7C3AED.toInt())
-        else
-          intArrayOf(0xFF0F172A.toInt(), 0xFF312E81.toInt(), 0xFF1D4ED8.toInt()),
-      )
+      backgroundMedia?.show(backgroundVisible)
     }
     val panel = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
@@ -730,6 +732,8 @@ class VoiceAlarmActivity : Activity() {
   private fun closeAlarmWindow(notifyService: Boolean = true) {
     if (closingAlarm) return
     closingAlarm = true
+    backgroundMedia?.close()
+    backgroundMedia = null
     endRequestedTurn()
     activeAiClient?.cancel()
     localSpeechParts.clear()
@@ -4966,6 +4970,8 @@ class VoiceAlarmActivity : Activity() {
   }
 
   override fun onDestroy() {
+    backgroundMedia?.close()
+    backgroundMedia = null
     endRequestedTurn()
     destroyed = true
     userSpeaking(false)

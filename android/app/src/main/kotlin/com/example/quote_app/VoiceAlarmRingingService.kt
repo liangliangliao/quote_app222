@@ -691,29 +691,13 @@ class VoiceAlarmRingingService : Service() {
       if (alarmUri != null) musicPlayer = createPlayer(alarmUri, true, currentMusicVolume)
     }
     currentVoiceVolume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f)
-    if (data.optBoolean("adaptiveWakeupEnabled", data.optString("mode") != "night")) {
-      wakeSession = VoiceAlarmWakeSession(data.optString("text"))
+    val adaptive = data.optBoolean("adaptiveWakeupEnabled", data.optString("mode") != "night")
+    if (adaptive || data.optBoolean("aiWakeupEnabled", false)) {
+      wakeSession = VoiceAlarmWakeSession(data.optString("text"), adaptive)
       requestWakeRound(data)
-      return
-    }
-    if (!data.optBoolean("aiWakeupEnabled", false)) {
-      if (hasVoicePrompt(data)) { playVoiceOnce(data); scheduleVoiceReplay(data) }
-    } else {
-      val token = wakeupGate.next()
-      // Music/vibration start immediately; no network operation blocks the main thread.
-      Thread {
-        val remote = try { VoiceAlarmWakeupStore.fetchToday(this) } catch (_: Exception) { null }
-        replayHandler.post {
-          if (!wakeupGate.isCurrent(token) || stopping || activePayload == null || !alarmSignalPlaybackActive) return@post
-          val latest = JSONObject(currentPayload)
-          if (remote != null) {
-            latest.put("text", remote.text).put("voicePath", "")
-            currentPayload = latest.toString()
-            logVoice("aiWakeup.ready", "Today's AI Wakeup content ready")
-          } else logVoice("aiWakeup.fallback", "AI Wakeup unavailable; retained original alarm content")
-          if (hasVoicePrompt(latest)) { playVoiceOnce(latest); scheduleVoiceReplay(latest) }
-        }
-      }.apply { name = "ai-wakeup-content"; isDaemon = true }.start()
+    } else if (hasVoicePrompt(data)) {
+      playVoiceOnce(data)
+      scheduleVoiceReplay(data)
     }
   }
 
@@ -731,21 +715,22 @@ class VoiceAlarmRingingService : Service() {
     roundClient = client
     reportRoundStatus("正在准备第 ${session.nextNumber} 轮起床提醒…")
     Thread {
-      val goals = VoiceAlarmGoalReader.read(this)
-      var source = "ai"
-      var status = ""
-      var motivation = ""
-      try {
-        val remote = if (session.firstRound && data.optBoolean("aiWakeupEnabled", false))
-          try { VoiceAlarmWakeupStore.fetchToday(this) } catch (_: Exception) { null } else null
+      val adaptive = data.optBoolean("adaptiveWakeupEnabled", data.optString("mode") != "night")
+      val useRemote = data.optBoolean("aiWakeupEnabled", false)
+      val date = VoiceAlarmWakeupClient.beijingDate()
+      if (useRemote && session.needsRemote(date, android.os.SystemClock.elapsedRealtime())) {
+        val day = try { VoiceAlarmWakeupStore.fetchDay(this) } catch (_: Exception) { null }
+        session.rememberRemote(date, android.os.SystemClock.elapsedRealtime(), day)
+      }
+      val goals = if (adaptive) VoiceAlarmGoalReader.read(this) else emptyList()
+      val prepared = (if (useRemote) session.remoteForRound(date) else null) ?: if (!adaptive) {
+        VoiceAlarmWakeSession.Prepared(data.optString("text"), "original")
+      } else try {
         val cfg = data.optJSONObject("aiConfig") ?: JSONObject()
-        val prepared = session.prepare(goals, remote?.text) { messages -> client.request(cfg, messages, false).text }
-        motivation = prepared.motivation
-        source = prepared.source
+        session.prepare(goals, null) { messages -> client.request(cfg, messages, false).text }
       } catch (_: Exception) {
-        source = "local_fallback"
-        status = "AI 暂不可用，本轮使用本地动作提示"
-        motivation = listOf("先不要求自己精神饱满。现在坐起，把双脚放到地上。", "你仍然可以选择从很小的一步开始：离开枕头，坐到床边。", "把今天的决定落到一个动作：站起来，走向水杯。")[((session.nextNumber - 1) % 3)]
+        val ideas = listOf("先不要求自己精神饱满。现在坐起，把双脚放到地上。", "你仍然可以选择从很小的一步开始：离开枕头，坐到床边。", "把今天的决定落到一个动作：站起来，走向水杯。")
+        VoiceAlarmWakeSession.Prepared(ideas[(session.nextNumber - 1) % ideas.size], "local_fallback")
       }
       replayHandler.post {
         if (!wakeupGate.isCurrent(token) || !session.active || stopping || activePayload == null) return@post
@@ -759,10 +744,22 @@ class VoiceAlarmRingingService : Service() {
               replayHandler.postDelayed(this, if (remaining > 0) remaining else 500L); return
             }
             readyRoundRunnable = null; roundBusy = false
-            val round = session.accept(motivation, goals, source)
-            val latest = latestVoiceReplayPayload(data).put("text", round.body).put("voicePath", "")
-            reportRoundStatus("第 ${round.number} 轮 · ${when (source) { "ai_wakeup" -> "AI Wakeup 当日原文"; "ai" -> "AI 调整起床策略"; else -> status }}")
-            playVoiceOnce(latest)
+            if (prepared.source.startsWith("ai_wakeup") && date != VoiceAlarmWakeupClient.beijingDate()) {
+              requestWakeRound(data)
+              return
+            }
+            val round = session.accept(prepared.motivation, goals, prepared.source, prepared.task?.id)
+            val latest = latestVoiceReplayPayload(data).put("text", round.body)
+            if (prepared.source != "original") latest.put("voicePath", "")
+            val status = when (prepared.source) {
+              "ai_wakeup_task" -> prepared.task?.let { listOf(it.scheduledTime, it.title).filter(String::isNotBlank).joinToString(" ") }.orEmpty()
+              "ai_wakeup" -> "AI Wakeup 当日原文"
+              "ai" -> "AI 调整起床策略"
+              "local_fallback" -> "本地动作提示"
+              else -> ""
+            }
+            if (status.isNotBlank()) reportRoundStatus("第 ${round.number} 轮 · $status")
+            if (hasVoicePrompt(latest)) playVoiceOnce(latest)
             scheduleVoiceReplay(data)
           }
         }

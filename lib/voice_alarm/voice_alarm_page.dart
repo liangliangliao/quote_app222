@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../data/kv_dao.dart';
@@ -414,14 +415,42 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   }
 
   Future<void> _pickBackground() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: true);
-    final paths = result?.files.map((file) => file.path).whereType<String>().where((path) => path.isNotEmpty).toList() ?? const <String>[];
-    if (paths.isEmpty || !mounted) return;
-    setState(() {
-      _backgroundImages = <String>{..._backgroundImages, ...paths}.toList();
-      _backgroundImage = (_backgroundImages.isEmpty ? null : _backgroundImages.first);
-    });
-    await _persistDraftConfig();
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'heif', 'gif', 'mp4', 'm4v', 'webm', '3gp', 'mov', 'mkv'],
+      allowMultiple: true,
+    );
+    if (result == null || !mounted) return;
+    final paths = <String>[];
+    final mode = _mode;
+    final support = await getApplicationSupportDirectory();
+    final backgrounds = await Directory('${support.path}/voice_alarm_backgrounds').create(recursive: true);
+    var failed = 0;
+    for (final file in result.files) {
+      final source = file.path;
+      if (source == null || source.isEmpty) {
+        failed++;
+        continue;
+      }
+      final target = await backgrounds.createTemp('media_');
+      try {
+        final name = file.name.split(RegExp(r'[/\\]')).last;
+        final copy = await File(source).copy('${target.path}/$name');
+        paths.add(copy.path);
+      } on FileSystemException {
+        await target.delete(recursive: true);
+        failed++;
+      }
+    }
+    if (!mounted || mode != _mode) return;
+    if (paths.isNotEmpty) {
+      setState(() {
+        _backgroundImages = [..._backgroundImages, ...paths];
+        _backgroundImage = _backgroundImages.first;
+      });
+      await _persistDraftConfig();
+    }
+    if (failed > 0 && mounted) _toast('有 $failed 个背景文件未能导入');
   }
 
   Future<void> _persistDraftConfig() async {
@@ -1089,14 +1118,33 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     }
   }
 
+  Future<void> _openWakeupHistory() async {
+    try {
+      final dates = await _native.invokeListMethod<String>('getAiWakeupHistoryDates') ?? [];
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => _WakeupHistoryPage(channel: _native, dates: dates),
+      ));
+    } on PlatformException catch (error) {
+      if (mounted) _toast(error.message ?? '无法读取本机同步记录');
+    } on MissingPluginException {
+      if (mounted) _toast('当前平台没有本机同步记录');
+    }
+  }
+
   Widget _wakeupConnectionCard() => Card(
     child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
         title: const Text('使用 AI Wakeup 云端提醒'),
-        subtitle: const Text('关闭时完全使用原闹钟模式。开启后到点读取今日正式提醒并用系统语音播报；连接失败使用原闹钟内容。保存设置后同步到当前模式的已有闹钟。'),
+        subtitle: const Text('读取北京时间当天的同步任务，按计划时间排序，每轮播报一条。当天暂无任务时使用原提醒流程。保存设置后同步当前模式的已有闹钟。'),
         value: _aiWakeupEnabled,
         onChanged: _saving ? null : (value) => setState(() => _aiWakeupEnabled = value),
+      ),
+      TextButton.icon(
+        onPressed: _openWakeupHistory,
+        icon: const Icon(Icons.history),
+        label: const Text('本机任务同步记录'),
       ),
       if (_aiWakeupEnabled) ...[
         TextField(controller: _wakeupUrl, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'AI Wakeup HTTPS 站点地址')),
@@ -1516,8 +1564,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     )),
               ListTile(
                 leading: const Icon(Icons.image_outlined),
-                title: const Text('全屏闹钟背景图片（多选，响铃时随机轮播）'),
-                subtitle: Text(_backgroundImages.isEmpty ? '未选择，使用默认渐变背景' : '已选择 ${_backgroundImages.length} 张：${_backgroundImages.first.split('/').last}'),
+                title: const Text('全屏闹钟背景'),
+                subtitle: Text(_backgroundImages.isEmpty ? '可多选图片、GIF 和视频。视频静音循环' : '已选择 ${_backgroundImages.length} 个文件，响铃时随机选用一个'),
                 trailing: const Icon(Icons.add),
                 onTap: _pickBackground,
               ),
@@ -1527,7 +1575,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                       contentPadding: const EdgeInsets.only(left: 56, right: 16),
                       title: Text(path.split('/').last, overflow: TextOverflow.ellipsis),
                       trailing: IconButton(
-                        tooltip: '删除背景图片',
+                        tooltip: '移除背景文件',
                         icon: const Icon(Icons.delete_outline),
                         onPressed: () async {
                           setState(() {
@@ -1554,7 +1602,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
               ),
               SwitchListTile(
                 title: const Text('逐轮调整起床提醒'),
-                subtitle: const Text('固定朗读＋近期目标/待办＋新的起床提醒。首轮优先使用已启用的 AI Wakeup 当日原文，后续按重播间隔结合前轮内容调整策略。未关闭按规则推定未起床；关闭即停止。最多读取3条近期未完成目标或待办，随本轮上下文交给已配置的 AI。动态提醒使用系统语音。'),
+                subtitle: const Text('固定朗读＋近期目标/待办＋本轮提醒。同步任务可用时逐条播报原文，暂无任务时沿用 AI 起床提醒策略。未关闭按规则推定未起床；关闭即停止。最多读取3条近期未完成目标或待办，随本轮上下文交给已配置的 AI。动态提醒使用系统语音。'),
                 value: _adaptiveWakeupEnabled,
                 onChanged: (value) => setState(() => _adaptiveWakeupEnabled = value),
               ),
@@ -1615,4 +1663,95 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       ),
     );
   }
+}
+
+
+class _WakeupHistoryPage extends StatefulWidget {
+  const _WakeupHistoryPage({required this.channel, required this.dates});
+
+  final MethodChannel channel;
+  final List<String> dates;
+
+  @override
+  State<_WakeupHistoryPage> createState() => _WakeupHistoryPageState();
+}
+
+class _WakeupHistoryPageState extends State<_WakeupHistoryPage> {
+  String? _date;
+  Future<List<Map<Object?, Object?>>>? _items;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.dates.isNotEmpty) _select(widget.dates.first);
+  }
+
+  void _select(String date) {
+    _date = date;
+    _items = widget.channel.invokeListMethod<Map<Object?, Object?>>(
+      'getAiWakeupHistory', {'date': date},
+    ).then((items) => items ?? []);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('本机任务同步记录')),
+    body: _date == null
+        ? const Center(child: Text('尚未成功获取过 AI Wakeup 内容'))
+        : Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: DropdownButtonFormField<String>(
+                  value: _date,
+                  decoration: const InputDecoration(labelText: '日期（北京时间）'),
+                  items: widget.dates.map((date) => DropdownMenuItem(value: date, child: Text(date))).toList(),
+                  onChanged: (date) {
+                    if (date != null) setState(() => _select(date));
+                  },
+                ),
+              ),
+              Expanded(
+                child: FutureBuilder<List<Map<Object?, Object?>>>(
+                  future: _items,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) return const Center(child: Text('无法读取这一天的本机记录'));
+                    final items = snapshot.data ?? [];
+                    return ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        final title = [item['scheduledTime'], item['title']]
+                            .whereType<String>().where((part) => part.isNotEmpty).join(' ');
+                        final fetched = item['fetchedAt'];
+                        final timestamp = fetched is num
+                            ? DateTime.fromMillisecondsSinceEpoch(fetched.toInt(), isUtc: true)
+                                .add(const Duration(hours: 8)).toIso8601String().replaceFirst('T', ' ').substring(0, 16)
+                            : null;
+                        return Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(title, style: Theme.of(context).textTheme.titleMedium),
+                                if (timestamp != null) Text('获取于 $timestamp（北京时间）'),
+                                const SizedBox(height: 12),
+                                SelectableText((item['text'] ?? '').toString()),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+  );
 }

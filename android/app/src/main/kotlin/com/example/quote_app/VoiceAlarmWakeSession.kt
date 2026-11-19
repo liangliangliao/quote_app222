@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** Local, per-ringing-session evidence. Dismissal is never claimed as physical proof of rising. */
-class VoiceAlarmWakeSession(private val fixedText: String) {
+class VoiceAlarmWakeSession(private val fixedText: String, private val adaptive: Boolean = true) {
   data class Round(val number: Int, val motivation: String, val body: String, val source: String,
     val strategy: String, var playback: String = "待播报")
   private val rounds = mutableListOf<Round>()
@@ -12,7 +12,31 @@ class VoiceAlarmWakeSession(private val fixedText: String) {
   val nextNumber get() = rounds.size + 1
   val firstRound get() = rounds.isEmpty()
   val active get() = !closed
-  data class Prepared(val motivation: String, val source: String)
+  data class Prepared(val motivation: String, val source: String, val task: WakeupContent? = null)
+  private var remote: WakeupDay? = null
+  private var remoteDate = ""
+  private var remoteCheckedAt = Long.MIN_VALUE
+  private var lastTaskId: String? = null
+
+  @Synchronized fun needsRemote(date: String, now: Long): Boolean =
+    date != remoteDate || now - remoteCheckedAt >= 60_000L
+
+  @Synchronized fun rememberRemote(date: String, now: Long, day: WakeupDay?) {
+    if (date != remoteDate) lastTaskId = null
+    remote = day?.takeIf { it.date == date }
+    remoteDate = date
+    remoteCheckedAt = now
+  }
+
+  @Synchronized fun remoteForRound(date: String): Prepared? {
+    val day = remote?.takeIf { it.date == date } ?: return null
+    if (day.tasks.isNotEmpty()) {
+      val previous = day.tasks.indexOfFirst { it.id == lastTaskId }
+      val task = day.tasks[(previous + 1) % day.tasks.size]
+      return Prepared(task.text, "ai_wakeup_task", task)
+    }
+    return if (!adaptive || firstRound) day.reminder?.let { Prepared(it.text, "ai_wakeup") } else null
+  }
   fun prepare(goals: List<String>, today: String?, generate: (JSONArray) -> String): Prepared {
     check(!closed) { "闹钟已结束" }
     if (firstRound && !today.isNullOrBlank()) return Prepared(today, "ai_wakeup")
@@ -51,9 +75,10 @@ class VoiceAlarmWakeSession(private val fixedText: String) {
       .put(JSONObject().put("role", "user").put("content", context.toString()))
   }
   @Synchronized fun strategy(): String = listOf("连接自主目标与最小离床动作", "允许困倦，先坐起再决定下一步", "把阻力拆小，用如果那么安排动作", "连接当日可控任务与个人选择", "改变环境线索，双脚落地并走向水杯", "回顾前轮未奏效方式，改用两分钟开始")[rounds.size % 6]
-  @Synchronized fun accept(motivation: String, goals: List<String>, source: String): Round {
+  @Synchronized fun accept(motivation: String, goals: List<String>, source: String, taskId: String? = null): Round {
     check(!closed) { "闹钟已结束" }
-    val body = listOf(fixedText, if (goals.isEmpty()) "" else "你最近设定的目标或待办：${goals.joinToString("；")}。", motivation)
+    if (taskId != null) lastTaskId = taskId
+    val body = if (!adaptive) motivation else listOf(fixedText, if (goals.isEmpty()) "" else "你最近设定的目标或待办：${goals.joinToString("；")}。", motivation)
       .filter { it.isNotBlank() }.joinToString("\n\n")
     return Round(nextNumber, motivation, body, source, strategy()).also { rounds.add(it) }
   }
