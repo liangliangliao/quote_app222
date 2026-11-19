@@ -168,6 +168,7 @@ class VoiceAlarmListenWindow(private val idleMs: Long) {
     finalGraceUsed = true
     expiresAt = maxOf(expiresAt, minOf(openedAt + 75000L, now + 3500L))
   }
+  fun mayFinishCloudTurn(now: Long) = now < openedAt + 130000L
   fun recovering(now: Long, delayMs: Long) {
     if (readyAt == null || recoveryGraceUsed || expiresAt - now >= delayMs + 6000L) return
     recoveryGraceUsed = true

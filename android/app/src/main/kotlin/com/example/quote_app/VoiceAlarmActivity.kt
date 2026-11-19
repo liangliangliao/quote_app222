@@ -74,7 +74,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "voice_turn_reliability_v48"
+  private val batchChatPipelineVersion = "voice_turn_reliability_v49"
   private val batchChatPipelineSummary = "连续人声窗口、完整转写、可恢复失败与过期播报隔离"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
@@ -161,6 +161,25 @@ class VoiceAlarmActivity : Activity() {
   private val microsoftPcmQueue = LinkedBlockingDeque<RecordedSpeech>(32)
   private val batchPcmQueue = LinkedBlockingDeque<BatchPcmJob>(3)
   private var iflytekSttClient: OkHttpClient? = null
+  private var iflytekTurns: IflytekTurns? = null
+  private data class IflytekTurn(
+    val evidence: VoiceAlarmCapture.Evidence,
+    val draft: String,
+    val complete: Boolean,
+    val audio: ByteArray,
+    val outcome: String,
+    val holdsWindow: Boolean,
+  )
+  private class IflytekTurns(val session: Int) {
+    val finished = LinkedBlockingDeque<IflytekTurn>(3)
+    private val speechByWindow = mutableMapOf<Long, Int>()
+    @Synchronized fun retain(window: Long) { speechByWindow[window] = (speechByWindow[window] ?: 0) + 1 }
+    @Synchronized fun release(window: Long) {
+      val count = speechByWindow[window] ?: return
+      if (count == 1) speechByWindow.remove(window) else speechByWindow[window] = count - 1
+    }
+    @Synchronized fun hasSpeech(window: Long, minTurns: Int = 1): Boolean = (speechByWindow[window] ?: 0) >= minTurns
+  }
   private var xaiSttClient: OkHttpClient? = null
   private data class BatchRecordSegment(
     val pcm: ByteArray,
@@ -774,6 +793,10 @@ class VoiceAlarmActivity : Activity() {
       if (!requestedTurn) return
       val remaining = listenWindow.expiresAt - nowUptime()
       if (remaining > 0) { speechHandler.postDelayed(this, remaining); return }
+      if (listenWindow.mayFinishCloudTurn(nowUptime()) && iflytekTurns?.hasSpeech(captureWindowId) == true) {
+        speechHandler.postDelayed(this, 300L)
+        return
+      }
       val needsRestart = waitingForQuiet
       endRequestedTurn()
       micStatus("语音待命 · 安静时可以直接提问")
@@ -960,6 +983,7 @@ class VoiceAlarmActivity : Activity() {
     if (cloudSttActive || cloudSttThread != null) userSpeaking(false)
     cloudSttActive = false
     cloudSttSession++
+    iflytekTurns = null
     try { cloudSttThread?.interrupt() } catch (_: Throwable) {}
     try { cloudSttRecognizeThread?.interrupt() } catch (_: Throwable) {}
     cloudSttThread = null
@@ -1401,27 +1425,36 @@ class VoiceAlarmActivity : Activity() {
       return
     }
     cloudSttActive = true
-    val session = ++cloudSttSession
-    cloudSttRecognizeThread = null
-    microsoftPcmQueue.clear()
+    val turns = IflytekTurns(++cloudSttSession)
+    iflytekTurns = turns
     transcriptView?.text = "讯飞流式识别已启用，正在持续聆听…"
     cloudSttThread = Thread {
-      while (!destroyed && cloudSttActive && cloudSttSession == session) {
-        // 允许在闹钟/AI 播报期间继续短窗口收音，再通过回声过滤判断是否是真人插话。
-        // 这样用户连续说话或打断 AI 时，不会因为 speaking=true 直接丢掉整段内容。
-        val endpoint = endpointingConfig()
+      while (isCurrentIflytekSession(turns)) {
         val sources = newCapture()
-        val text = try { recognizeWithIflytekStreaming(cfg, endpoint.maxUtteranceMs.toInt(), sources) } catch (t: Throwable) {
-          runOnUiThread { transcriptView?.text = "讯飞识别失败：${t.message ?: t.javaClass.simpleName}；正在重试…" }
-          try { Thread.sleep(1000L) } catch (_: InterruptedException) {}
-          ""
+        val turn = try {
+          recognizeWithIflytekStreaming(cfg, sources, turns)
+        } catch (_: InterruptedException) {
+          break
+        } catch (error: Exception) {
+          logVoice("stt.iflytek.capture.error", "could not start audio capture", mapOf("type" to error.javaClass.simpleName))
+          runOnUiThread {
+            if (isCurrentIflytekSession(turns)) transcriptView?.text = "讯飞收音中断，正在自动恢复…"
+          }
+          try { Thread.sleep(350L) } catch (_: InterruptedException) { break }
+          continue
         }
-        if (text.isNotBlank() && !destroyed && cloudSttActive && cloudSttSession == session) {
-          // If alarm playback interrupted the stream, still pass the recognized
-          // user text through the central buffering/filtering path instead of
-          // dropping it.  That path suppresses alarm echo and waits for playback
-          // completion before sending real user speech to AI.
-          runOnUiThread { if (!destroyed && cloudSttSession == session) onSpeechChunk(text, finalChunk = true, evidence = sources.endpoint()) }
+        if (turn.audio.isEmpty() && turn.draft.isBlank() && !turn.holdsWindow) {
+          if (turn.outcome == "open_failed") try { Thread.sleep(350L) } catch (_: InterruptedException) { break }
+          continue
+        }
+        if (!turns.finished.offer(turn)) {
+          if (turn.holdsWindow) turns.release(turn.evidence.windowId)
+          logVoice("stt.iflytek.result.backlog", "transcription recovery queue full", mapOf("chars" to turn.draft.length))
+          runOnUiThread {
+            if (isCurrentIflytekSession(turns) && turn.evidence.belongsTo(captureWindowId)) {
+              transcriptView?.text = "仍在重试上一段。刚才这段未发送。"
+            }
+          }
         }
       }
     }.apply {
@@ -1429,8 +1462,53 @@ class VoiceAlarmActivity : Activity() {
       isDaemon = true
       start()
     }
+    cloudSttRecognizeThread = Thread {
+      while (isCurrentIflytekSession(turns)) {
+        val turn = try { turns.finished.poll(250L, TimeUnit.MILLISECONDS) } catch (_: InterruptedException) { break } ?: continue
+        if (!turn.evidence.belongsTo(captureWindowId)) {
+          if (turn.holdsWindow) turns.release(turn.evidence.windowId)
+          continue
+        }
+        var finalText = if (turn.complete) turn.draft else ""
+        if (!turn.complete && turn.audio.isNotEmpty()) {
+          logVoice("stt.iflytek.recover", "retrying retained audio once", mapOf("reason" to turn.outcome, "pcmBytes" to turn.audio.size, "draftChars" to turn.draft.length))
+          runOnUiThread {
+            if (isCurrentIflytekSession(turns) && turn.evidence.belongsTo(captureWindowId)) {
+              transcriptView?.text = "讯飞未完成转写，正在用刚才的录音自动重试…"
+            }
+          }
+          finalText = try { recognizeWithIflytekPcm(cfg, turn.audio, retryingRealtime = true) }
+          catch (_: InterruptedException) { if (turn.holdsWindow) turns.release(turn.evidence.windowId); break }
+          catch (error: Exception) {
+            logVoice("stt.iflytek.recover.failed", "retry did not return a full transcript", mapOf("type" to error.javaClass.simpleName))
+            ""
+          }
+        }
+        val result = finalText
+        runOnUiThread {
+          try {
+            if (!isCurrentIflytekSession(turns) || !turn.evidence.belongsTo(captureWindowId) || waitingForQuiet) return@runOnUiThread
+            when {
+              result.isNotBlank() -> onSpeechChunk(result, finalChunk = true, evidence = turn.evidence)
+              turn.evidence.hasPlaybackOverlap && turn.draft.isNotBlank() ->
+                onSpeechChunk(turn.draft, finalChunk = true, evidence = turn.evidence, reliable = false)
+              turn.holdsWindow -> transcriptView?.text = if (turn.draft.isBlank()) "讯飞未能完成刚才的转写，内容未发送。"
+                else "讯飞未能完成刚才的转写，以下是保留的草稿（未发送）：\n${turn.draft}"
+            }
+          } finally {
+            if (turn.holdsWindow) turns.release(turn.evidence.windowId)
+          }
+        }
+      }
+    }.apply {
+      name = "voice-alarm-iflytek-results"
+      isDaemon = true
+      start()
+    }
   }
 
+  private fun isCurrentIflytekSession(turns: IflytekTurns): Boolean =
+    !destroyed && cloudSttActive && cloudSttSession == turns.session
 
   private fun startXaiCloudStt(cfg: JSONObject) {
     if (cloudSttActive && isCloudSttHealthy()) return
@@ -2756,264 +2834,249 @@ class VoiceAlarmActivity : Activity() {
     return synchronized(bestText) { bestText.toString().trim() }
   }
 
-  private fun recognizeWithIflytekPcm(cfg: JSONObject, pcm: ByteArray): String {
+  private fun recognizeWithIflytekPcm(cfg: JSONObject, pcm: ByteArray, retryingRealtime: Boolean = false): String {
     if (pcm.isEmpty()) return ""
     val opened = CountDownLatch(1)
-    val closed = CountDownLatch(1)
-    val text = StringBuilder()
-    val transcript = VoiceAlarmTranscript()
-    var webSocket: WebSocket? = null
-    var errorMessage = ""
-    var messageCount = 0
-    var nonEmptyPieceCount = 0
-    var sentFinalFrameWithAudio = false
-    val serverDone = java.util.concurrent.atomic.AtomicBoolean(false)
-    val client = getIflytekSttClient()
-    fun applyIflytekPieceLocked(piece: IflytekRecognitionPiece): String {
-      val draft = transcript.apply(piece.sn, piece.text,
-        if (piece.isReplacement) piece.replaceStart else null,
-        if (piece.isReplacement) piece.replaceEnd else null)
-      text.setLength(0)
-      text.append(draft)
-      return draft
-    }
+    val ended = CountDownLatch(1)
+    val transcript = VoiceAlarmIflytekTranscript()
+    val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
+    val eos = if (retryingRealtime) maxOf(8000, iflytekEosMs(cfg)) else iflytekEosMs(cfg)
     val listener = object : WebSocketListener() {
-      override fun onOpen(webSocket: WebSocket, response: Response) {
-        logVoice("stt.iflytek.batch.open", "iFlytek batch WebSocket opened", mapOf("status" to response.code, "pcmBytes" to pcm.size, "eosMs" to iflytekEosMs(cfg)))
-        opened.countDown()
-      }
+      override fun onOpen(webSocket: WebSocket, response: Response) = opened.countDown()
       override fun onMessage(webSocket: WebSocket, message: String) {
-        messageCount += 1
-        val piece = parseIflytekResult(message)
-        val draft = synchronized(text) { applyIflytekPieceLocked(piece) }
-        if (piece.text.isNotBlank()) nonEmptyPieceCount += 1
-        val obj = try { JSONObject(message) } catch (_: Throwable) { JSONObject() }
-        val code = obj.optInt("code", 0)
-        if (code != 0) errorMessage = "讯飞 code=$code ${obj.optString("message", obj.optString("desc", ""))}"
-        if (code != 0 || piece.isLast) serverDone.set(true)
-        if (code != 0 || piece.text.isNotBlank() || piece.isLast) {
-          logVoice(
-            "stt.iflytek.batch.message",
-            "iFlytek batch message",
-            mapOf("code" to code, "sn" to piece.sn, "last" to piece.isLast, "piece" to logPreview(piece.text), "draft" to logPreview(draft), "raw" to message.take(320)),
-          )
-        }
-        if (code != 0 || piece.isLast) closed.countDown()
+        val update = transcript.accept(message) ?: return
+        if (update.code != 0) failure.compareAndSet(null, "server_${update.code}")
+        if (update.code != 0 || update.complete) ended.countDown()
       }
       override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-        serverDone.set(true)
+        if (!transcript.complete) failure.compareAndSet(null, "socket_failure")
         opened.countDown()
-        errorMessage = t.message ?: t.javaClass.simpleName
-        logVoice("stt.iflytek.batch.failure", errorMessage, mapOf("http" to (response?.code ?: -1)))
-        closed.countDown()
+        ended.countDown()
       }
       override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-        serverDone.set(true)
-        logVoice("stt.iflytek.batch.closed", reason, mapOf("code" to code, "messages" to messageCount, "pieces" to nonEmptyPieceCount))
-        closed.countDown()
+        if (!transcript.complete) failure.compareAndSet(null, "closed_before_final")
+        opened.countDown()
+        ended.countDown()
       }
     }
-    webSocket = client.newWebSocket(Request.Builder().url(iflytekSignedUrl(cfg)).build(), listener)
-    if (!opened.await(12, TimeUnit.SECONDS)) {
-      // 主动取消这条迟迟未握手成功的连接，避免它在超时后才 onOpen 变成僵尸连接。
-      try { webSocket?.cancel() } catch (_: Throwable) {}
-      throw IllegalStateException("讯飞 WebSocket 连接超时")
-    }
-    val chunkSize = 1280
+    val socket = getIflytekSttClient().newWebSocket(Request.Builder().url(iflytekSignedUrl(cfg)).build(), listener)
     var offset = 0
-    var frameIndex = 0
-    while (offset < pcm.size && !serverDone.get()) {
-      val end = minOf(offset + chunkSize, pcm.size)
-      // 讯飞 IAT 的最后一帧应该用 status=2 携带最后一段真实音频。
-      // 旧逻辑把所有真实音频都按 0/1 发送，最后再发一个空的 status=2，部分账号/机型会出现服务端收尾异常，返回空文本。
-      val frameStatus = when {
-        frameIndex == 0 -> 0
-        end >= pcm.size -> 2
-        else -> 1
+    try {
+      if (!opened.await(if (retryingRealtime) 6L else 12L, TimeUnit.SECONDS)) {
+        throw java.net.SocketTimeoutException("讯飞 WebSocket 连接超时")
       }
-      if (frameStatus == 2) sentFinalFrameWithAudio = true
-      if (webSocket?.send(iflytekFrame(cfg, frameStatus, pcm.copyOfRange(offset, end))) != true) { errorMessage = "讯飞语音连接已关闭"; break }
-      offset = end
-      frameIndex += 1
-      Thread.sleep(42)
-      if (serverDone.get()) break
+      val chunkSize = 1280
+      var finalSent = false
+      while (offset < pcm.size && ended.count > 0L) {
+        val end = minOf(offset + chunkSize, pcm.size)
+        val flag = if (offset == 0) 0 else if (end == pcm.size) 2 else 1
+        if (!socket.send(iflytekFrame(cfg, flag, pcm.copyOfRange(offset, end), eos))) {
+          failure.compareAndSet(null, "audio_send_failed")
+          break
+        }
+        finalSent = flag == 2
+        offset = end
+        if (!finalSent) Thread.sleep(40L)
+      }
+      if (!finalSent && ended.count > 0L && failure.get() == null && offset > 0 &&
+          !socket.send(iflytekFrame(cfg, 2, ByteArray(0), eos))) failure.compareAndSet(null, "audio_send_failed")
+      failure.get()?.let { throw java.io.IOException("讯飞识别中断（$it）") }
+      val waitSeconds = if (retryingRealtime) 8L else ((pcm.size / 32000L) + 8L).coerceIn(8L, 90L)
+      if (!ended.await(waitSeconds, TimeUnit.SECONDS)) throw java.net.SocketTimeoutException("讯飞最终转写超时")
+      failure.get()?.let { throw java.io.IOException("讯飞识别中断（$it）") }
+      if (!transcript.complete) throw java.io.IOException("讯飞连接结束前未返回最终结果")
+      if (offset < pcm.size) throw java.io.IOException("讯飞在完整录音发送前结束识别")
+      return transcript.text.ifBlank { throw java.io.IOException("讯飞未返回文字") }
+    } finally {
+      logVoice("stt.iflytek.batch.done", "audio transcription finished", mapOf("complete" to transcript.complete,
+        "pcmBytes" to pcm.size, "sentBytes" to offset, "chars" to transcript.text.length, "retry" to retryingRealtime))
+      if (transcript.complete) socket.close(1000, "done") else socket.cancel()
     }
-    if (!sentFinalFrameWithAudio && !serverDone.get()) {
-      // 极短音频只有首帧时仍补一个空尾帧，保证协议闭合。正常长录音不会走这里。
-      webSocket?.send(iflytekFrame(cfg, 2, ByteArray(0)))
-    }
-    val waitSeconds = ((pcm.size / (16000.0 * 2.0)) + 8.0).toLong().coerceIn(8L, 90L)
-    val completed = closed.await(waitSeconds, TimeUnit.SECONDS)
-    try { webSocket?.close(1000, "done") } catch (_: Throwable) {}
-    val result = synchronized(text) { text.toString().trim() }
-    val appendOnlyResult = synchronized(text) { text.toString().trim() }
-    logVoice(
-      "stt.iflytek.batch.done",
-      "iFlytek batch completed",
-      mapOf("completed" to completed, "messages" to messageCount, "pieces" to nonEmptyPieceCount, "pcmBytes" to pcm.size, "audioSeconds" to String.format(Locale.US, "%.2f", pcm.size / (16000.0 * 2.0)), "finalWithAudio" to sentFinalFrameWithAudio, "appendChars" to appendOnlyResult.length, "appendResult" to logPreview(appendOnlyResult), "result" to logPreview(result), "error" to errorMessage),
-    )
-    if (errorMessage.isNotBlank()) throw java.io.IOException(errorMessage)
-    if (!completed) throw java.net.SocketTimeoutException("讯飞最终转写超时，录音已保留，可重试")
-    if (offset < pcm.size) throw java.io.IOException("讯飞在完整录音发送前结束识别，录音已保留，可重试")
-    if (result.isBlank()) {
-      if (errorMessage.isNotBlank()) throw IllegalStateException(errorMessage)
-      throw IllegalStateException("讯飞未返回文字：messages=$messageCount, pieces=$nonEmptyPieceCount, completed=$completed, finalWithAudio=$sentFinalFrameWithAudio")
-    }
-    return result
   }
 
-  private fun recognizeWithIflytekStreaming(cfg: JSONObject, durationMs: Int, sources: VoiceAlarmCapture): String {
-    val sampleRate = 16000
-    val chunkSize = 1280 // 40ms at 16kHz 16-bit mono; matches iFlytek IAT streaming recommendations.
-    val playbackEchoGuard = isStrictPlaybackActiveForCapture()
-    val audioRecord = obtainContinuousAudioRecord(playbackEchoGuard) ?: throw IllegalStateException("麦克风不可用，请检查权限或其他应用占用")
+  private fun recognizeWithIflytekStreaming(cfg: JSONObject, sources: VoiceAlarmCapture, turns: IflytekTurns): IflytekTurn {
+    val playbackGuard = isStrictPlaybackActiveForCapture()
+    val recorder = obtainContinuousAudioRecord(playbackGuard) ?: throw IllegalStateException("麦克风不可用")
     val opened = CountDownLatch(1)
-    val closed = CountDownLatch(1)
+    val ended = CountDownLatch(1)
     val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
-    val session = cloudSttSession
-    val music = CaptureMusic(session)
+    val transcript = VoiceAlarmIflytekTranscript()
     val streamActive = java.util.concurrent.atomic.AtomicBoolean(true)
-    val text = StringBuilder()
-    val transcript = VoiceAlarmTranscript()
-    var webSocket: WebSocket? = null
-    val client = getIflytekSttClient()
+    val music = CaptureMusic(turns.session)
+    val audio = ByteArrayOutputStream()
+    val packetBytes = 1280
+    val bytesPerMs = 32
+    val endpoint = endpointingConfig()
+    val remoteSilenceMs = maxOf(iflytekEosMs(cfg), endpoint.completeSilenceMs.toInt() + 1800)
+    var holdsWindow = false
+    var finished = false
+    var socket: WebSocket? = null
+    var pending = ByteArray(0)
+    var sentBytes = 0
+    var lastVoiceByte = 0
+    var lastSendAt = 0L
+    var audioReadFailed = false
+    var status = 0
+    var draftSeen = ""
+    var speechStarted = false
 
-    fun applyIflytekPieceLocked(piece: IflytekRecognitionPiece): String {
-      val draft = transcript.apply(piece.sn, piece.text,
-        if (piece.isReplacement) piece.replaceStart else null,
-        if (piece.isReplacement) piece.replaceEnd else null)
-      text.setLength(0)
-      text.append(draft)
-      return draft
-    }
     val listener = object : WebSocketListener() {
-      override fun onOpen(webSocket: WebSocket, response: Response) {
-        opened.countDown()
-      }
+      override fun onOpen(webSocket: WebSocket, response: Response) = opened.countDown()
 
       override fun onMessage(webSocket: WebSocket, message: String) {
-        val piece = parseIflytekResult(message)
-        val draft = synchronized(text) { applyIflytekPieceLocked(piece) }
-        if (draft.isNotBlank()) {
+        if (!streamActive.get()) return
+        val update = transcript.accept(message) ?: return
+        if (update.code != 0) {
+          failure.compareAndSet(null, "server_${update.code}")
+          ended.countDown()
+        } else if (update.complete) {
+          ended.countDown()
+        } else if (update.text.isNotBlank()) {
           runOnUiThread {
-            if (!streamActive.get() || cloudSttSession != session || destroyed) return@runOnUiThread
-            if (pauseOnStableCue(draft, sources)) return@runOnUiThread
-            val correctionLabel = when (piece.pgs) {
-              "rpl" -> "讯飞已动态修正"
-              "apd" -> "讯飞实时听写"
-              else -> "讯飞识别中"
-            }
-            transcriptView?.text = if (isPlaybackActiveForSpeechGate()) {
-              "识别候选：$draft\n（播报中，稍后先做回声过滤，再决定是否作为用户语音…）"
-            } else {
-              "正在听写：$draft\n（$correctionLabel；识别结束后核对发言来源）"
-            }
+            if (!streamActive.get() || !isCurrentIflytekSession(turns) ||
+                sources.windowId != captureWindowId || waitingForQuiet || aiBusy) return@runOnUiThread
+            if (pauseOnStableCue(update.text, sources)) return@runOnUiThread
+            if (!sources.hasPlaybackOverlap()) transcriptView?.text = "正在听写：${update.text}"
           }
         }
-        val code = try { JSONObject(message).optInt("code", 0) } catch (_: Throwable) { 0 }
-        if (code != 0) { failure.set("讯飞识别服务错误 code=$code，请检查服务配置或额度"); opened.countDown() }
-        if (code != 0 || piece.isLast) closed.countDown()
       }
 
       override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-        failure.set("讯飞连接失败，HTTP ${response?.code ?: 0}：${t.javaClass.simpleName}")
+        if (!transcript.complete) failure.compareAndSet(null, "socket_failure")
         opened.countDown()
-        closed.countDown()
+        ended.countDown()
       }
 
       override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-        closed.countDown()
+        if (!transcript.complete) failure.compareAndSet(null, "closed_before_final")
+        opened.countDown()
+        ended.countDown()
+      }
+    }
+
+    fun push(packet: ByteArray, flag: Int) {
+      if (ended.count == 0L || failure.get() != null) return
+      val delay = 40L - (nowUptime() - lastSendAt)
+      if (delay > 0L) Thread.sleep(delay)
+      if (ended.count == 0L || failure.get() != null) return
+      if (socket?.send(iflytekFrame(cfg, flag, packet, remoteSilenceMs)) != true) {
+        failure.compareAndSet(null, "audio_send_failed")
+        return
+      }
+      lastSendAt = nowUptime()
+      sentBytes += packet.size
+      status = 1
+    }
+    fun retain(frame: ByteArray) {
+      audio.write(frame)
+      if (ended.count == 0L || failure.get() != null) return
+      pending += frame
+      if (pending.size >= 2 * packetBytes) {
+        push(pending.copyOfRange(0, packetBytes), status)
+        pending = pending.copyOfRange(packetBytes, pending.size)
       }
     }
 
     try {
-      webSocket = client.newWebSocket(Request.Builder().url(iflytekSignedUrl(cfg)).build(), listener)
-      if (!opened.await(5, TimeUnit.SECONDS)) throw java.net.SocketTimeoutException("语音服务连接超时")
-      failure.get()?.let { throw java.io.IOException(it) }
-      val endpoint = endpointingConfig()
-      var deadline = System.currentTimeMillis() + durationMs
-      var status = 0
-      val buffer = ByteArray(chunkSize)
-      val startDeadline = System.currentTimeMillis() + if (playbackEchoGuard) 1800L else maxOf(4500L, endpoint.minUtteranceMs + 1800L)
-      var speechStarted = false
-      var lastSpeechAt = 0L
-      var speechHitCount = 0
+      try {
+        socket = getIflytekSttClient().newWebSocket(Request.Builder().url(iflytekSignedUrl(cfg)).build(), listener)
+        if (!opened.await(5, TimeUnit.SECONDS)) {
+          failure.compareAndSet(null, "open_failed")
+          socket.cancel()
+        }
+      } catch (cancelled: InterruptedException) {
+        throw cancelled
+      } catch (_: Exception) {
+        failure.compareAndSet(null, "open_failed")
+      }
+      val beganAt = nowUptime()
+      val maxSessionEnd = beganAt + 55000L
+      val idleDeadline = beganAt + if (playbackGuard) 1800L else maxOf(4500L, endpoint.minUtteranceMs + 1800L)
+      var deadline = idleDeadline
+      var heardFrames = 0
       val preRoll = java.util.ArrayDeque<ByteArray>()
       var preRollBytes = 0
-      val preRollLimitBytes = sampleRate * 2 * (if (playbackEchoGuard || isPostPlaybackHandoffActive()) 1200 else 900) / 1000
-      val streamFromOpen = !playbackEchoGuard || isPostPlaybackHandoffActive()
-      fun sendSpeechFrame(frame: ByteArray) {
-        if (webSocket?.send(iflytekFrame(cfg, status, frame)) != true) throw java.io.IOException("讯飞语音连接已关闭")
-        status = 1
-      }
-      cloudCaptureReady(session, sources)
-      while (!destroyed && cloudSttActive && cloudSttSession == session && closed.count > 0 && System.currentTimeMillis() < deadline) {
-        if (sources.windowId != captureWindowId && !speechStarted) break
-        val read = readVoicePcm(audioRecord, buffer, sources)
-        if (read == VoiceAlarmPcmPump.NEXT_WINDOW) break
-        if (read < 0) {
-          releaseContinuousAudioRecord(audioRecord)
+      val streamFromOpen = !playbackGuard || isPostPlaybackHandoffActive()
+      val buffer = ByteArray(packetBytes)
+      cloudCaptureReady(turns.session, sources)
+      while (isCurrentIflytekSession(turns) && sources.windowId == captureWindowId && nowUptime() < deadline &&
+             audio.size() < 55000 * bytesPerMs) {
+        val count = try { readVoicePcm(recorder, buffer, sources) }
+        catch (cancelled: InterruptedException) { throw cancelled }
+        catch (_: java.io.IOException) { -1 }
+        if (count == VoiceAlarmPcmPump.NEXT_WINDOW) break
+        if (count < 0) {
+          audioReadFailed = true
+          releaseContinuousAudioRecord(recorder)
           break
         }
-        if (read > 0) {
-          val now = System.currentTimeMillis()
-          val dynamicPlaybackGuard = isStrictPlaybackActiveForCapture()
-          val frame = buffer.copyOf(read)
-          val energyThreshold = voiceSpeechEnergyThreshold(dynamicPlaybackGuard)
-          val silenceMs = if (dynamicPlaybackGuard) endpoint.completeSilenceMs else endpoint.completeSilenceMs
-          val speech = containsSpeechEnergy(buffer, read, energyThreshold)
-          var justStarted = false
-          if (!speechStarted) {
-            preRollBytes = pushPreRoll(preRoll, frame, preRollBytes, preRollLimitBytes)
-            speechHitCount = if (speech) speechHitCount + 1 else 0
+        if (count == 0) continue
+
+        val voice = containsSpeechEnergy(buffer, count, voiceSpeechEnergyThreshold(isStrictPlaybackActiveForCapture()))
+        if (voice) sources.note(currentVoiceSources())
+        val draft = transcript.text
+        val newWords = draft.isNotBlank() && draft != draftSeen
+        draftSeen = draft
+        val frame = buffer.copyOf(count)
+        if (!streamFromOpen && !speechStarted) preRollBytes = pushPreRoll(preRoll, frame, preRollBytes, 38400)
+        heardFrames = if (voice) heardFrames + 1 else 0
+        val startedNow = !speechStarted && (heardFrames >= 2 || newWords)
+        if (startedNow) {
+          speechStarted = true
+          deadline = minOf(maxSessionEnd, nowUptime() + endpoint.maxUtteranceMs)
+          if (!streamFromOpen) {
+            for (cached in preRoll) retain(cached)
+            preRoll.clear()
           }
-          val requiredSpeechHits = if (isPostPlaybackHandoffActive()) 1 else 2
-          val confirmedSpeech = speechStarted || (speech && speechHitCount >= requiredSpeechHits)
-          music.frame(speech && confirmedSpeech, now)
-          if (speech) sources.note(currentVoiceSources())
-          if (speech && confirmedSpeech) {
-            if (!speechStarted) {
-              speechStarted = true
-              deadline = now + durationMs
-              justStarted = true
-              if (!streamFromOpen) {
-                for (cached in preRoll) sendSpeechFrame(cached)
-              }
-              preRoll.clear()
-              preRollBytes = 0
-            }
-            lastSpeechAt = now
-          }
-          // Normal iFlytek dictation should be streamed from the moment the
-          // socket opens, letting the vendor VAD/language model see the full
-          // acoustic context.  Local VAD is still used as a guard and timeout.
-          // During our own playback we keep the stricter old gating to reduce
-          // speaker echo, then rely on text-level echo filtering afterwards.
-          if (streamFromOpen || (speechStarted && !justStarted)) sendSpeechFrame(frame)
-          if (!speechStarted && now >= startDeadline && !isPostPlaybackHandoffActive()) break
-          if (speechStarted && now - lastSpeechAt >= silenceMs) break
         }
+        if (streamFromOpen || (speechStarted && !startedNow)) retain(frame)
+        if (speechStarted && (voice || newWords)) {
+          lastVoiceByte = if (voice) audio.size() else maxOf(lastVoiceByte, sentBytes)
+          if (!holdsWindow && !sources.hasPlaybackOverlap()) {
+            turns.retain(sources.windowId)
+            holdsWindow = true
+          }
+        }
+        music.frame(voice && speechStarted, System.currentTimeMillis())
+        // Keep collecting after a provider disconnect or early final; the unsent
+        // ending is included in a retry of the complete clean recording.
+        if (speechStarted && audio.size() - lastVoiceByte >= endpoint.completeSilenceMs * bytesPerMs) break
+        if (!speechStarted && ended.count == 0L && failure.get() == null) break
       }
-      sources.endpoint()
+      val evidence = sources.endpoint()
       music.end()
-      if (status > 0) {
-        webSocket?.send(iflytekFrame(cfg, 2, ByteArray(0)))
-        if (!closed.await(4, TimeUnit.SECONDS)) throw java.net.SocketTimeoutException("讯飞最终转写超时")
+      if (isCurrentIflytekSession(turns) && evidence.belongsTo(captureWindowId) && ended.count > 0L &&
+          failure.get() == null && audio.size() > 0) {
+        if (status == 0 && pending.isNotEmpty()) {
+          push(pending, 0)
+          pending = ByteArray(0)
+        }
+        push(pending, 2)
+        if (failure.get() == null && !ended.await(6L, TimeUnit.SECONDS)) failure.compareAndSet(null, "final_timeout")
       }
-    } catch (t: Throwable) {
-      releaseContinuousAudioRecord(audioRecord)
-      throw t
+      val result = transcript.text
+      val outcome = transcript.outcome(audioReadFailed, lastVoiceByte, sentBytes, failure.get())
+      val keepAudio = outcome != "final" && !audioReadFailed && !evidence.hasPlaybackOverlap &&
+        (speechStarted || result.isNotBlank()) && isCurrentIflytekSession(turns) && evidence.belongsTo(captureWindowId)
+      val canSubmit = outcome == "final"
+      if ((speechStarted || result.isNotBlank()) && !holdsWindow && !evidence.hasPlaybackOverlap) {
+        turns.retain(evidence.windowId)
+        holdsWindow = true
+      }
+      if (speechStarted || result.isNotBlank() || failure.get() != null) {
+        logVoice("stt.iflytek.finish", "stream ended", mapOf("outcome" to outcome, "final" to transcript.complete,
+          "pcmBytes" to audio.size(), "sentBytes" to sentBytes, "voiceEndBytes" to lastVoiceByte, "draftChars" to result.length,
+          "mixed" to evidence.hasPlaybackOverlap, "window" to evidence.windowId, "pipeline" to batchChatPipelineVersion))
+      }
+      val turn = IflytekTurn(evidence, result, canSubmit, if (keepAudio) audio.toByteArray() else ByteArray(0), outcome, holdsWindow)
+      finished = true
+      return turn
     } finally {
       streamActive.set(false)
-      sources.endpoint()
       music.end()
-      // The AudioRecord itself is shared/continuous and intentionally left
-      // running (torn down centrally in stopCloudStt()); only the per-segment
-      // WebSocket is closed here.
-      try { webSocket?.close(1000, "done") } catch (_: Throwable) {}
+      if (!finished && holdsWindow) turns.release(sources.windowId)
+      if (transcript.complete) socket?.close(1000, "done") else socket?.cancel()
     }
-    failure.get()?.let { throw java.io.IOException(it) }
-    return synchronized(text) { text.toString().trim() }
   }
 
   private fun getIflytekSttClient(): OkHttpClient {
@@ -3043,7 +3106,7 @@ class VoiceAlarmActivity : Activity() {
     return cfg.optInt("eos", cfg.optInt("vadEos", cfg.optInt("vad_eos", defaultMs))).coerceIn(700, 60000)
   }
 
-  private fun iflytekFrame(cfg: JSONObject, status: Int, audio: ByteArray): String {
+  private fun iflytekFrame(cfg: JSONObject, status: Int, audio: ByteArray, eosMs: Int = iflytekEosMs(cfg)): String {
     val data = JSONObject()
       .put("status", status)
       .put("format", "audio/L16;rate=16000")
@@ -3065,55 +3128,12 @@ class VoiceAlarmActivity : Activity() {
           // and causing the server to send `ls=true` before the client had sent
           // the tail of a long utterance.  Keep `vad_eos` too as a harmless
           // compatibility alias, but make `eos` authoritative.
-          .put("eos", iflytekEosMs(cfg))
-          .put("vad_eos", iflytekEosMs(cfg)),
+          .put("eos", eosMs)
+          .put("vad_eos", eosMs),
       )
     }
     root.put("data", data)
     return root.toString()
-  }
-
-  private data class IflytekRecognitionPiece(
-    val sn: Int,
-    val text: String,
-    val pgs: String,
-    val replaceStart: Int?,
-    val replaceEnd: Int?,
-    val isLast: Boolean,
-  ) {
-    val isReplacement: Boolean get() = pgs == "rpl"
-  }
-
-  private fun parseIflytekRange(result: JSONObject): Pair<Int?, Int?> {
-    val raw = result.opt("rg") ?: return null to null
-    val nums = when (raw) {
-      is JSONArray -> (0 until raw.length()).map { raw.optInt(it) }
-      is String -> Regex("""-?\d+""").findAll(raw).map { it.value.toIntOrNull() ?: 0 }.toList()
-      else -> emptyList()
-    }
-    if (nums.size < 2) return null to null
-    return minOf(nums[0], nums[1]) to maxOf(nums[0], nums[1])
-  }
-
-  private fun parseIflytekResult(message: String): IflytekRecognitionPiece {
-    fun emptyPiece(isLast: Boolean = false) = IflytekRecognitionPiece(-1, "", "", null, null, isLast)
-    val result = try { JSONObject(message).optJSONObject("data")?.optJSONObject("result") } catch (_: Throwable) { null }
-      ?: return emptyPiece()
-    val sn = result.optInt("sn", -1)
-    val pgs = result.optString("pgs", "")
-    val isLast = result.optBoolean("ls", false)
-    val words = result.optJSONArray("ws") ?: return IflytekRecognitionPiece(sn, "", pgs, null, null, isLast)
-    val out = StringBuilder()
-    for (i in 0 until words.length()) {
-      val candidates = words.optJSONObject(i)?.optJSONArray("cw") ?: continue
-      // For IAT, cw is a candidate list for the same token.  Taking every
-      // candidate makes the transcript look duplicated and prevents visible
-      // correction.  Use the best candidate only, as input methods do.
-      val word = candidates.optJSONObject(0)?.optString("w", "") ?: ""
-      if (word.isNotBlank()) out.append(word)
-    }
-    val (replaceStart, replaceEnd) = if (pgs == "rpl") parseIflytekRange(result) else null to null
-    return IflytekRecognitionPiece(sn, out.toString(), pgs, replaceStart, replaceEnd, isLast)
   }
 
   private fun iflytekSignedUrl(cfg: JSONObject): String {
@@ -3884,7 +3904,7 @@ class VoiceAlarmActivity : Activity() {
       VoiceAlarmConversationGate.Route.SEND -> Unit
     }
     conversationActiveUntil = nowUptime() + 45000L
-    endRequestedTurn()
+    if (iflytekTurns?.hasSpeech(captureWindowId, minTurns = 2) != true) endRequestedTurn()
     if (speaking || alarmVoicePlaying) interruptPlaybackForUserSpeech(decision.text)
     postponeAlarmVoiceReplay(30_000L)
     appendSpeechChunk(decision.text, finalChunk = true)
@@ -4031,6 +4051,11 @@ class VoiceAlarmActivity : Activity() {
     processSpeechRunnable = Runnable {
       processSpeechRunnable = null
       val merged = speechBuffer.toString().trim()
+      if (merged.isNotBlank() && iflytekTurns?.hasSpeech(captureWindowId) == true &&
+          System.currentTimeMillis() - lastSpeechChunkAt < 75000L) {
+        scheduleBufferedSpeechProcessing(350L)
+        return@Runnable
+      }
       if (nativeTurn.shouldWaitForFinal(lastSpeechWasFinal) && merged.isNotBlank()) {
         scheduleBufferedSpeechProcessing(350L); return@Runnable
       }

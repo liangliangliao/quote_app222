@@ -11,6 +11,41 @@ fun main() {
   var passed = 0
   fun scenario(name: String, body: () -> Unit) { body(); passed++; println("PASS $name") }
   fun rejects(body: () -> Unit) { check(runCatching(body).isFailure) }
+  scenario("iFlytek envelope-only final retains and completes the accumulated paragraph") {
+    val stream = VoiceAlarmIflytekTranscript()
+    check(stream.accept("""{"code":0,"data":{"status":1,"result":{"sn":1,"ws":[{"cw":[{"w":"第一句。"},{"w":"干扰候选"}]}]}}}""")?.text == "第一句。")
+    check(stream.accept("""{"code":0,"data":{"status":1,"result":{"sn":2,"ws":[{"cw":[{"w":"还有最后一句。"}]}]}}}""")?.complete == false)
+    val done = stream.accept("""{"code":0,"data":{"status":2}}""")
+    check(done?.complete == true && done.text == "第一句。还有最后一句。")
+    check(stream.outcome(false, 12800, 14080, null) == "final")
+    check(stream.accept("""{"code":0,"data":{"status":2}}""") == null)
+  }
+  scenario("iFlytek terminal words apply the correction before completing") {
+    val stream = VoiceAlarmIflytekTranscript()
+    stream.accept("""{"code":0,"data":{"result":{"sn":1,"ws":[{"cw":[{"w":"带错字的草稿"}]}]}}}""")
+    val done = stream.accept("""{"code":0,"data":{"status":2,"result":{"sn":2,"ls":true,"pgs":"rpl","rg":[1,1],"ws":[{"cw":[{"w":"修正后的内容"}]}]}}}""")
+    check(done?.complete == true && done.text == "修正后的内容")
+  }
+  scenario("iFlytek draft, close, unsent tail, and microphone interruption are never marked complete") {
+    val stream = VoiceAlarmIflytekTranscript()
+    stream.accept("""{"code":0,"data":{"status":1,"result":{"sn":0,"ws":[{"cw":[{"w":"没有收到结尾"}]}]}}}""")
+    check(stream.accept("not a JSON response") == null)
+    check(stream.accept("""{"code":10165,"data":{"status":2}}""")?.complete == false)
+    check(stream.outcome(false, 10000, 10000, null) == "missing_final")
+    check(stream.outcome(false, 10000, 10000, "closed_before_final") == "closed_before_final")
+    check(stream.text == "没有收到结尾")
+    check(stream.accept("""{"code":0,"data":{"status":2,"result":{"sn":0,"ls":true,"ws":[]}}}""")?.text == "没有收到结尾")
+    check(stream.outcome(false, 11000, 10000, null) == "unsent_speech_tail")
+    check(stream.outcome(true, 10000, 10000, null) == "microphone_interrupted")
+  }
+  scenario("active cloud dictation can finish after idle expiry with a bounded recovery deadline") {
+    val listening = VoiceAlarmListenWindow(18000L)
+    listening.open(1000L)
+    listening.ready(2000L)
+    check(listening.expiresAt == 20000L)
+    check(listening.mayFinishCloudTurn(40000L))
+    check(!listening.mayFinishCloudTurn(131000L))
+  }
   scenario("network timeout selects local once then falls back if Chinese is unavailable") {
     val policy = VoiceAlarmNativeRecovery()
     val network = VoiceAlarmNativeRecovery.Failure.NETWORK

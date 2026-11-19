@@ -25,6 +25,7 @@ voice_classpath="$voice_deps/okhttp.jar:$voice_deps/okio.jar:$voice_deps/json.ja
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmTurnBuffer.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmWebSearch.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmXaiTranscript.kt \
+  android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmIflytekTranscript.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmNativeTurn.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmAiClient.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmWakeSession.kt \

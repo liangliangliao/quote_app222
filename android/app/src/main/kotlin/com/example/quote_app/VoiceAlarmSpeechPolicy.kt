@@ -156,6 +156,7 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
   private var cause = if (initiallyMixed) "start_" + initialOutput else "none"
   private var sealed = false
   data class Evidence(val sources: List<String>, val mixed: Boolean, val mixCause: String = if (mixed) "unknown" else "none", val windowId: Long = 0L) {
+    val hasPlaybackOverlap get() = mixed || sources.isNotEmpty()
     fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
     // Audio merged across conversation windows is neither from the active window nor from standby.
     fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed, if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else -1L)
@@ -188,6 +189,7 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
     }
   }
   @Synchronized fun note(texts: List<String>) { if (!sealed) sources.addAll(texts.filter { it.isNotBlank() }) }
+  @Synchronized fun hasPlaybackOverlap() = mixed || sources.isNotEmpty()
   @Synchronized fun finish(epoch: Long, audible: Boolean, output: String = if (audible) "active" else "quiet"): Evidence {
     if (!sealed) {
       if (!mixed) cause = when { audible -> "end_" + output; epoch != initialEpoch -> "output_changed"; else -> "none" }
