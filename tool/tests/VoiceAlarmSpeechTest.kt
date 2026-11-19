@@ -55,6 +55,21 @@ fun main() {
     check(!VoiceAlarmSpeechPolicy.isEcho("关闭闹钟", playing, true))
     check(!VoiceAlarmSpeechPolicy.isEcho("专注充满力量", playing, false))
   }
+  scenario("a two-character ASR omission stays echo across streaming revisions and final") {
+    val sources = listOf("测试提醒。扶着床沿站起来，停三秒。")
+    for (draft in listOf("扶着", "扶着站起", "扶着站起来", "扶着站起来停")) {
+      check(VoiceAlarmSpeechPolicy.isEcho(draft, sources, true, partial = true))
+    }
+    check(VoiceAlarmSpeechPolicy.isEcho("扶着站起来停三秒", sources, true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("扶着站起来停三秒", sources, false))
+  }
+  scenario("nearby questions new words negations and distant fragments remain user speech") {
+    val sources = listOf("扶着床沿站起来，停三秒。现在不要打开音乐。")
+    for (reply in listOf("扶着站起来停几秒", "我不想站起来", "扶着站起来停三秒吗", "现在打开音乐", "请打开音乐")) {
+      check(!VoiceAlarmSpeechPolicy.isEcho(reply, sources, true))
+    }
+    check(!VoiceAlarmSpeechPolicy.isEcho("扶着站起来停三秒", listOf("扶着桌边喝水之后再站起来停三秒"), true))
+  }
   scenario("clean reply can quote or repeat the assistant") {
     check(!VoiceAlarmSpeechPolicy.isEcho("新的一天开始了", listOf("早上好，新的一天开始了"), false))
     check(!VoiceAlarmSpeechPolicy.isEcho("早上好，新的一天开始了", listOf("早上好，新的一天开始了"), false))

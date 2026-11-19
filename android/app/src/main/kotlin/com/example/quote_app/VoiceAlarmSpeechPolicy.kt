@@ -30,9 +30,33 @@ object VoiceAlarmSpeechPolicy {
 
   private val phraseBoundary = Regex("[，。！？、；：,.!?;:\\s]+")
 
+  // ASR can drop a short word in the middle of otherwise verbatim Chinese playback.
+  // Require anchors on both sides and never discard novel words from the transcript.
+  private fun hasInternalOmission(spoken: String, candidate: String, partial: Boolean): Boolean {
+    val minLength = if (partial) 4 else 6
+    if (candidate.length < minLength) return false
+    val anchor = candidate.take(2)
+    var start = spoken.indexOf(anchor)
+    while (start >= 0) {
+      var matched = 2
+      while (matched < candidate.length && start + matched < spoken.length &&
+        spoken[start + matched] == candidate[matched]) matched++
+      // Try earlier split points too, in case the omitted word starts with a repeated character.
+      for (split in 2..minOf(matched, candidate.length - 2)) {
+        for (gap in 1..2) {
+          val after = start + split + gap
+          if (after > spoken.length || !spoken.regionMatches(after, candidate, split, candidate.length - split)) continue
+          if (spoken.substring(start + split, after).none { it in "不没别勿甭未莫" }) return true
+        }
+      }
+      start = spoken.indexOf(anchor, start + 1)
+    }
+    return false
+  }
+
   // Only near-verbatim playback captured during playback can be echo. Do not delete
   // matching phrases from a user's sentence: "不要关闭闹钟" must retain its negation.
-  fun isEcho(text: String, sources: List<String>, overlapsPlayback: Boolean): Boolean {
+  fun isEcho(text: String, sources: List<String>, overlapsPlayback: Boolean, partial: Boolean = false): Boolean {
     if (!overlapsPlayback) return false
     val candidate = normalized(text)
     if (candidate.length < 2) return false
@@ -41,6 +65,8 @@ object VoiceAlarmSpeechPolicy {
       val spoken = normalized(source)
       when {
         spoken == candidate -> true
+        containsHan && hasInternalOmission(spoken, candidate, partial) -> true
+        partial -> spoken.contains(candidate)
         candidate.length >= 8 || (containsHan && candidate.length >= 4) -> spoken.contains(candidate)
         containsHan -> source.split(phraseBoundary).any { normalized(it) == candidate }
         else -> false

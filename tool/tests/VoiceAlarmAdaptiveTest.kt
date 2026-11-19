@@ -11,6 +11,24 @@ fun main() {
   var passed = 0
   fun scenario(name: String, body: () -> Unit) { body(); passed++; println("PASS $name") }
   fun rejects(body: () -> Unit) { check(runCatching(body).isFailure) }
+  scenario("network timeout selects local once then falls back if Chinese is unavailable") {
+    val policy = VoiceAlarmNativeRecovery()
+    val network = VoiceAlarmNativeRecovery.Failure.NETWORK
+    check(policy.failed(network, true)!!.replaceEngine && policy.onDevice)
+    check(policy.failed(VoiceAlarmNativeRecovery.Failure.LANGUAGE, true)!!.replaceEngine && !policy.onDevice)
+    check(!policy.failed(network, true)!!.replaceEngine && !policy.onDevice)
+  }
+  scenario("empty no-match rearms fast while persistent network failure has a bounded retry delay") {
+    val policy = VoiceAlarmNativeRecovery()
+    val network = VoiceAlarmNativeRecovery.Failure.NETWORK
+    val delays = (1..6).map { policy.failed(network, false)!!.delayMs }
+    check(delays == listOf(400L, 800L, 1600L, 3200L, 3200L, 3200L))
+    check(policy.failed(VoiceAlarmNativeRecovery.Failure.NO_MATCH, true)!!.delayMs == 100L)
+    check(!policy.onDevice)
+    policy.success()
+    check(policy.failed(network, false)!!.delayMs == 400L)
+    check(policy.failed(VoiceAlarmNativeRecovery.Failure.PERMISSION, true) == null)
+  }
   scenario("native end-of-speech cannot prematurely begin another recognition") {
     val turn = VoiceAlarmNativeTurn(); check(turn.begin()); turn.ready(); turn.speechStarted()
     turn.partial("请关闭背景"); turn.endSpeech(); check(!turn.begin() && turn.active && turn.awaitingFinal)

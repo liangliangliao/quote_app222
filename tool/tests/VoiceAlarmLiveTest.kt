@@ -47,12 +47,40 @@ fun main() {
   scenario("negations questions and discussion do not change music") {
     for (text in listOf("不要关闭背景音乐", "别关掉音乐", "为什么关闭背景音乐", "我刚才说播放背景音乐了吗", "如果关闭背景音乐", "不要停止音乐")) check(VoiceAlarmCommands.music(text) == null)
   }
-  scenario("music OFF survives restore timers and manual gain changes") {
-    val state = VoiceAlarmMusicState(); state.duck(1000, 3000); check(state.gain(1500, .7f) == 0f)
-    state.choose(false); check(state.gain(5000, 1f) == 0f)
-    state.choose(true); check(state.gain(5000, .35f) == .35f)
-    state.duck(5000, 2000); state.duck(6000, 3000)
-    check(state.gain(8000, 1f) == 0f && state.gain(9000, 1f) == 1f)
+  scenario("music resumes only after all overlapping speakers end") {
+    val mix = VoiceAlarmMusicState()
+    val owner = Any()
+    for (speaker in VoiceAlarmMusicState.Speaker.values()) mix.setSpeaking(speaker, owner, true)
+    for (speaker in listOf(VoiceAlarmMusicState.Speaker.REMINDER, VoiceAlarmMusicState.Speaker.ASSISTANT)) {
+      mix.setSpeaking(speaker, owner, false)
+      check(mix.gain(.35f) == 0f)
+    }
+    mix.setSpeaking(VoiceAlarmMusicState.Speaker.USER, owner, false)
+    check(mix.gain(.35f) == .35f)
+  }
+  scenario("changing gain or enabling music during speech cannot bypass mute") {
+    val mix = VoiceAlarmMusicState()
+    val owner = Any()
+    for (speaker in VoiceAlarmMusicState.Speaker.values()) {
+      mix.setSpeaking(speaker, owner, true)
+      mix.choose(false)
+      mix.choose(true)
+      check(mix.gain(.8f) == 0f)
+      mix.setSpeaking(speaker, owner, false)
+      check(mix.gain(.8f) == .8f)
+    }
+  }
+  scenario("manual music OFF survives the last speech end and stale owners") {
+    val mix = VoiceAlarmMusicState()
+    val old = Any()
+    val current = Any()
+    val user = VoiceAlarmMusicState.Speaker.USER
+    mix.setSpeaking(user, old, true)
+    mix.setSpeaking(user, current, true)
+    check(!mix.setSpeaking(user, old, false) && mix.gain(.6f) == 0f)
+    mix.choose(false)
+    mix.setSpeaking(user, current, false)
+    check(mix.gain(.6f) == 0f)
   }
   scenario("pre-roll and first syllables survive byte for byte") {
     val turn = VoiceAlarmTurnBuffer(800, 10000)

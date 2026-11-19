@@ -44,3 +44,39 @@ class VoiceAlarmNativeTurn {
   }
   fun cancel() { overlappingSources.clear(); active = false; ready = false; hasSpeech = false; awaitingFinal = false; draft = "" }
 }
+
+/** Recovery decisions are scoped to one alarm. Network loss and an empty recognition are distinct. */
+class VoiceAlarmNativeRecovery {
+  enum class Failure { NETWORK, NO_MATCH, BUSY, LANGUAGE, PERMISSION, OTHER }
+  data class Retry(val delayMs: Long, val replaceEngine: Boolean = false)
+  var onDevice = false
+    private set
+  private var triedOnDevice = false
+  private var networkFailures = 0
+
+  fun success() { networkFailures = 0 }
+  fun localUnavailable() { onDevice = false }
+  fun failed(kind: Failure, localAvailable: Boolean): Retry? {
+    if (kind == Failure.PERMISSION) return null
+    if (onDevice && (kind == Failure.LANGUAGE || kind == Failure.OTHER || kind == Failure.NETWORK)) {
+      localUnavailable()
+      return Retry(120, replaceEngine = true)
+    }
+    return when (kind) {
+      Failure.NETWORK -> {
+        if (!triedOnDevice && localAvailable) {
+          triedOnDevice = true
+          onDevice = true
+          Retry(120, replaceEngine = true)
+        } else {
+          networkFailures = (networkFailures + 1).coerceAtMost(4)
+          Retry(400L shl (networkFailures - 1), replaceEngine = networkFailures == 2)
+        }
+      }
+      Failure.LANGUAGE, Failure.PERMISSION -> null
+      Failure.BUSY -> Retry(1000)
+      Failure.NO_MATCH -> Retry(100)
+      Failure.OTHER -> Retry(350)
+    }
+  }
+}

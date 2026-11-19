@@ -25,11 +25,23 @@ class VoiceAlarmPlaybackQueue {
   fun cancel() { generation++; parts = emptyList(); index = 0; attempts = 0; fullText = "" }
 }
 
-/** Explicit music choice survives temporary microphone ducking and volume changes. */
+/** The foreground service and its activity update this mixer on the main thread. */
 class VoiceAlarmMusicState {
-  var enabled = true; private set
-  var duckUntil = 0L; private set
-  fun choose(play: Boolean) { enabled = play; duckUntil = 0 }
-  fun duck(now: Long, durationMs: Long) { duckUntil = maxOf(duckUntil, now + durationMs) }
-  fun gain(now: Long, volume: Float): Float = if (enabled && now >= duckUntil) volume.coerceIn(0f, 1f) else 0f
+  enum class Speaker { REMINDER, ASSISTANT, USER }
+  private val speakers = mutableMapOf<Speaker, Any>()
+  var enabled = true
+    private set
+
+  fun choose(play: Boolean) { enabled = play }
+  fun speaking(speaker: Speaker): Boolean = speaker in speakers
+
+  // An old activity or recorder finishing cannot release a newer owner's mute.
+  fun setSpeaking(speaker: Speaker, owner: Any, active: Boolean): Boolean {
+    if (active) return speakers.put(speaker, owner) !== owner
+    if (speakers[speaker] !== owner) return false
+    speakers.remove(speaker)
+    return true
+  }
+
+  fun gain(volume: Float): Float = if (enabled && speakers.isEmpty()) volume.coerceIn(0f, 1f) else 0f
 }
