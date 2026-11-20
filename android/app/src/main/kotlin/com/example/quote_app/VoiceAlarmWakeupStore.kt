@@ -60,11 +60,12 @@ object VoiceAlarmWakeupStore {
       .put("serviceToken", token(serviceToken).ifBlank { if (sameOrigin) old?.serviceToken.orEmpty() else "" })
     check(prefs.edit().putString("connection", encrypt(cfg)).remove("cache").commit()) { "连接设置未保存" }
   }
-  fun fetchDay(context: Context): WakeupDay {
+  fun fetchDay(context: Context, requireHistorySaved: Boolean = false): WakeupDay {
     val cfg = access(context) ?: throw IllegalStateException("AI Wakeup 尚未配置连接")
     val day = VoiceAlarmWakeupClient.fetchDay(cfg)
     try { saveHistory(context, day) } catch (failure: Exception) {
       VoiceAlarmDebugLog.write(context, "aiWakeup.history.error", "本次内容未能存入本地历史", mapOf("type" to failure.javaClass.simpleName))
+      if (requireHistorySaved) throw failure
     }
     return day
   }

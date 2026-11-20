@@ -21,6 +21,14 @@ object VoiceAlarmChannel {
       try {
         when (call.method) {
           "getAiWakeupSettings" -> result.success(VoiceAlarmWakeupStore.publicSettings(context))
+          "refreshAiWakeupHistory" -> wakeupIo.execute {
+            try {
+              val day = VoiceAlarmWakeupStore.fetchDay(context, requireHistorySaved = true)
+              main.post { result.success(mapOf("date" to day.date, "tasks" to day.tasks.size, "saved" to day.historyItems.size)) }
+            } catch (_: Exception) {
+              main.post { result.error("AI_WAKEUP_HISTORY_SYNC", "同步未完成，请检查 AI Wakeup 连接设置或本机存储", null) }
+            }
+          }
           "getAiWakeupHistoryDates", "getAiWakeupHistory" -> {
             val date = call.argument<String>("date")
             wakeupIo.execute {

@@ -73,7 +73,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "voice_turn_reliability_v50"
+  private val batchChatPipelineVersion = "voice_turn_reliability_v51"
   private val batchChatPipelineSummary = "连续人声窗口、完整转写、可恢复失败与过期播报隔离"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {

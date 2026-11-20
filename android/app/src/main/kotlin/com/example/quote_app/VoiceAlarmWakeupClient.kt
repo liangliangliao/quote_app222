@@ -14,13 +14,14 @@ import java.util.concurrent.TimeUnit
 /** No credentials, response bodies or private text are included in error messages. */
 data class WakeupAccess(val baseUrl: String, val deviceToken: String, val serviceToken: String)
 data class WakeupContent(val date: String, val text: String, val id: String,
-  val title: String = "今日播报", val scheduledTime: String = "")
-data class WakeupDay(val date: String, val tasks: List<WakeupContent>, val reminder: WakeupContent?) {
+  val title: String = "今日播报", val scheduledTime: String = "", val createdAt: String = "")
+data class WakeupDay(val date: String, val tasks: List<WakeupContent>, val reminder: WakeupContent?, val shouldRing: Boolean = true) {
   val historyItems get() = tasks.ifEmpty { listOfNotNull(reminder) }
 }
 
 object VoiceAlarmWakeupClient {
   const val DEFAULT_URL = "https://ai-wakeup-personal-lab.fond-beech-0136.chatgpt.site"
+  private const val MAX_RESPONSE_BYTES = 1024 * 1024
   private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
     .connectTimeout(2, TimeUnit.SECONDS).readTimeout(3, TimeUnit.SECONDS)
     .callTimeout(5, TimeUnit.SECONDS).build()
@@ -36,13 +37,13 @@ object VoiceAlarmWakeupClient {
   }
 
   fun parseToday(raw: String, expectedDate: String): WakeupContent {
-    return parseDay(raw, expectedDate).reminder ?: throw IllegalStateException("今日提醒尚未生成")
+    return parseDay(raw, expectedDate).takeIf { it.shouldRing }?.reminder ?: throw IllegalStateException("今日提醒不可播报")
   }
 
   fun parseDay(raw: String, expectedDate: String): WakeupDay {
     val root = JSONObject(raw)
     require(root.optJSONObject("settings")?.opt("demoMode") == false) { "站点正式模式未启用，使用原闹钟内容" }
-    require(root.optString("date") == expectedDate && root.optBoolean("shouldRing", false)) { "今日提醒尚未就绪或站点闹钟未启用" }
+    require(root.optString("date") == expectedDate) { "站点未返回请求日期的任务" }
     val messages = root.optJSONArray("scheduledMessages")
     val tasks = (0 until (messages?.length() ?: 0)).mapNotNull { index ->
       val item = messages?.optJSONObject(index) ?: return@mapNotNull null
@@ -50,8 +51,9 @@ object VoiceAlarmWakeupClient {
       val id = item.optString("id")
       val text = item.opt("text") as? String ?: return@mapNotNull null
       if (id.isBlank() || text.isBlank() || text.length > 16000) return@mapNotNull null
-      WakeupContent(expectedDate, text, id, item.optString("task_title").ifBlank { "同步任务" }, item.optString("scheduled_time"))
-    }.distinctBy { it.id }.sortedBy { it.scheduledTime.ifBlank { "99:99" } }
+      WakeupContent(expectedDate, text, id, item.optString("task_title").ifBlank { "同步任务" },
+        item.optString("scheduled_time", "").takeUnless { item.isNull("scheduled_time") }.orEmpty(), item.optString("created_at"))
+    }.distinctBy { it.id }.sortedWith(compareBy({ it.scheduledTime.ifBlank { "99:99" } }, { it.createdAt }, { it.id }))
     val reminder = root.optJSONObject("content")?.let { item ->
       val text = item.opt("body") as? String
       if (item.optString("date") == expectedDate && item.optString("source") != "synthetic" && item.opt("isDemo") == false &&
@@ -59,11 +61,11 @@ object VoiceAlarmWakeupClient {
         WakeupContent(expectedDate, text, item.optString("id"), item.optString("title").ifBlank { "今日播报" })
       } else null
     }
-    return WakeupDay(expectedDate, tasks, reminder)
+    return WakeupDay(expectedDate, tasks, reminder, root.optBoolean("shouldRing", false))
   }
 
   fun fetch(access: WakeupAccess, date: String = beijingDate(), transport: OkHttpClient = client): WakeupContent {
-    return fetchDay(access, date, transport).reminder ?: throw IllegalStateException("今日提醒尚未生成")
+    return fetchDay(access, date, transport).takeIf { it.shouldRing }?.reminder ?: throw IllegalStateException("今日提醒不可播报")
   }
 
   fun fetchDay(access: WakeupAccess, date: String = beijingDate(), transport: OkHttpClient = client): WakeupDay {
@@ -84,7 +86,7 @@ object VoiceAlarmWakeupClient {
       val out = ByteArrayOutputStream()
       body.byteStream().use { input ->
         val buffer = ByteArray(4096)
-        while (true) { val n = input.read(buffer); if (n < 0) break; require(out.size() + n <= 65536) { "站点响应超出限制" }; out.write(buffer, 0, n) }
+        while (true) { val n = input.read(buffer); if (n < 0) break; require(out.size() + n <= MAX_RESPONSE_BYTES) { "站点响应超出限制" }; out.write(buffer, 0, n) }
       }
       return parseDay(out.toString("UTF-8"), date)
     }

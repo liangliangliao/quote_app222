@@ -47,23 +47,53 @@ fun main() {
     val empty = VoiceAlarmWakeupClient.parseDay(fixture().put("content", JSONObject.NULL).toString(), date)
     check(empty.tasks.isEmpty() && empty.historyItems.isEmpty())
   }
-  scenario("one remote task per round, wrap in order, retain position on refresh, never cross midnight") {
+  scenario("finish each task once, then generate from completed originals and play late arrivals") {
     val first = WakeupContent(date, "任务一\n正文", "a", "一", "06:00")
     val second = WakeupContent(date, "任务二\n正文", "b", "二", "07:00")
-    val session = VoiceAlarmWakeSession("本地开场")
+    val late = WakeupContent(date, "后来同步的任务", "c", "三", "07:05")
+    val session = VoiceAlarmWakeSession("本地开场", adaptive = false)
     check(session.needsRemote(date, 0))
-    session.rememberRemote(date, 0, WakeupDay(date, listOf(first, second), null))
+    val day = WakeupDay(date, listOf(first, second), null)
+    session.rememberRemote(date, 0, day)
     check(!session.needsRemote(date, 59000) && session.needsRemote(date, 60000))
-    repeat(3) { index ->
+    fun begin(expected: WakeupContent) {
       val next = session.remoteForRound(date) ?: error("missing task")
-      val expected = if (index == 1) second else first
       check(next.task == expected)
-      check(session.accept(next.motivation, emptyList(), next.source, next.task?.id).body == "本地开场\n\n${expected.text}")
-      session.rememberRemote(date, (index + 1) * 60000L, WakeupDay(date, listOf(first, second), null))
+      check(session.accept(next.motivation, emptyList(), next.source, next.task).body == expected.text)
     }
-    check(session.remoteForRound("2026-11-17") == null)
-    val direct = VoiceAlarmWakeSession("本地开场", adaptive = false)
-    check(direct.accept(first.text, emptyList(), "ai_wakeup_task", first.id).body == first.text)
+    begin(first)
+    session.markPlayback("用户插话中断")
+    check(!session.shouldFollowUpOnTasks(date))
+    begin(first)
+    session.markPlayback("完整播报完成", completed = true)
+    session.rememberRemote(date, 60000, null, keepOnNetworkError = true)
+    begin(second)
+    session.markPlayback("完整播报完成", completed = true)
+    check(session.remoteForRound(date) == null && session.shouldFollowUpOnTasks(date))
+    val preview = session.prepare(emptyList(), null) { messages ->
+      val context = JSONObject(messages.getJSONObject(1).getString("content"))
+      val originals = context.getJSONArray("completedWakeupTasks")
+      check((0 until originals.length()).map { originals.getJSONObject(it).getString("text") } == listOf(first.text, second.text))
+      check(context.getJSONArray("previousAttempts").getJSONObject(0).getString("playback") == "用户插话中断")
+      "取一个任务里的行动线索，现在就迈出第一步。"
+    }
+    check(preview.source == "ai" && preview.motivation != first.text)
+    session.rememberRemote(date, 120000, day.copy(tasks = day.tasks + late))
+    check(!session.shouldFollowUpOnTasks(date))
+    begin(late)
+    session.markPlayback("完整播报完成", completed = true)
+    check(session.shouldFollowUpOnTasks(date))
+    session.rememberRemote("2026-11-17", 180000, null, keepOnNetworkError = true)
+    check(session.remoteForRound("2026-11-17") == null && !session.shouldFollowUpOnTasks("2026-11-17"))
+  }
+  scenario("history can import today's task while disabled alarms never play it") {
+    val raw = fixture().put("shouldRing", false).put("scheduledMessages", JSONArray().put(
+      JSONObject().put("date", date).put("isDemo", false).put("id", "task-disabled").put("text", text)))
+    val day = VoiceAlarmWakeupClient.parseDay(raw.toString(), date)
+    check(day.historyItems.single().text == text && !day.shouldRing)
+    val session = VoiceAlarmWakeSession("本地开场")
+    session.rememberRemote(date, 0, day)
+    check(session.remoteForRound(date) == null && !session.shouldFollowUpOnTasks(date))
   }
   scenario("disabled alarm never supplies cloud content") {
     rejects { VoiceAlarmWakeupClient.parseToday(fixture().put("shouldRing", false).toString(), date) }
@@ -134,7 +164,7 @@ fun main() {
     rejects { VoiceAlarmWakeupClient.fetch(access, date, transport(200, "<html>login</html>", "text/html")) }
   }
   scenario("unbounded HTTP bodies are rejected before JSON parsing") {
-    rejects { VoiceAlarmWakeupClient.fetch(access, date, transport(200, "x".repeat(65537))) }
+    rejects { VoiceAlarmWakeupClient.fetch(access, date, transport(200, "x".repeat(1048577))) }
   }
   scenario("header injection and missing device credential are rejected before HTTP") {
     val forbidden = OkHttpClient.Builder().addInterceptor { error("Must not call network") }.build()
