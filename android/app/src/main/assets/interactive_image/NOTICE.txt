@@ -1,0 +1,7 @@
+MediaPipe Tasks Vision by the MediaPipe Authors.
+Source and Apache 2.0 license for the library: https://github.com/google-ai-edge/mediapipe/tree/v0.10.32
+
+Bundled Google MediaPipe model files, float16 version 1:
+https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task

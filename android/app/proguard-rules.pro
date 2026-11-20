@@ -55,3 +55,5 @@
 # at runtime. It is intentionally not bundled for the text-only import feature.
 -dontwarn com.gemalto.jp2.JP2Decoder
 
+# MediaPipe Tasks Vision resolves its Java bridge through JNI.
+-keep class com.google.mediapipe.** { *; }
