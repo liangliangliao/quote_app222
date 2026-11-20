@@ -55,3 +55,21 @@
 # at runtime. It is intentionally not bundled for the text-only import feature.
 -dontwarn com.gemalto.jp2.JP2Decoder
 
+# MediaPipe framework JNI callbacks (upstream framework/proguard.pgcfg, v0.10.32).
+# The Android default rules retain native method names. The Java callbacks
+# below also need to survive shrinking even when no Java caller references them.
+-keep public interface com.google.mediapipe.framework.* {
+    public *;
+}
+-keep public class com.google.mediapipe.framework.Packet {
+    public static *** create(***);
+    public long getNativeHandle();
+    public void release();
+}
+-keep public class com.google.mediapipe.framework.PacketCreator {
+    *** releaseWithSyncToken(...);
+}
+-keep public class com.google.mediapipe.framework.MediaPipeException {
+    <init>(int, byte[]);
+}
+-keep class com.google.mediapipe.framework.ProtoUtil$SerializedMessage { *; }

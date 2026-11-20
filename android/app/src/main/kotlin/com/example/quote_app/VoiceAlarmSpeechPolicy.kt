@@ -28,17 +28,175 @@ object VoiceAlarmSpeechPolicy {
 
   fun normalized(text: String): String = text.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
 
+  private val phraseBoundary = Regex("[，。！？、；：,.!?;:\\s]+")
+
+  // ASR can drop a short word in the middle of otherwise verbatim Chinese playback.
+  // Require anchors on both sides and never discard novel words from the transcript.
+  private fun hasInternalOmission(spoken: String, candidate: String, partial: Boolean): Boolean {
+    val minLength = if (partial) 4 else 6
+    if (candidate.length < minLength) return false
+    val anchor = candidate.take(2)
+    var start = spoken.indexOf(anchor)
+    while (start >= 0) {
+      var matched = 2
+      while (matched < candidate.length && start + matched < spoken.length &&
+        spoken[start + matched] == candidate[matched]) matched++
+      // Try earlier split points too, in case the omitted word starts with a repeated character.
+      for (split in 2..minOf(matched, candidate.length - 2)) {
+        for (gap in 1..2) {
+          val after = start + split + gap
+          if (after > spoken.length || !spoken.regionMatches(after, candidate, split, candidate.length - split)) continue
+          if (spoken.substring(start + split, after).none { it in "不没别勿甭未莫" }) return true
+        }
+      }
+      start = spoken.indexOf(anchor, start + 1)
+    }
+    return false
+  }
+
+  // One ASR substitution inside a longer audible passage, with exact anchors on both sides.
+  // Preserve question words, quantities and negations that change what the user meant.
+  private fun hasInternalSubstitution(spoken: String, candidate: String): Boolean {
+    if (candidate.length < 8) return false
+    val protected = "不是没别勿几谁怎啥哪吗么多少零一二三四五六七八九十两"
+    var start = spoken.indexOf(candidate.take(2))
+    while (start >= 0 && start + candidate.length <= spoken.length) {
+      var i = 2
+      while (i < candidate.length && spoken[start + i] == candidate[i]) i++
+      if (i in 2..candidate.length - 3 && candidate[i] !in protected && spoken[start + i] !in protected &&
+          spoken.regionMatches(start + i + 1, candidate, i + 1, candidate.length - i - 1)) return true
+      start = spoken.indexOf(candidate.take(2), start + 1)
+    }
+    return false
+  }
+
   // Only near-verbatim playback captured during playback can be echo. Do not delete
   // matching phrases from a user's sentence: "不要关闭闹钟" must retain its negation.
-  fun isEcho(text: String, sources: List<String>, overlapsPlayback: Boolean): Boolean {
+  fun isEcho(text: String, sources: List<String>, overlapsPlayback: Boolean, partial: Boolean = false): Boolean {
     if (!overlapsPlayback) return false
     val candidate = normalized(text)
-    if (candidate.length < 4) return false
+    if (candidate.length < 2) return false
+    val containsHan = candidate.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
     return sources.any { source ->
       val spoken = normalized(source)
-      spoken.length >= 4 && (spoken == candidate ||
-        (candidate.length >= 8 && spoken.contains(candidate)))
+      when {
+        spoken == candidate -> true
+        containsHan && hasInternalSubstitution(spoken, candidate) -> true
+        containsHan && hasInternalOmission(spoken, candidate, partial) -> true
+        partial -> spoken.contains(candidate)
+        candidate.length >= 8 || (containsHan && candidate.length >= 4) -> spoken.contains(candidate)
+        containsHan -> source.split(phraseBoundary).any { normalized(it) == candidate }
+        else -> false
+      }
     }
+  }
+}
+
+/** Accept a clean final from an open conversation or a direct question during alarm standby. */
+object VoiceAlarmConversationGate {
+  enum class Route { ECHO, DRAFT, IGNORE, RELISTEN, OPEN_MIC, LOCAL, SEND }
+  enum class RetryReason { INCOMPLETE, PLAYBACK_OVERLAP }
+  data class Decision(val route: Route, val text: String, val retryReason: RetryReason? = null)
+  private val interruptPhrases = setOf("打断一下", "请打断一下", "先听我说", "请先听我说", "先暂停播报", "请暂停播报")
+  private val address = Regex("""^(小名小名|闹钟助手|你好AI|AI助手|(?:小名|助手)(?=$|[\s，。！？、：,:.!?]))[\s，。！？、：,:.!?]*""", RegexOption.IGNORE_CASE)
+  // Android recognition often omits question marks. Use grammatical cues, keeping the original transcript.
+  private val questionStart = Regex("^(?:为什么|为何|怎么|怎样|如何|能不能|可不可以|是不是|要不要|有没有).+")
+  private val questionWords = Regex("(?:什么|谁|哪里|哪儿|哪[个位种些天年本条项部]|多少|几[个位种天点分秒次岁条件篇项名本部]|为什么|为何|怎么|怎样|如何)")
+  private val reportedSpeech = Regex("^(?:[我你他她您]们?|大家|有人|别人)?(?:已经|早就|也)?(?:不知道|知道|记得|听说|在讨论|问过|告诉过|说过|想知道)")
+  private val indefinite = Regex("^(?:无论|不管|随便).+|.+(?:都可以|都行|都一样|都没关系)$")
+  private val directRequest = Regex("^(?:请问|能帮我|请?(?:帮我|告诉我|介绍一下|解释一下|说说|讲讲)).+|^(?:继续说|继续讲|接着说|接着讲|换一个)$")
+
+  private fun isDirectQuestion(text: String): Boolean {
+    val normalized = VoiceAlarmSpeechPolicy.normalized(text)
+    if (normalized.length < 3) return false
+    if (text.endsWith('？') || text.endsWith('?')) return true
+    if (indefinite.matches(normalized)) return false
+    return questionStart.matches(normalized) || normalized.endsWith('吗') ||
+      (!reportedSpeech.containsMatchIn(normalized) && questionWords.containsMatchIn(normalized))
+  }
+
+  fun isInterruption(text: String) = VoiceAlarmSpeechPolicy.normalized(text) in interruptPhrases
+
+  fun canPauseForSpeech(text: String): Boolean = isInterruption(text) || address.containsMatchIn(text) || looksDirected(text)
+
+  private fun looksDirected(text: String): Boolean = isDirectQuestion(text) || directRequest.matches(VoiceAlarmSpeechPolicy.normalized(text))
+
+  fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
+             armed: Boolean, localCommand: Boolean, passive: Boolean): Decision {
+    val text = raw.trim()
+    val prefix = address.find(text)
+    val question = prefix?.let { text.substring(it.range.last + 1).trim() }
+    val normalized = VoiceAlarmSpeechPolicy.normalized(text)
+    val opensMic = question?.isEmpty() == true || normalized in interruptPhrases
+    val directed = armed || question != null || looksDirected(text) || localCommand || opensMic
+    val route = when {
+      text.isEmpty() -> Route.DRAFT
+      VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
+      !final -> Route.DRAFT
+      !reliable -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.INCOMPLETE) else Decision(Route.IGNORE, "")
+      opensMic && sources.any {
+        VoiceAlarmSpeechPolicy.normalized(it).contains(VoiceAlarmSpeechPolicy.normalized(text))
+      } -> Route.ECHO
+      opensMic -> Route.OPEN_MIC
+      mixed || sources.isNotEmpty() -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP) else Decision(Route.IGNORE, "")
+      localCommand -> Route.LOCAL
+      armed || question != null || (passive && directed) -> Route.SEND
+      else -> Route.IGNORE
+    }
+    return Decision(route, if (route == Route.SEND && question != null) question else text)
+  }
+}
+
+data class VoiceAlarmFrameStamp(val windowId: Long, val outputEpoch: Long, val output: String)
+
+/** Immutable at the microphone endpoint. Network delays cannot erase a playback overlap. */
+class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean, initialOutput: String = if (initiallyMixed) "active" else "quiet", val windowId: Long = 0L) {
+  private val sources = linkedSetOf<String>()
+  private var mixed = initiallyMixed
+  private var cause = if (initiallyMixed) "start_" + initialOutput else "none"
+  private var sealed = false
+  data class Evidence(val sources: List<String>, val mixed: Boolean, val mixCause: String = if (mixed) "unknown" else "none", val windowId: Long = 0L) {
+    val hasPlaybackOverlap get() = mixed || sources.isNotEmpty()
+    fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
+    // Audio merged across conversation windows is neither from the active window nor from standby.
+    fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed, if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else -1L)
+  }
+  private var pendingCue = ""
+  private var cueAt = 0L
+
+  // A stable, directed partial may pause the speaker. Only a new, clean final can authorize dialogue.
+  @Synchronized fun confirmedPause(text: String, now: Long, currentSources: List<String>): Boolean {
+    val cue = VoiceAlarmSpeechPolicy.normalized(text)
+    val allSources = (sources + currentSources).toList()
+    if (sealed || cue.length < 4 || !VoiceAlarmConversationGate.canPauseForSpeech(text) ||
+        VoiceAlarmSpeechPolicy.isEcho(text, allSources, true, partial = true)) {
+      pendingCue = ""
+      return false
+    }
+    if (pendingCue.isEmpty() || !cue.startsWith(pendingCue)) {
+      pendingCue = cue
+      cueAt = now
+      return false
+    }
+    return now - cueAt >= 180L
+  }
+  @Synchronized fun noteFrame(before: VoiceAlarmFrameStamp, after: VoiceAlarmFrameStamp) {
+    if (sealed || mixed) return
+    val audible = if (before.output != "quiet") before.output else after.output
+    if (audible != "quiet" || before.outputEpoch != after.outputEpoch) {
+      mixed = true
+      cause = if (audible == "quiet") "frame_output_changed" else "frame_" + audible
+    }
+  }
+  @Synchronized fun note(texts: List<String>) { if (!sealed) sources.addAll(texts.filter { it.isNotBlank() }) }
+  @Synchronized fun hasPlaybackOverlap() = mixed || sources.isNotEmpty()
+  @Synchronized fun finish(epoch: Long, audible: Boolean, output: String = if (audible) "active" else "quiet"): Evidence {
+    if (!sealed) {
+      if (!mixed) cause = when { audible -> "end_" + output; epoch != initialEpoch -> "output_changed"; else -> "none" }
+      mixed = mixed || epoch != initialEpoch || audible
+      sealed = true
+    }
+    return Evidence(sources.toList(), mixed, cause, windowId)
   }
 }
 

@@ -19,6 +19,10 @@ android {
     // V2.5 local-first acceptance baseline.
     compileSdk = 36
 
+    androidResources {
+        noCompress += ["task"]
+    }
+
     defaultConfig {
         applicationId "com.example.quote_app"
         // Never commit the Baidu Android AK to AndroidManifest.xml. Release
@@ -101,6 +105,7 @@ configurations.configureEach {
 }
 
 dependencies {
+    implementation "com.google.mediapipe:tasks-vision:0.10.32"
     implementation "com.baidu.lbsyun:BaiduMapSDK_Location:9.6.6.1"
     implementation "com.baidu.lbsyun:BaiduMapSDK_Search:7.6.6"
     // Baidu SDK (Location/Search/Map init) requires OkHttp at runtime on some code paths.

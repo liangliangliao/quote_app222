@@ -42,6 +42,161 @@ fun main() {
     check(!VoiceAlarmSpeechPolicy.isVoice(180, 650, 40, 360, 60, 100.0))
     check(VoiceAlarmSpeechPolicy.isVoice(360, 1250, 40, 347, 60, 100.0))
   }
+  scenario("speaker fragment transcribed without punctuation must not stop TTS") {
+    // Synthetic prompt containing the six-character fragment from the bug report.
+    val playing = listOf("测试提醒。愿你专注、充满力量。现在站起来。")
+    check(VoiceAlarmSpeechPolicy.isEcho("专注充满力量", playing, true))
+    check(VoiceAlarmSpeechPolicy.isEcho("充满力量", playing, true))
+    check(VoiceAlarmSpeechPolicy.isEcho("专注", listOf("愿你平静、专注、充满力量。"), true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("起来", playing, true)) // Only part of a longer clause.
+    check(!VoiceAlarmSpeechPolicy.isEcho("ring", listOf("bringing coffee"), true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("专注充满力量是什么意思", playing, true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("请关闭背景音乐", playing, true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("关闭闹钟", playing, true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("专注充满力量", playing, false))
+  }
+  scenario("a two-character ASR omission stays echo across streaming revisions and final") {
+    val sources = listOf("测试提醒。扶着床沿站起来，停三秒。")
+    for (draft in listOf("扶着", "扶着站起", "扶着站起来", "扶着站起来停")) {
+      check(VoiceAlarmSpeechPolicy.isEcho(draft, sources, true, partial = true))
+    }
+    check(VoiceAlarmSpeechPolicy.isEcho("扶着站起来停三秒", sources, true))
+    check(!VoiceAlarmSpeechPolicy.isEcho("扶着站起来停三秒", sources, false))
+  }
+  scenario("nearby questions new words negations and distant fragments remain user speech") {
+    val sources = listOf("扶着床沿站起来，停三秒。现在不要打开音乐。")
+    for (reply in listOf("扶着站起来停几秒", "我不想站起来", "扶着站起来停三秒吗", "现在打开音乐", "请打开音乐")) {
+      check(!VoiceAlarmSpeechPolicy.isEcho(reply, sources, true))
+    }
+    check(!VoiceAlarmSpeechPolicy.isEcho("扶着站起来停三秒", listOf("扶着桌边喝水之后再站起来停三秒"), true))
+  }
+  val echo = VoiceAlarmConversationGate.Route.ECHO
+  val relisten = VoiceAlarmConversationGate.Route.RELISTEN
+  val ignore = VoiceAlarmConversationGate.Route.IGNORE
+  val send = VoiceAlarmConversationGate.Route.SEND
+  val mic = VoiceAlarmConversationGate.Route.OPEN_MIC
+  fun route(text: String, sources: List<String> = emptyList(), mixed: Boolean = false,
+            final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed, local: Boolean = false) =
+    VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = local, passive = passive)
+
+  scenario("v44 incident replay cannot interrupt TTS or enter correction or conversation") {
+    val source = listOf("测试。平静、专注、充满力量。每周专注一项、每天检查行为。")
+    val capture = VoiceAlarmCapture(2, true)
+    capture.note(source)
+    val atEnd = capture.finish(3, false)
+    val routes = listOf("平静专注充满力量", "专注一下每天检查行为").map {
+      route(it, atEnd.sources, atEnd.mixed, armed = true).route
+    }
+    check(routes == listOf(echo, echo))
+  }
+  scenario("overlapping utterances are re-recorded instead of sent or placed in manual review") {
+    for (candidate in listOf("怎么整理测试记录", "闹钟助手我今天要做什么", "我已经起来了")) {
+      check(route(candidate, listOf("虚构测试播报"), true, armed = true).route == relisten)
+      check(route(candidate, emptyList(), true, armed = true).route == relisten)
+    }
+  }
+  scenario("clean intentional voice accepts questions and ordinary conversation without dropping words") {
+    check(route("闹钟助手，我今天该先做什么？").let { it.route == send && it.text == "我今天该先做什么？" })
+    check(route("我已经坐起来了", armed = true).route == send)
+    check(route("专注一下每天检查行为", armed = true).route == send)
+    check(route("刚才听到闹钟助手这个词").route == ignore)
+    check(route("助手这个词是什么意思").let { it.route == send && it.text == "助手这个词是什么意思" })
+  }
+  scenario("a complete question in quiet standby goes directly to AI even without punctuation") {
+    for (question in listOf("他有几个兄弟", "这件事的动力是什么", "能不能解释一下", "今天有安排吗", "Are you there?")) {
+      check(route(question).let { it.route == send && it.text == question })
+    }
+    check(route("我记得他有几个兄弟").route == ignore)
+    check(route("我不知道他有几个兄弟").route == ignore)
+    check(route("随便选哪一个都行").route == ignore)
+    check(route("我已经回来了").route == ignore)
+  }
+  scenario("question-shaped words cannot bypass echo, partial, or playback overlap checks") {
+    val question = "他有几个兄弟"
+    val reminder = listOf("读完故事后想想，他有几个兄弟？")
+    check(route(question, reminder, mixed = true).route == echo)
+    check(route(question, mixed = true).retryReason == VoiceAlarmConversationGate.RetryReason.PLAYBACK_OVERLAP)
+    check(route(question, final = false).route == VoiceAlarmConversationGate.Route.DRAFT)
+    check(route(question, reliable = false).retryReason == VoiceAlarmConversationGate.RetryReason.INCOMPLETE)
+  }
+  scenario("an intentional reply window never authorizes a previous cloud job or joined captures") {
+    val old = VoiceAlarmCapture(2, false, windowId = 3).finish(2, false)
+    val current = VoiceAlarmCapture(2, false, windowId = 4).finish(2, false)
+    check(!old.belongsTo(4) && !old.merge(current).belongsTo(4))
+    check(!current.belongsTo(0) && current.belongsTo(4))
+    check(route("我还想再问一句", armed = current.belongsTo(4)).route == send)
+    check(route("我还想再问一句", armed = old.belongsTo(4)).route == ignore)
+    val standby = VoiceAlarmCapture(2, false).finish(2, false)
+    for (capture in listOf(old, old.merge(current), old.merge(standby))) {
+      check(capture.windowId != 0L)
+      check(route("还有什么安排", armed = capture.belongsTo(4), passive = capture.windowId == 0L).route == ignore)
+    }
+    val echo = listOf("下一步整理桌面")
+    check(route("整理桌面", echo, mixed = true, armed = true).route == VoiceAlarmConversationGate.Route.ECHO)
+  }
+  scenario("two stable interruption drafts can pause speech but never send a user query") {
+    val capture = VoiceAlarmCapture(1, true)
+    val source = listOf("请看窗边的日历。")
+    check(!capture.confirmedPause("先听我说", 100, source))
+    check(!capture.confirmedPause("先听我说", 200, source))
+    check(capture.confirmedPause("先听我说", 300, source))
+    check(route("先听我说", source, mixed = true).route == mic)
+    check(route("先听我说", listOf("先听我说，再看日历"), mixed = true).route == echo)
+    check(!capture.confirmedPause("先听我说", 600, listOf("请先听我说完")))
+    capture.finish(2, false)
+    check(!capture.confirmedPause("先听我说", 900, source))
+  }
+  scenario("music-only and tail overlap require a fresh quiet recording even when results arrive late") {
+    val bed = VoiceAlarmCapture(1, true, "music", 12)
+    val held = bed.finish(2, false)
+    check(held.sources.isEmpty() && held.mixCause == "start_music")
+    check(route("五字测试句", held.sources, held.mixed, armed = held.belongsTo(12)).route == relisten)
+    check(VoiceAlarmCapture(2, false).finish(3, false).mixCause == "output_changed")
+    check(VoiceAlarmCapture(2, false).finish(2, true, "tail").mixCause == "end_tail")
+  }
+  scenario("a stable novel partial requests a quiet microphone without using mixed words") {
+    val music = VoiceAlarmCapture(1, true, "music", 3)
+    check(!music.confirmedPause("这是谁的", 100, emptyList()))
+    check(music.confirmedPause("这是谁的书", 300, emptyList()))
+    val before = music.finish(2, false)
+    val quiet = VoiceAlarmCapture(2, false, windowId = 4).finish(2, false)
+    val actual = "这是谁的书"
+    val retry = route(actual, before.sources, before.mixed)
+    check(retry.route == relisten && retry.text.isEmpty())
+    check(!before.belongsTo(4) && quiet.belongsTo(4))
+    check(route(actual, quiet.sources, quiet.mixed, armed = true).let { it.route == send && it.text == actual })
+    val reading = VoiceAlarmCapture(1, true, "voice")
+    val echoed = listOf("今天的问题是：这是谁的书？")
+    check(!reading.confirmedPause("这是谁的", 100, echoed))
+    check(!reading.confirmedPause("这是谁的书", 300, echoed))
+    check(route("今天的测试已经做完", mixed = true).route == ignore)
+  }
+  scenario("an unverified alarm command during music cannot act until a clean retry") {
+    check(route("关闭闹钟", mixed = true, local = true).route == relisten)
+    check(route("关闭闹钟", listOf("请勿跟着说：关闭闹钟。"), mixed = true, local = true).route == echo)
+    check(route("关闭闹钟", local = true).route == VoiceAlarmConversationGate.Route.LOCAL)
+  }
+  scenario("only a final standalone wake cue can open a fresh microphone turn") {
+    check(route("闹钟助手", mixed = true).route == mic)
+    check(route("小名", listOf("请把小名写在这里"), mixed = true).route == echo)
+    check(route("闹钟助手", final = false).route == VoiceAlarmConversationGate.Route.DRAFT)
+    check(route("闹钟助手", reliable = false).route == relisten)
+    check(route("我想继续", armed = true, reliable = false).route == relisten)
+  }
+  scenario("capture retains music-only or missed playback across online recognition delays") {
+    val mixed = VoiceAlarmCapture(5, false)
+    val result = mixed.finish(7, false)
+    check(result.mixed && result.sources.isEmpty())
+    val clean = VoiceAlarmCapture(8, false)
+    check(!clean.finish(8, false).mixed)
+    clean.note(listOf("晚到的新播报"))
+    check(!clean.finish(10, true).mixed && clean.finish(10, true).sources.isEmpty())
+    check(result.merge(clean.finish(10, true)).mixed)
+  }
+  scenario("a changed question during playback gets a fresh recording without being called echo") {
+    check(!VoiceAlarmSpeechPolicy.isEcho("请告诉我停几秒再走", listOf("请告诉我停三秒再走"), true))
+    check(route("请告诉我停几秒再走", listOf("请告诉我停三秒再走"), mixed = true).route == relisten)
+  }
   scenario("clean reply can quote or repeat the assistant") {
     check(!VoiceAlarmSpeechPolicy.isEcho("新的一天开始了", listOf("早上好，新的一天开始了"), false))
     check(!VoiceAlarmSpeechPolicy.isEcho("早上好，新的一天开始了", listOf("早上好，新的一天开始了"), false))
@@ -109,6 +264,34 @@ fun main() {
         check(frame.all { it == expected.toByte() })
       }
     } finally { pump.close(); hold.countDown() }
+  }
+  scenario("buffered TTS samples keep their capture-time provenance and the first clean syllable stays queued") {
+    val bed = VoiceAlarmFrameStamp(0, 11, "voice")
+    val live = VoiceAlarmFrameStamp(4, 12, "quiet")
+    val copied = CountDownLatch(3)
+    val stop = CountDownLatch(1)
+    var written = 0
+    var stamps = 0
+    val pump = VoiceAlarmPcmPump({ frame ->
+      if (written >= 3) stop.await()
+      frame.fill((++written).toByte())
+      copied.countDown()
+      frame.size
+    }, 6, stamp = {
+      if (Thread.currentThread().name == "voice-alarm-pcm" && stamps++ < 2) bed else live
+    })
+    try {
+      check(copied.await(2, TimeUnit.SECONDS))
+      val bytes = ByteArray(640)
+      val old = VoiceAlarmCapture(12, false)
+      val next = VoiceAlarmCapture(12, false, windowId = 4)
+      check(pump.read(bytes, old) == 640 && bytes.first() == 1.toByte())
+      check(pump.read(bytes, old) == VoiceAlarmPcmPump.NEXT_WINDOW)
+      check(old.finish(12, false).mixCause == "frame_voice")
+      for (index in 2..3) check(pump.read(bytes, next) == 640 && bytes.all { it == index.toByte() })
+      val received = next.finish(12, false)
+      check(received.belongsTo(4) && !received.mixed)
+    } finally { pump.close(); stop.countDown() }
   }
   scenario("overflow and dead microphone are explicit recoverable errors") {
     val pump = VoiceAlarmPcmPump({ frame -> frame.size }, 1)
