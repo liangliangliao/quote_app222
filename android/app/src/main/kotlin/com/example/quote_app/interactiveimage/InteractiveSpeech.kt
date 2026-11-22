@@ -20,9 +20,14 @@ internal class InteractiveSpeech(private val context: Context, private val emit:
     fun start(allowSystemSpeech: Boolean): String? {
         stop()
         allowSystem = allowSystemSpeech
-        val local = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-        if (!local && !allowSystem) return "offline_unavailable"
-        return startSession(local)
+        val local = Build.VERSION.SDK_INT >= 31 && runCatching {
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        }.getOrDefault(false)
+        if (local) {
+            val error = startSession(true)
+            if (error == null || !allowSystem) return error
+        }
+        return if (allowSystem) startSession(false) else "offline_unavailable"
     }
 
     private fun startSession(offline: Boolean): String? {

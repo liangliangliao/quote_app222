@@ -24,7 +24,7 @@ void main() {
     expect(
         old.rules[TouchGesture.hold], const [FeedbackStep(TouchAction.books)]);
     const link =
-        'https://chatgpt.com/g/g-p-6af9d87331c08191b280799c851c87ca/project';
+        'https://chatgpt.com/g/g-p-00000000000000000000000000000000/project';
     const chain = [
       FeedbackStep(TouchAction.vibration),
       FeedbackStep(TouchAction.link, value: link)

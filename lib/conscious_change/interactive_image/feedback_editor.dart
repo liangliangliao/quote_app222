@@ -520,64 +520,76 @@ class _AppPickerState extends State<_AppPicker> {
     super.dispose();
   }
 
+  void _selectName() {
+    final name = _text.text.trim();
+    if (name.isNotEmpty)
+      Navigator.pop(context, FeedbackStep(TouchAction.app, name: name));
+  }
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.68,
-        child: Padding(
-            padding: EdgeInsets.fromLTRB(
-                20, 0, 20, MediaQuery.viewInsetsOf(context).bottom),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('选择手机应用', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                TextField(
-                    controller: _text,
-                    decoration: const InputDecoration(labelText: '应用名称'),
-                    maxLength: 80,
-                    onChanged: (_) => setState(() {})),
-                Expanded(
-                    child: FutureBuilder<List<InstalledFeedbackApp>>(
-                        future: _apps,
-                        builder: (context, snapshot) {
-                          final query = _text.text.trim().toLowerCase();
-                          final matches =
-                              (snapshot.data ?? const <InstalledFeedbackApp>[])
-                                  .where((app) =>
-                                      app.name.toLowerCase().contains(query) ||
-                                      app.package.contains(query))
-                                  .toList();
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting)
-                            return const Center(
-                                child: CircularProgressIndicator());
-                          if (matches.isEmpty)
-                            return const Center(child: Text('没有匹配的已安装应用。'));
-                          return ListView.builder(
-                              itemCount: matches.length,
-                              itemBuilder: (context, index) {
-                                final app = matches[index];
-                                return ListTile(
-                                    title: Text(app.name),
-                                    subtitle: Text(app.package),
-                                    onTap: () => Navigator.pop(
-                                        context,
-                                        FeedbackStep(TouchAction.app,
-                                            value: app.package,
-                                            name: app.name)));
-                              });
-                        })),
-                SafeArea(
-                    top: false,
-                    child: FilledButton(
-                        onPressed: _text.text.trim().isEmpty
-                            ? null
-                            : () => Navigator.pop(
-                                context,
-                                FeedbackStep(TouchAction.app,
-                                    name: _text.text.trim())),
-                        child: const Text('按此名称查找'))),
-              ],
-            )),
-      );
+  Widget build(BuildContext context) {
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: inset),
+      child: SizedBox(
+        height: (MediaQuery.sizeOf(context).height - inset) * 0.72,
+        child: SafeArea(
+            top: false,
+            child: CustomScrollView(slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                sliver: SliverToBoxAdapter(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                      Text('选择手机应用',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      TextField(
+                          controller: _text,
+                          decoration: const InputDecoration(labelText: '应用名称'),
+                          maxLength: 80,
+                          onChanged: (_) => setState(() {}),
+                          onSubmitted: (_) => _selectName()),
+                      FilledButton(
+                          onPressed:
+                              _text.text.trim().isEmpty ? null : _selectName,
+                          child: const Text('按此名称查找')),
+                    ])),
+              ),
+              FutureBuilder<List<InstalledFeedbackApp>>(
+                  future: _apps,
+                  builder: (context, snapshot) {
+                    final query = _text.text.trim().toLowerCase();
+                    final matches =
+                        (snapshot.data ?? const <InstalledFeedbackApp>[])
+                            .where((app) =>
+                                app.name.toLowerCase().contains(query) ||
+                                app.package.contains(query))
+                            .toList();
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const SliverToBoxAdapter(
+                          child: Center(child: CircularProgressIndicator()));
+                    }
+                    if (matches.isEmpty) {
+                      return const SliverToBoxAdapter(
+                          child: Center(child: Text('没有匹配的已安装应用。')));
+                    }
+                    return SliverList.builder(
+                        itemCount: matches.length,
+                        itemBuilder: (context, index) {
+                          final app = matches[index];
+                          return ListTile(
+                              title: Text(app.name),
+                              subtitle: Text(app.package),
+                              onTap: () => Navigator.pop(
+                                  context,
+                                  FeedbackStep(TouchAction.app,
+                                      value: app.package, name: app.name)));
+                        });
+                  }),
+            ])),
+      ),
+    );
+  }
 }

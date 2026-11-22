@@ -6,6 +6,7 @@ import 'package:image/image.dart' as image;
 import 'package:quote_app/conscious_change/interactive_image/artwork.dart';
 import 'package:quote_app/conscious_change/interactive_image/artwork_canvas.dart';
 import 'package:quote_app/conscious_change/interactive_image/artwork_repository.dart';
+import 'package:quote_app/conscious_change/interactive_image/feedback_editor.dart';
 import 'package:quote_app/conscious_change/interactive_image/region_editor_page.dart';
 import 'package:quote_app/conscious_change/interactive_image/region_geometry.dart';
 
@@ -87,6 +88,70 @@ void main() {
       FeedbackStep(TouchAction.vibration),
       FeedbackStep(TouchAction.highlight),
     ]);
+  });
+
+  testWidgets('saves an app by name with the keyboard open on a short screen',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 600);
+    addTearDown(tester.view.reset);
+    final artwork = Artwork(
+        id: 'test',
+        title: '图片',
+        format: 'png',
+        width: 120,
+        height: 60,
+        createdAt: DateTime(2026));
+    ImageRegion? saved;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Builder(
+                builder: (context) => TextButton(
+                      child: const Text('配置区域'),
+                      onPressed: () async {
+                        saved = await editRegionRules(
+                            context,
+                            artwork,
+                            const ImageRegion(
+                                id: 'region',
+                                label: '区域',
+                                group: RegionGroup.object,
+                                polygon: [
+                                  Offset.zero,
+                                  Offset(1, 0),
+                                  Offset(1, 1)
+                                ]),
+                            const FeedbackSettings(),
+                            (region, steps) async {});
+                      },
+                    )))));
+    await tester.tap(find.text('配置区域'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('点击'));
+    await tester.tap(find.text('点击'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加反馈'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('打开手机应用'), 100,
+        scrollable: find.byType(Scrollable).last);
+    await tester.tap(find.text('打开手机应用'));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '应用名称'), 'ChatGPT');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('按此名称查找'));
+    await tester.tap(find.text('按此名称查找'));
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存顺序'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('保存规则'));
+    await tester.tap(find.text('保存规则'));
+    await tester.pumpAndSettle();
+    expect(saved?.rules[TouchGesture.tap],
+        const [FeedbackStep(TouchAction.app, name: 'ChatGPT')]);
   });
 }
 
