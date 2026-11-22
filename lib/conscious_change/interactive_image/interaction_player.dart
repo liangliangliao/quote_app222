@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -40,9 +41,9 @@ class InteractionPlayer extends StatefulWidget {
 }
 
 class _InteractionPlayerState extends State<InteractionPlayer>
-    with TickerProviderStateMixin, WidgetsBindingObserver {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const _platform = FeedbackPlatform();
-  static const _holdIntentTime = Duration(milliseconds: 240);
+  static const _tapTime = Duration(milliseconds: 240);
   static const _swipeSlop = 18.0;
   static const _minimumSwipeStep = 2.0;
   static const _unlockTime = Duration(milliseconds: 180);
@@ -50,7 +51,13 @@ class _InteractionPlayerState extends State<InteractionPlayer>
   final _pointers = <int>{};
   late final _animation = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 530));
-  late final _effort = TouchEffort(widget.settings.effortDifficulty, this);
+  late final _effort = TouchEffort(widget.settings.effortDifficulty,
+      tuning: widget.settings.effortTuning);
+  late final _holdIntentTime = Duration(
+      microseconds: math.min(_tapTime.inMicroseconds,
+          _effort.tuning.holdTime.inMicroseconds ~/ 2));
+  late final _swipeIntentDistance =
+      math.min(_swipeSlop, _effort.tuning.swipeDistance.toDouble());
   late final _wake = WakePhraseMatcher(widget.settings.wakePhrase);
   late final _commands = _voiceCommands();
   AudioPlayer? _audio;
@@ -184,6 +191,7 @@ class _InteractionPlayerState extends State<InteractionPlayer>
       _holdIntent = Timer(_holdIntentTime, () {
         if (!_canInteract || _primary != event.pointer) return;
         _holding = true;
+        _keepScreenOn(true);
         _effort.hold(
             _holdIntentTime, () => _completeTouch(region, TouchGesture.hold));
       });
@@ -199,18 +207,22 @@ class _InteractionPlayerState extends State<InteractionPlayer>
       return;
     }
     if (!_sliding) {
-      if ((position - _start!).distance < _swipeSlop) return;
+      final displacement = (position - _start!).distance;
+      if (displacement < _swipeIntentDistance) return;
+      final target =
+          hitRegion(widget.regions, _imageStart!, gesture: TouchGesture.swipe);
+      if (target == null && displacement < _swipeSlop) return;
       _holdIntent?.cancel();
+      _stopHolding();
       _effort.reset();
       _sliding = true;
       _lastSwipePosition = _start;
-      _swipeRegion =
-          hitRegion(widget.regions, _imageStart!, gesture: TouchGesture.swipe);
+      _swipeRegion = target;
     }
     final region = _swipeRegion;
     if (region == null) return;
     final distance = (position - _lastSwipePosition!).distance;
-    if (distance < _minimumSwipeStep) return;
+    if (distance < math.min(_minimumSwipeStep, _swipeIntentDistance)) return;
     _lastSwipePosition = position;
     if (_effort.swipe(distance)) _completeTouch(region, TouchGesture.swipe);
   }
@@ -221,7 +233,7 @@ class _InteractionPlayerState extends State<InteractionPlayer>
     final tap = _tapRegion;
     final isQuickTap = !_sliding &&
         !_holding &&
-        event.timeStamp - _downAt! < _holdIntentTime &&
+        event.timeStamp - _downAt! < _tapTime &&
         (event.localPosition - _start!).distance < _swipeSlop &&
         coordinates.pointAt(event.localPosition) != null;
     _clearGesture();
@@ -251,8 +263,17 @@ class _InteractionPlayerState extends State<InteractionPlayer>
     _swipeRegion = null;
     _downAt = null;
     _sliding = false;
-    _holding = false;
+    _stopHolding();
   }
+
+  void _stopHolding() {
+    if (!_holding) return;
+    _holding = false;
+    _keepScreenOn(false);
+  }
+
+  void _keepScreenOn(bool enabled) =>
+      unawaited(_platform.setHoldScreenOn(enabled).catchError((Object _) {}));
 
   void _clearPointers() {
     _pointers.clear();
@@ -508,141 +529,165 @@ class _InteractionPlayerState extends State<InteractionPlayer>
         _ => '此反馈暂时无法执行，请检查设置。',
       };
 
+  Widget _buildControls() => Material(
+        color: const Color(0xB5212435),
+        borderRadius: BorderRadius.circular(25),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(
+              tooltip: '退出预览',
+              color: Colors.white,
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).maybePop()),
+          IconButton(
+              tooltip: _paused ? '恢复互动' : '暂停互动',
+              color: Colors.white,
+              icon: Icon(
+                  _paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+              onPressed: () {
+                _clearPointers();
+                _cancelRun();
+                setState(() => _paused = !_paused);
+                unawaited(_syncVoice());
+              }),
+          if (widget.trial == null && _commands.isNotEmpty)
+            IconButton(
+                tooltip: _voiceEnabled ? '关闭语音操作' : '开启语音操作',
+                color: Colors.white,
+                isSelected: _voiceEnabled,
+                selectedIcon: const Icon(Icons.mic),
+                icon: const Icon(Icons.mic_off_outlined),
+                onPressed: _toggleVoice),
+          PopupMenuButton<String>(
+              tooltip: '画布选项',
+              icon: const Icon(Icons.more_vert, color: Colors.white),
+              onSelected: (choice) {
+                _clearPointers();
+                setState(() {
+                  switch (choice) {
+                    case 'regions':
+                      _showRegions = !_showRegions;
+                    case 'pan':
+                      _moving = !_moving;
+                    case 'reset':
+                      _transform.value = Matrix4.identity();
+                  }
+                });
+                unawaited(_syncVoice());
+              },
+              itemBuilder: (_) => [
+                    CheckedPopupMenuItem(
+                        value: 'regions',
+                        checked: _showRegions,
+                        child: const Text('显示区域')),
+                    CheckedPopupMenuItem(
+                        value: 'pan',
+                        checked: _moving,
+                        child: const Text('单指移动画布')),
+                    const PopupMenuItem(value: 'reset', child: Text('重置缩放')),
+                  ]),
+        ]),
+      );
+
   @override
   Widget build(BuildContext context) {
     final hasRules = widget.regions.any(
         (r) => r.enabled && (r.rules.isNotEmpty || r.voiceRules.isNotEmpty));
     final showEffort = widget.trial == null &&
-        !_paused &&
-        !_moving &&
         widget.regions
             .any((region) => region.enabled && region.rules.isNotEmpty);
+    final modeHint = _paused
+        ? '互动已暂停'
+        : _moving
+            ? '单指移动画布已开启'
+            : null;
     final hint = _notice ??
-        (_paused
-            ? '互动已暂停'
-            : _moving
-                ? '单指移动画布已开启'
-                : _voiceEnabled && _run == null
-                    ? (_wake.armedAt(DateTime.now())
-                        ? '已唤醒，请说口令'
-                        : '请说「${widget.settings.wakePhrase}」再说口令')
-                    : !hasRules && widget.trial == null
-                        ? '返回编辑器，为区域设置手势或语音反馈。'
-                        : null);
-    final screen = Scaffold(
-      backgroundColor: const Color(0xFF131621),
-      body: Stack(fit: StackFit.expand, children: [
-        ArtworkCanvas(
-            file: widget.file,
-            fallbackFile: widget.fallback,
-            original: true,
-            aspectRatio: widget.artwork.aspectRatio,
-            transform: _transform,
-            panEnabled: _moving,
-            regions: _showRegions ? widget.regions : const [],
-            feedback: _feedback,
-            pulse: _pulse,
-            animation: _animation,
-            onDown: _onDown,
-            onMove: _onMove,
-            onUp: _onUp,
-            onCancel: () {
-              _clearPointers();
-              _cancelRun();
-            }),
+        (modeHint != null
+            ? (showEffort ? null : modeHint)
+            : _voiceEnabled && _run == null
+                ? (_wake.armedAt(DateTime.now())
+                    ? '已唤醒，请说口令'
+                    : '请说「${widget.settings.wakePhrase}」再说口令')
+                : !hasRules && widget.trial == null
+                    ? '返回编辑器，为区域设置手势或语音反馈。'
+                    : null);
+    final controls = _buildControls();
+    final canvas = Stack(fit: StackFit.expand, children: [
+      ArtworkCanvas(
+        file: widget.file,
+        fallbackFile: widget.fallback,
+        original: true,
+        aspectRatio: widget.artwork.aspectRatio,
+        transform: _transform,
+        panEnabled: _moving,
+        regions: _showRegions ? widget.regions : const [],
+        feedback: _feedback,
+        pulse: _pulse,
+        animation: _animation,
+        onDown: _onDown,
+        onMove: _onMove,
+        onUp: _onUp,
+        onCancel: () {
+          _clearPointers();
+          _cancelRun();
+        },
+      ),
+      if (hint != null)
         Align(
-            alignment: Alignment.topCenter,
-            child: SafeArea(
-                bottom: false,
-                minimum: const EdgeInsets.all(8),
-                child: Material(
-                    color: const Color(0xB5212435),
-                    borderRadius: BorderRadius.circular(25),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      IconButton(
-                          tooltip: '退出预览',
-                          color: Colors.white,
-                          icon: const Icon(Icons.arrow_back),
-                          onPressed: () => Navigator.of(context).maybePop()),
-                      IconButton(
-                          tooltip: _paused ? '恢复互动' : '暂停互动',
-                          color: Colors.white,
-                          icon: Icon(_paused
-                              ? Icons.play_arrow_rounded
-                              : Icons.pause_rounded),
-                          onPressed: () {
-                            _clearPointers();
-                            _cancelRun();
-                            setState(() => _paused = !_paused);
-                            unawaited(_syncVoice());
-                          }),
-                      if (widget.trial == null && _commands.isNotEmpty)
-                        IconButton(
-                            tooltip: _voiceEnabled ? '关闭语音操作' : '开启语音操作',
-                            color: Colors.white,
-                            isSelected: _voiceEnabled,
-                            selectedIcon: const Icon(Icons.mic),
-                            icon: const Icon(Icons.mic_off_outlined),
-                            onPressed: _toggleVoice),
-                      PopupMenuButton<String>(
-                          tooltip: '画布选项',
-                          icon:
-                              const Icon(Icons.more_vert, color: Colors.white),
-                          onSelected: (choice) {
-                            _clearPointers();
-                            setState(() {
-                              switch (choice) {
-                                case 'regions':
-                                  _showRegions = !_showRegions;
-                                case 'pan':
-                                  _moving = !_moving;
-                                case 'reset':
-                                  _transform.value = Matrix4.identity();
-                              }
-                            });
-                            unawaited(_syncVoice());
-                          },
-                          itemBuilder: (_) => [
-                                CheckedPopupMenuItem(
-                                    value: 'regions',
-                                    checked: _showRegions,
-                                    child: const Text('显示区域')),
-                                CheckedPopupMenuItem(
-                                    value: 'pan',
-                                    checked: _moving,
-                                    child: const Text('单指移动画布')),
-                                const PopupMenuItem(
-                                    value: 'reset', child: Text('重置缩放')),
-                              ]),
-                    ])))),
-        if (hint != null || showEffort)
-          Align(
             alignment: Alignment.bottomCenter,
             child: SafeArea(
-              top: false,
-              minimum: const EdgeInsets.all(12),
-              child: IgnorePointer(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                if (hint != null)
-                  Semantics(
-                      liveRegion: true,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                            color: const Color(0xBD212435),
-                            borderRadius: BorderRadius.circular(16)),
-                        child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
-                            child: Text(hint,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white))),
-                      )),
-                if (hint != null && showEffort) const SizedBox(height: 8),
-                if (showEffort) EffortMeter(effort: _effort),
-              ])),
-            ),
-          ),
-      ]),
+                top: false,
+                minimum: const EdgeInsets.all(12),
+                child: IgnorePointer(
+                    child: Semantics(
+                        liveRegion: true,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                              color: const Color(0xBD212435),
+                              borderRadius: BorderRadius.circular(16)),
+                          child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              child: Text(hint,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white))),
+                        ))))),
+    ]);
+    final screen = Scaffold(
+      backgroundColor: const Color(0xFF131621),
+      body: showEffort
+          ? Column(children: [
+              SafeArea(
+                  bottom: false,
+                  minimum: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  child: LayoutBuilder(builder: (context, constraints) {
+                    final meter =
+                        EffortMeter(effort: _effort, idleHint: modeHint);
+                    if (constraints.maxWidth >= 560) {
+                      return Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            meter,
+                            const SizedBox(width: 12),
+                            controls,
+                          ]);
+                    }
+                    return Column(mainAxisSize: MainAxisSize.min, children: [
+                      meter,
+                      const SizedBox(height: 4),
+                      controls,
+                    ]);
+                  })),
+              Expanded(child: canvas),
+            ])
+          : Stack(fit: StackFit.expand, children: [
+              canvas,
+              Align(
+                  alignment: Alignment.topCenter,
+                  child: SafeArea(
+                      bottom: false,
+                      minimum: const EdgeInsets.all(8),
+                      child: controls)),
+            ]),
     );
     return PopScope<void>(
       onPopInvokedWithResult: (didPop, result) {

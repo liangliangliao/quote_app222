@@ -109,7 +109,11 @@ void main() {
     await repository.saveSettings(const FeedbackSettings(
         visual: false,
         vibration: false,
-        effortDifficulty: EffortDifficulty.hard));
+        effortDifficulty: EffortDifficulty.hard,
+        effortOverrides: {
+          EffortDifficulty.hard: EffortTuning(
+              taps: 70, swipeDistance: 700, holdTime: Duration(seconds: 7)),
+        }));
     await repository.saveAnalysis(
         folder, 'run', {'model': 'test', 'processing': 'on-device'});
     final renamed = await repository.rename(original, '新名字');
@@ -124,6 +128,7 @@ void main() {
     final feedback = await reopened.loadSettings();
     expect(feedback.vibration, isFalse);
     expect(feedback.effortDifficulty, EffortDifficulty.hard);
+    expect(feedback.effortTuning.taps, 70);
     expect((await reopened.loadAnalysis(copyFolder, 'run'))['model'], 'test');
     await reopened.delete(renamed);
     expect(await folder.exists(), isFalse);

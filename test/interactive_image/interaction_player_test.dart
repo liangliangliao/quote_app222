@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 import 'package:quote_app/conscious_change/interactive_image/artwork.dart';
 import 'package:quote_app/conscious_change/interactive_image/artwork_canvas.dart';
+import 'package:quote_app/conscious_change/interactive_image/effort_meter.dart';
 import 'package:quote_app/conscious_change/interactive_image/interaction_player.dart';
 import 'package:quote_app/conscious_change/interactive_image/region_geometry.dart';
 
@@ -147,8 +148,11 @@ void main() {
   });
 
   testWidgets(
-      'runs feedback steps in order and uses the full canvas with the original image',
+      'keeps the effort bar above the original image and runs feedback steps in order',
       (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 800);
+    addTearDown(tester.view.reset);
     final folder = Directory.systemTemp.createTempSync('interaction-chain-');
     addTearDown(() => folder.deleteSync(recursive: true));
     final file = File('${folder.path}/original.png')
@@ -190,7 +194,13 @@ void main() {
       },
     )));
     final finder = find.byType(ArtworkCanvas);
-    expect(tester.getRect(finder), tester.getRect(find.byType(Scaffold)));
+    final canvas = tester.getRect(finder);
+    final meter = tester.getRect(find.byType(EffortMeter));
+    final screen = tester.getRect(find.byType(Scaffold));
+    expect(meter.bottom, lessThanOrEqualTo(canvas.top));
+    expect(canvas.bottom, screen.bottom);
+    expect(canvas.width, screen.width);
+    expect(meter.top, lessThan(24));
     expect(tester.widget<ArtworkCanvas>(finder).original, isTrue);
     for (var i = 0; i < 3; i++) {
       await tester.tapAt(tester.getCenter(finder));

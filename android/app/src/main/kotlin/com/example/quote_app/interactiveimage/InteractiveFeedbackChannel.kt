@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.view.WindowManager
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.core.view.WindowCompat
@@ -44,6 +45,7 @@ class InteractiveFeedbackChannel(private val activity: Activity, messenger: Bina
     private val voice = InteractiveSpeech(context) { event -> voiceSink?.success(event) }
     private val picker = PickVisualMedia()
     private var pick: Pick? = null
+    private var ownsScreenOnFlag = false
     private var closed = false
 
     init {
@@ -77,6 +79,7 @@ class InteractiveFeedbackChannel(private val activity: Activity, messenger: Bina
                         if (error == null) reply.success(null) else reply.error(error, null, null)
                     }
                     "stopVoice" -> { voice.stop(); reply.success(null) }
+                    "setHoldScreenOn" -> { setHoldScreenOn(call.arguments == true); reply.success(null) }
                     "setImmersive" -> { immersive(call.arguments == true); reply.success(null) }
                     else -> reply.notImplemented()
                 }
@@ -272,7 +275,22 @@ class InteractiveFeedbackChannel(private val activity: Activity, messenger: Bina
         }
     }
 
-    fun stopVoice() = voice.stop()
+    fun onPause() {
+        voice.stop()
+        setHoldScreenOn(false)
+    }
+
+    private fun setHoldScreenOn(enabled: Boolean) {
+        val flag = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        val window = activity.window
+        if (enabled && (window.attributes.flags and flag) == 0) {
+            window.addFlags(flag)
+            ownsScreenOnFlag = true
+        } else if (!enabled && ownsScreenOnFlag) {
+            window.clearFlags(flag)
+            ownsScreenOnFlag = false
+        }
+    }
 
     private fun immersive(enabled: Boolean) {
         val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
@@ -284,7 +302,7 @@ class InteractiveFeedbackChannel(private val activity: Activity, messenger: Bina
 
     fun dispose() {
         closed = true
-        voice.stop()
+        onPause()
         media.stop()
         voiceEvents.setStreamHandler(null)
         channel.setMethodCallHandler(null)

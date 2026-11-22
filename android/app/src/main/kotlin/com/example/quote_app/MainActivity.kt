@@ -131,7 +131,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onPause() {
-        interactiveFeedbackChannel?.stopVoice()
+        interactiveFeedbackChannel?.onPause()
         super.onPause()
     }
 

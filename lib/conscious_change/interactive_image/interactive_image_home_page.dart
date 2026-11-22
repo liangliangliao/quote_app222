@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'artwork.dart';
 import 'artwork_repository.dart';
 import 'editor_dialogs.dart';
+import 'effort_tuning_dialog.dart';
 import 'local_recognition.dart';
 import 'original_artwork_image.dart';
 import 'region_editor_page.dart';
@@ -400,6 +401,14 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     }
   }
 
+  Future<void> _changeEffortTuning() async {
+    final result = await editEffortTuning(
+        context, _settings.effortDifficulty, _settings.effortTuning);
+    if (mounted && result != null) {
+      setState(() => _settings = _settings.withEffortTuning(result.value));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => SafeArea(
         child: SingleChildScrollView(
@@ -429,6 +438,14 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               ],
               onChanged: (difficulty) => setState(() =>
                   _settings = _settings.copyWith(effortDifficulty: difficulty)),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('手动调节当前档位'),
+              subtitle: Text(
+                  '${_settings.effortTuning.taps} 次连点 · 滑动 ${_settings.effortTuning.swipeDistance} · 长按 ${effortHoldLabel(_settings.effortTuning.holdTime)}'),
+              trailing: const Icon(Icons.tune),
+              onTap: _changeEffortTuning,
             ),
             const SizedBox(height: 8),
             SwitchListTile(

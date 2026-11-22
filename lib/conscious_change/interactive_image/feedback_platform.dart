@@ -60,6 +60,12 @@ class FeedbackPlatform {
     }
   }
 
+  Future<void> setHoldScreenOn(bool enabled) async {
+    if (Platform.isAndroid) {
+      await _channel.invokeMethod<void>('setHoldScreenOn', enabled);
+    }
+  }
+
   Future<void> openLink(Uri uri) async {
     if (Platform.isAndroid) {
       await _channel.invokeMethod<void>('openLink', uri.toString());

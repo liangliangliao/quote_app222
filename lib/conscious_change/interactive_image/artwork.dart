@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'feedback.dart';
 import 'touch_effort.dart';
 export 'feedback.dart';
-export 'touch_effort.dart' show EffortDifficulty, TouchGesture;
+export 'touch_effort.dart' show EffortDifficulty, EffortTuning, TouchGesture;
 
 String newArtworkId() {
   final random = Random.secure();
@@ -309,6 +309,7 @@ class FeedbackSettings {
     this.wakePhrase = defaultWakePhrase,
     this.allowSystemSpeech = false,
     this.effortDifficulty = EffortDifficulty.standard,
+    this.effortOverrides = const {},
   });
 
   factory FeedbackSettings.fromJson(Map<String, dynamic> json) =>
@@ -319,6 +320,7 @@ class FeedbackSettings {
         wakePhrase: json['wakePhrase'] as String? ?? defaultWakePhrase,
         allowSystemSpeech: json['allowSystemSpeech'] as bool? ?? false,
         effortDifficulty: EffortDifficulty.fromStored(json['effortDifficulty']),
+        effortOverrides: _readEffortOverrides(json['effortOverrides']),
       );
 
   final bool visual;
@@ -327,6 +329,31 @@ class FeedbackSettings {
   final String wakePhrase;
   final bool allowSystemSpeech;
   final EffortDifficulty effortDifficulty;
+  final Map<EffortDifficulty, EffortTuning> effortOverrides;
+
+  EffortTuning get effortTuning =>
+      effortOverrides[effortDifficulty] ?? effortDifficulty.preset;
+
+  static Map<EffortDifficulty, EffortTuning> _readEffortOverrides(
+      Object? value) {
+    if (value is! Map) return const {};
+    return {
+      for (final difficulty in EffortDifficulty.values)
+        if (EffortTuning.fromStored(value[difficulty.name], difficulty.preset)
+            case final tuning?)
+          difficulty: tuning,
+    };
+  }
+
+  FeedbackSettings withEffortTuning(EffortTuning? tuning) {
+    final updated = Map.of(effortOverrides);
+    if (tuning == null) {
+      updated.remove(effortDifficulty);
+    } else {
+      updated[effortDifficulty] = tuning;
+    }
+    return copyWith(effortOverrides: Map.unmodifiable(updated));
+  }
 
   FeedbackSettings copyWith(
           {bool? visual,
@@ -334,7 +361,8 @@ class FeedbackSettings {
           bool? vibration,
           String? wakePhrase,
           bool? allowSystemSpeech,
-          EffortDifficulty? effortDifficulty}) =>
+          EffortDifficulty? effortDifficulty,
+          Map<EffortDifficulty, EffortTuning>? effortOverrides}) =>
       FeedbackSettings(
         visual: visual ?? this.visual,
         sound: sound ?? this.sound,
@@ -342,6 +370,7 @@ class FeedbackSettings {
         wakePhrase: wakePhrase ?? this.wakePhrase,
         allowSystemSpeech: allowSystemSpeech ?? this.allowSystemSpeech,
         effortDifficulty: effortDifficulty ?? this.effortDifficulty,
+        effortOverrides: effortOverrides ?? this.effortOverrides,
       );
 
   Map<String, Object> toJson() => {
@@ -351,5 +380,8 @@ class FeedbackSettings {
         'wakePhrase': wakePhrase,
         'allowSystemSpeech': allowSystemSpeech,
         'effortDifficulty': effortDifficulty.name,
+        if (effortOverrides.isNotEmpty)
+          'effortOverrides': effortOverrides.map((difficulty, tuning) =>
+              MapEntry(difficulty.name, tuning.toJson())),
       };
 }

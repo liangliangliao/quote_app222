@@ -5,23 +5,24 @@ import 'package:flutter/material.dart';
 import 'touch_effort.dart';
 
 class EffortMeter extends StatelessWidget {
-  const EffortMeter({super.key, required this.effort});
+  const EffortMeter({super.key, required this.effort, this.idleHint});
 
   final TouchEffort effort;
+  final String? idleHint;
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<EffortProgress>(
         valueListenable: effort,
         builder: (context, progress, _) {
           final active = progress.gesture;
-          final value = '${progress.percent}%';
+          final value = progress.percentLabel;
           final hint = progress.reached
               ? '已达成'
               : switch (active) {
                   TouchGesture.tap => '继续点击同一区域',
                   TouchGesture.hold => '继续按住',
                   TouchGesture.swipe => '继续滑动',
-                  null => '连续操作，达到 100% 后触发反馈',
+                  null => idleHint ?? '连续操作，达到 100% 后触发反馈',
                 };
           final reduceMotion = MediaQuery.disableAnimationsOf(context);
           final duration = reduceMotion || progress.reached
