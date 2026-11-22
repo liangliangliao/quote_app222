@@ -106,8 +106,10 @@ void main() {
         folder,
         const ArtworkEdits(
             regions: [region], draft: PolygonDraft('book', _nested)));
-    await repository
-        .saveSettings(const FeedbackSettings(visual: false, vibration: false));
+    await repository.saveSettings(const FeedbackSettings(
+        visual: false,
+        vibration: false,
+        effortDifficulty: EffortDifficulty.hard));
     await repository.saveAnalysis(
         folder, 'run', {'model': 'test', 'processing': 'on-device'});
     final renamed = await repository.rename(original, '新名字');
@@ -119,7 +121,9 @@ void main() {
     final restored = await reopened.loadEdits(copyFolder);
     expect(restored.regions.single.rules, region.rules);
     expect(restored.draft?.points, _nested);
-    expect((await reopened.loadSettings()).vibration, isFalse);
+    final feedback = await reopened.loadSettings();
+    expect(feedback.vibration, isFalse);
+    expect(feedback.effortDifficulty, EffortDifficulty.hard);
     expect((await reopened.loadAnalysis(copyFolder, 'run'))['model'], 'test');
     await reopened.delete(renamed);
     expect(await folder.exists(), isFalse);

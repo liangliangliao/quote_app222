@@ -414,6 +414,23 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 title: Text('设备端识别'),
                 subtitle: Text('原图、区域和规则仅保存在此设备。作品库显示模糊缩略图。')),
             const Divider(),
+            DropdownButtonFormField<EffortDifficulty>(
+              initialValue: _settings.effortDifficulty,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '触屏努力难度',
+                helperText: '努力值达到 100% 后执行反馈链',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final difficulty in EffortDifficulty.values)
+                  DropdownMenuItem(
+                      value: difficulty, child: Text(difficulty.label)),
+              ],
+              onChanged: (difficulty) => setState(() =>
+                  _settings = _settings.copyWith(effortDifficulty: difficulty)),
+            ),
+            const SizedBox(height: 8),
             SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('视觉反馈'),

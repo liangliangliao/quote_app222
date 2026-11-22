@@ -8,8 +8,10 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'artwork.dart';
 import 'artwork_canvas.dart';
+import 'effort_meter.dart';
 import 'feedback_platform.dart';
 import 'region_geometry.dart';
+import 'touch_effort.dart' show TouchEffort;
 
 typedef OpenInteractionPage = Future<void> Function(TouchAction action);
 
@@ -38,13 +40,17 @@ class InteractionPlayer extends StatefulWidget {
 }
 
 class _InteractionPlayerState extends State<InteractionPlayer>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const _platform = FeedbackPlatform();
-  static const _holdTime = Duration(milliseconds: 500);
+  static const _holdIntentTime = Duration(milliseconds: 240);
+  static const _swipeSlop = 18.0;
+  static const _minimumSwipeStep = 2.0;
+  static const _unlockTime = Duration(milliseconds: 180);
   final _transform = TransformationController();
   final _pointers = <int>{};
   late final _animation = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 530));
+  late final _effort = TouchEffort(widget.settings.effortDifficulty, this);
   late final _wake = WakePhraseMatcher(widget.settings.wakePhrase);
   late final _commands = _voiceCommands();
   AudioPlayer? _audio;
@@ -53,13 +59,16 @@ class _InteractionPlayerState extends State<InteractionPlayer>
   StreamSubscription<dynamic>? _voiceEvents;
   Future<void> _voiceQueue = Future.value();
   Timer? _wakeTimer;
-  Timer? _hold;
+  Timer? _holdIntent;
   int? _primary;
   Offset? _start;
   Offset? _imageStart;
+  Offset? _lastSwipePosition;
+  ImageRegion? _tapRegion;
+  ImageRegion? _swipeRegion;
   Duration? _downAt;
   bool _sliding = false;
-  bool _longPressed = false;
+  bool _holding = false;
   bool _paused = false;
   bool _showRegions = false;
   bool _moving = false;
@@ -116,11 +125,13 @@ class _InteractionPlayerState extends State<InteractionPlayer>
         if (waiting != null && !waiting.isCompleted) waiting.complete();
       }
       if (!_appPage) unawaited(_immersion(true));
-    } else if (_externalReturn != null) {
-      _outside = true;
-    } else if (state != AppLifecycleState.inactive) {
+    } else {
       _clearPointers();
-      _cancelRun();
+      if (_externalReturn != null) {
+        _outside = true;
+      } else if (state != AppLifecycleState.inactive) {
+        _cancelRun();
+      }
     }
     unawaited(_syncVoice());
   }
@@ -143,6 +154,7 @@ class _InteractionPlayerState extends State<InteractionPlayer>
     if (audio != null) unawaited(audio.dispose().catchError((Object _) {}));
     unawaited(_immersion(false));
     _animation.dispose();
+    _effort.dispose();
     _transform.dispose();
     super.dispose();
   }
@@ -151,66 +163,101 @@ class _InteractionPlayerState extends State<InteractionPlayer>
     _pointers.add(event.pointer);
     if (_pointers.length > 1) {
       _clearGesture();
+      _effort.reset();
       _cancelRun();
       return;
     }
     if (!_canInteract) return;
     final point = coordinates.pointAt(event.localPosition);
-    if (point == null) return;
+    if (point == null) {
+      _effort.reset();
+      return;
+    }
     _primary = event.pointer;
     _start = event.localPosition;
     _downAt = event.timeStamp;
     _imageStart = point;
+    _tapRegion = hitRegion(widget.regions, point, gesture: TouchGesture.tap);
+    _effort.beginPointer(_tapRegion?.id);
     final region = hitRegion(widget.regions, point, gesture: TouchGesture.hold);
     if (region != null) {
-      _hold = Timer(_holdTime, () {
-        _longPressed = true;
-        unawaited(_runChain(region, region.rules[TouchGesture.hold]!));
+      _holdIntent = Timer(_holdIntentTime, () {
+        if (!_canInteract || _primary != event.pointer) return;
+        _holding = true;
+        _effort.hold(
+            _holdIntentTime, () => _completeTouch(region, TouchGesture.hold));
       });
     }
   }
 
   void _onMove(PointerEvent event, ArtworkCoordinates coordinates) {
     if (event.pointer != _primary) return;
-    if (coordinates.pointAt(event.localPosition) == null) {
+    final position = event.localPosition;
+    if (coordinates.pointAt(position) == null) {
       _clearGesture();
-      _cancelRun();
+      _effort.reset();
       return;
     }
-    if ((event.localPosition - _start!).distance >= 18) {
-      _hold?.cancel();
+    if (!_sliding) {
+      if ((position - _start!).distance < _swipeSlop) return;
+      _holdIntent?.cancel();
+      _effort.reset();
       _sliding = true;
+      _lastSwipePosition = _start;
+      _swipeRegion =
+          hitRegion(widget.regions, _imageStart!, gesture: TouchGesture.swipe);
     }
+    final region = _swipeRegion;
+    if (region == null) return;
+    final distance = (position - _lastSwipePosition!).distance;
+    if (distance < _minimumSwipeStep) return;
+    _lastSwipePosition = position;
+    if (_effort.swipe(distance)) _completeTouch(region, TouchGesture.swipe);
   }
 
   void _onUp(PointerEvent event, ArtworkCoordinates coordinates) {
     _pointers.remove(event.pointer);
     if (event.pointer != _primary) return;
-    final start = _imageStart!;
-    final gesture = _sliding ? TouchGesture.swipe : TouchGesture.tap;
-    final trigger = !_longPressed &&
-        (_sliding || event.timeStamp - _downAt! < _holdTime) &&
+    final tap = _tapRegion;
+    final isQuickTap = !_sliding &&
+        !_holding &&
+        event.timeStamp - _downAt! < _holdIntentTime &&
+        (event.localPosition - _start!).distance < _swipeSlop &&
         coordinates.pointAt(event.localPosition) != null;
     _clearGesture();
-    if (trigger) {
-      final region = hitRegion(widget.regions, start, gesture: gesture);
-      if (region != null) unawaited(_runChain(region, region.rules[gesture]!));
+    if (!_canInteract || tap == null || !isQuickTap) {
+      _effort.reset();
+      return;
     }
+    if (_effort.tap(tap.id)) _completeTouch(tap, TouchGesture.tap);
+  }
+
+  void _completeTouch(ImageRegion region, TouchGesture gesture) {
+    _clearGesture();
+    if (!_canInteract) {
+      _effort.reset();
+      return;
+    }
+    unawaited(_runChain(region, region.rules[gesture]!, fromTouch: true));
   }
 
   void _clearGesture() {
-    _hold?.cancel();
+    _holdIntent?.cancel();
     _primary = null;
     _start = null;
     _imageStart = null;
+    _lastSwipePosition = null;
+    _tapRegion = null;
+    _swipeRegion = null;
     _downAt = null;
     _sliding = false;
-    _longPressed = false;
+    _holding = false;
   }
 
   void _clearPointers() {
     _pointers.clear();
     _clearGesture();
+    _effort.reset();
   }
 
   void _cancelRun() {
@@ -223,8 +270,10 @@ class _InteractionPlayerState extends State<InteractionPlayer>
       unawaited(_platform.stopMedia().catchError((Object _) {}));
   }
 
-  Future<void> _runChain(ImageRegion region, List<FeedbackStep> steps) async {
+  Future<void> _runChain(ImageRegion region, List<FeedbackStep> steps,
+      {bool fromTouch = false}) async {
     if (!_canInteract || steps.isEmpty) return;
+    if (!fromTouch) _clearPointers();
     final run = Completer<void>();
     setState(() {
       _run = run;
@@ -233,6 +282,10 @@ class _InteractionPlayerState extends State<InteractionPlayer>
     _wake.reset();
     await _syncVoice();
     try {
+      if (fromTouch) {
+        await Future.any([run.future, Future<void>.delayed(_unlockTime)]);
+        if (!_foreground) return;
+      }
       for (final step in steps) {
         if (!mounted || run.isCompleted) break;
         try {
@@ -459,6 +512,11 @@ class _InteractionPlayerState extends State<InteractionPlayer>
   Widget build(BuildContext context) {
     final hasRules = widget.regions.any(
         (r) => r.enabled && (r.rules.isNotEmpty || r.voiceRules.isNotEmpty));
+    final showEffort = widget.trial == null &&
+        !_paused &&
+        !_moving &&
+        widget.regions
+            .any((region) => region.enabled && region.rules.isNotEmpty);
     final hint = _notice ??
         (_paused
             ? '互动已暂停'
@@ -557,27 +615,33 @@ class _InteractionPlayerState extends State<InteractionPlayer>
                                     value: 'reset', child: Text('重置缩放')),
                               ]),
                     ])))),
-        if (hint != null)
+        if (hint != null || showEffort)
           Align(
-              alignment: Alignment.bottomCenter,
-              child: SafeArea(
-                  top: false,
-                  minimum: const EdgeInsets.all(12),
-                  child: IgnorePointer(
-                      child: Semantics(
-                          liveRegion: true,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                                color: const Color(0xBD212435),
-                                borderRadius: BorderRadius.circular(16)),
-                            child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
-                                child: Text(hint,
-                                    textAlign: TextAlign.center,
-                                    style:
-                                        const TextStyle(color: Colors.white))),
-                          ))))),
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.all(12),
+              child: IgnorePointer(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                if (hint != null)
+                  Semantics(
+                      liveRegion: true,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                            color: const Color(0xBD212435),
+                            borderRadius: BorderRadius.circular(16)),
+                        child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
+                            child: Text(hint,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white))),
+                      )),
+                if (hint != null && showEffort) const SizedBox(height: 8),
+                if (showEffort) EffortMeter(effort: _effort),
+              ])),
+            ),
+          ),
       ]),
     );
   }

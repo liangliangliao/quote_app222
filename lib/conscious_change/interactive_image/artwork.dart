@@ -3,7 +3,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import 'feedback.dart';
+import 'touch_effort.dart';
 export 'feedback.dart';
+export 'touch_effort.dart' show EffortDifficulty, TouchGesture;
 
 String newArtworkId() {
   final random = Random.secure();
@@ -86,15 +88,6 @@ enum RegionSource {
   const RegionSource(this.label);
   final String label;
   bool get isAutomatic => this == detected || this == proposed;
-}
-
-enum TouchGesture {
-  tap('点击'),
-  hold('长按'),
-  swipe('滑动');
-
-  const TouchGesture(this.label);
-  final String label;
 }
 
 class ImageRegion {
@@ -315,6 +308,7 @@ class FeedbackSettings {
     this.vibration = true,
     this.wakePhrase = defaultWakePhrase,
     this.allowSystemSpeech = false,
+    this.effortDifficulty = EffortDifficulty.standard,
   });
 
   factory FeedbackSettings.fromJson(Map<String, dynamic> json) =>
@@ -324,6 +318,7 @@ class FeedbackSettings {
         vibration: json['vibration'] as bool? ?? true,
         wakePhrase: json['wakePhrase'] as String? ?? defaultWakePhrase,
         allowSystemSpeech: json['allowSystemSpeech'] as bool? ?? false,
+        effortDifficulty: EffortDifficulty.fromStored(json['effortDifficulty']),
       );
 
   final bool visual;
@@ -331,19 +326,22 @@ class FeedbackSettings {
   final bool vibration;
   final String wakePhrase;
   final bool allowSystemSpeech;
+  final EffortDifficulty effortDifficulty;
 
   FeedbackSettings copyWith(
           {bool? visual,
           bool? sound,
           bool? vibration,
           String? wakePhrase,
-          bool? allowSystemSpeech}) =>
+          bool? allowSystemSpeech,
+          EffortDifficulty? effortDifficulty}) =>
       FeedbackSettings(
         visual: visual ?? this.visual,
         sound: sound ?? this.sound,
         vibration: vibration ?? this.vibration,
         wakePhrase: wakePhrase ?? this.wakePhrase,
         allowSystemSpeech: allowSystemSpeech ?? this.allowSystemSpeech,
+        effortDifficulty: effortDifficulty ?? this.effortDifficulty,
       );
 
   Map<String, Object> toJson() => {
@@ -352,5 +350,6 @@ class FeedbackSettings {
         'vibration': vibration,
         'wakePhrase': wakePhrase,
         'allowSystemSpeech': allowSystemSpeech,
+        'effortDifficulty': effortDifficulty.name,
       };
 }

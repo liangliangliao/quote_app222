@@ -46,7 +46,8 @@ void main() {
             },
           ),
         ],
-        settings: const FeedbackSettings(),
+        settings:
+            const FeedbackSettings(effortDifficulty: EffortDifficulty.easy),
         openPage: (action) async => actions.add(action),
       ),
     ));
@@ -60,9 +61,14 @@ void main() {
     final corner = view.topLeft + const Offset(3, 3);
     await tester.tapAt(corner);
     expect(actions, isEmpty);
-    await tester.tapAt(view.topLeft + coords.viewPoint(target));
+    final initialTarget = view.topLeft + coords.viewPoint(target);
+    await tester.tapAt(initialTarget);
     await tester.pump();
-    expect(actions, [TouchAction.learning]);
+    expect(find.text('33%'), findsOneWidget);
+    expect(actions, isEmpty);
+    await tester.pump(const Duration(milliseconds: 651));
+    expect(find.text('0%'), findsOneWidget);
+    expect(actions, isEmpty);
 
     final zoom = Matrix4.diagonal3Values(2, 2, 1)
       ..setTranslationRaw(-180, -150, 0);
@@ -70,36 +76,72 @@ void main() {
     await tester.pump();
     final transformedTarget = view.topLeft + coords.viewPoint(target);
     await tester.tapAt(transformedTarget);
+    await tester.tapAt(transformedTarget);
     await tester.pump();
-    expect(actions, [TouchAction.learning, TouchAction.learning]);
+    expect(find.text('66%'), findsOneWidget);
+    expect(actions, isEmpty);
+    await tester.tapAt(transformedTarget);
+    await tester.pump();
+    expect(find.text('100%'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(actions, [TouchAction.learning]);
 
-    final held = await tester.startGesture(transformedTarget, pointer: 10);
-    await tester.pump(const Duration(milliseconds: 510));
+    final shortHold = await tester.startGesture(transformedTarget, pointer: 10);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('继续按住'), findsOneWidget);
+    expect(actions, hasLength(1));
+    await shortHold.up();
+    await tester.pump();
+    expect(find.text('0%'), findsOneWidget);
+    expect(actions, hasLength(1));
+
+    final held = await tester.startGesture(transformedTarget, pointer: 11);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('100%'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(actions, [TouchAction.learning, TouchAction.books]);
     await held.up();
-    await tester.pump();
-    expect(actions.last, TouchAction.books);
-    expect(actions, hasLength(3));
 
-    final slide = await tester.startGesture(transformedTarget, pointer: 11);
-    await slide.moveBy(const Offset(32, 0));
+    final slide = await tester.startGesture(transformedTarget, pointer: 12);
+    await slide.moveBy(const Offset(40, 0));
+    await tester.pump();
+    expect(find.text('40%'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 361));
+    expect(find.text('0%'), findsOneWidget);
+    await slide.moveBy(const Offset(65, 0));
     await slide.up();
     await tester.pump();
-    expect(actions.last, TouchAction.books);
-    expect(actions, hasLength(4));
+    expect(find.text('0%'), findsOneWidget);
+    expect(actions, hasLength(2));
 
+    final completedSlide =
+        await tester.startGesture(transformedTarget, pointer: 13);
+    await completedSlide.moveBy(const Offset(60, 0));
+    await tester.pump();
+    expect(find.text('60%'), findsOneWidget);
+    await completedSlide.moveBy(const Offset(-45, 0));
+    await tester.pump();
+    expect(find.text('100%'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(
+        actions, [TouchAction.learning, TouchAction.books, TouchAction.books]);
+    await completedSlide.up();
+
+    await tester.tapAt(transformedTarget);
     final firstFinger =
-        await tester.startGesture(transformedTarget, pointer: 12);
+        await tester.startGesture(transformedTarget, pointer: 14);
     final secondFinger = await tester
-        .startGesture(transformedTarget + const Offset(25, 0), pointer: 13);
-    await tester.pump(const Duration(milliseconds: 600));
+        .startGesture(transformedTarget + const Offset(25, 0), pointer: 15);
+    await tester.pump(const Duration(milliseconds: 1000));
     await firstFinger.up();
     await secondFinger.up();
-    expect(actions, hasLength(4));
+    expect(find.text('0%'), findsOneWidget);
+    expect(actions, hasLength(3));
 
     await tester.tap(find.byTooltip('暂停互动'));
     await tester.pump();
     await tester.tapAt(transformedTarget);
-    expect(actions, hasLength(4));
+    expect(actions, hasLength(3));
     expect(find.text('互动已暂停'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -123,7 +165,7 @@ void main() {
           height: 60,
           createdAt: DateTime(2026)),
       file: file,
-      settings: const FeedbackSettings(),
+      settings: const FeedbackSettings(effortDifficulty: EffortDifficulty.easy),
       regions: const [
         ImageRegion(
             id: 'region',
@@ -150,8 +192,12 @@ void main() {
     final finder = find.byType(ArtworkCanvas);
     expect(tester.getRect(finder), tester.getRect(find.byType(Scaffold)));
     expect(tester.widget<ArtworkCanvas>(finder).original, isTrue);
-    await tester.tapAt(tester.getCenter(finder));
+    for (var i = 0; i < 3; i++) {
+      await tester.tapAt(tester.getCenter(finder));
+    }
     await tester.pump();
+    expect(actions, isEmpty);
+    await tester.pump(const Duration(milliseconds: 180));
     expect(actions, [TouchAction.learning]);
     firstStep.complete();
     await tester.pump();
