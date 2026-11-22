@@ -1,16 +1,154 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 import 'package:quote_app/conscious_change/interactive_image/artwork.dart';
 import 'package:quote_app/conscious_change/interactive_image/artwork_canvas.dart';
 import 'package:quote_app/conscious_change/interactive_image/effort_meter.dart';
 import 'package:quote_app/conscious_change/interactive_image/interaction_player.dart';
+import 'package:quote_app/conscious_change/interactive_image/original_artwork_image.dart';
 import 'package:quote_app/conscious_change/interactive_image/region_geometry.dart';
 
 void main() {
+  testWidgets(
+      'a region deforms under the finger and the effort rail moves at a fixed value',
+      (tester) async {
+    final folder = Directory.systemTemp.createTempSync('soft-surface-');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    final texture = image.Image(280, 140);
+    for (var y = 0; y < texture.height; y++) {
+      for (var x = 0; x < texture.width; x++) {
+        final detail = (x % 9) * 4;
+        texture.setPixelRgba(
+            x, y, 120 + y ~/ 2 + detail, 55 + y ~/ 3, 45 + detail);
+      }
+    }
+    final file = File('${folder.path}/texture.png')
+      ..writeAsBytesSync(image.encodePng(texture));
+    final snapshotKey = GlobalKey();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.expand()));
+    await tester.runAsync(() async {
+      await precacheImage(
+          OriginalArtworkImage(file), tester.element(find.byType(SizedBox)));
+      await ui.FragmentProgram.fromAsset(
+          'assets/interactive_image/soft_surface.frag');
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: RepaintBoundary(
+        key: snapshotKey,
+        child: InteractionPlayer(
+          artwork: Artwork(
+              id: 'test',
+              title: '图片',
+              format: 'png',
+              width: 280,
+              height: 140,
+              createdAt: DateTime(2026)),
+          file: file,
+          regions: const [
+            ImageRegion(
+              id: 'test',
+              label: '区域',
+              group: RegionGroup.object,
+              polygon: [
+                Offset(0.2, 0.2),
+                Offset(0.5, 0.2),
+                Offset(0.5, 0.75),
+                Offset(0.2, 0.75)
+              ],
+              rules: {
+                TouchGesture.tap: [FeedbackStep(TouchAction.learning)]
+              },
+            ),
+          ],
+          settings:
+              const FeedbackSettings(effortDifficulty: EffortDifficulty.easy),
+          openPage: (_) async =>
+              fail('A single touch must not unlock feedback'),
+        ),
+      ),
+    ));
+    final finder = find.byType(ArtworkCanvas);
+    await tester.pump();
+    final boundary =
+        tester.renderObject<RenderRepaintBoundary>(find.byKey(snapshotKey));
+    Future<ByteData> snapshot() async => (await tester.runAsync(() async {
+          final frame = await boundary.toImage();
+          try {
+            return await frame.toByteData();
+          } finally {
+            frame.dispose();
+          }
+        }))!;
+
+    final view = tester.getRect(finder);
+    final photo = artworkRect(view.size, 2).shift(view.topLeft);
+    final contact = imagePoint(const Offset(0.48, 0.49), photo);
+    final outside = imagePoint(const Offset(0.51, 0.49), photo);
+    final destination = imagePoint(const Offset(0.30, 0.51), photo);
+    int pixel(ByteData frame, Offset point) => frame.getUint32(
+        (point.dy.floor() * boundary.size.width.floor() + point.dx.floor()) *
+            4);
+
+    final original = await snapshot();
+    final finger = await tester.startGesture(contact);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 140));
+    final pressed = await snapshot();
+    expect(pixel(pressed, contact), isNot(pixel(original, contact)));
+    expect(pixel(pressed, outside), pixel(original, outside));
+
+    await finger.moveTo(destination);
+    await tester.pump();
+    final moved = await snapshot();
+    expect(pixel(moved, destination), isNot(pixel(original, destination)));
+    expect(pixel(moved, contact), pixel(original, contact));
+    await finger.up();
+    await tester.pump();
+    final releasing = await snapshot();
+    expect(pixel(releasing, destination), isNot(pixel(original, destination)));
+    await tester.pump(const Duration(milliseconds: 400));
+    final released = await snapshot();
+    expect(pixel(released, destination), pixel(original, destination));
+
+    final crossing = await tester.startGesture(outside);
+    await crossing.moveTo(contact);
+    await tester.pump();
+    final entered = await snapshot();
+    expect(pixel(entered, contact), isNot(pixel(original, contact)));
+    expect(pixel(entered, outside), pixel(original, outside));
+    await crossing.cancel();
+    await tester.pump();
+    expect(pixel(await snapshot(), contact), pixel(original, contact));
+
+    final tap = await tester.startGesture(contact);
+    await tap.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 175));
+    expect(find.text('33%'), findsOneWidget);
+    final firstWave = await snapshot();
+    await tester.pump(const Duration(milliseconds: 70));
+    final secondWave = await snapshot();
+    expect(find.text('33%'), findsOneWidget);
+    final rail = tester.getRect(find.descendant(
+        of: find.byType(EffortMeter), matching: find.byType(CustomPaint)));
+    expect(
+        [
+          for (var x = rail.center.dx; x < rail.right - 4; x += 3)
+            pixel(firstWave, Offset(x, rail.center.dy))
+        ],
+        isNot(equals([
+          for (var x = rail.center.dx; x < rail.right - 4; x += 3)
+            pixel(secondWave, Offset(x, rail.center.dy))
+        ])));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
       'tap, long press and swipe use the transformed image and pinch cancels them',
       (tester) async {

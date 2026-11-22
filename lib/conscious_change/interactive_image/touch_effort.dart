@@ -88,10 +88,11 @@ enum EffortDifficulty {
 }
 
 class EffortProgress {
-  const EffortProgress({this.gesture, this.value = 0});
+  const EffortProgress({this.gesture, this.value = 0, this.impulse = 0});
 
   final TouchGesture? gesture;
   final double value;
+  final double impulse;
 
   bool get reached => value == 1;
   int get percent => (value * 100).floor();
@@ -134,7 +135,7 @@ class TouchEffort extends ValueNotifier<EffortProgress> {
     if (_tapRegion != regionId || value.reached) reset();
     _tapRegion = regionId;
     _tapCount++;
-    return _add(TouchGesture.tap, _tapCount / tuning.taps, tuning.tapGap);
+    return _add(TouchGesture.tap, _tapCount / tuning.taps, tuning.tapGap, 0.94);
   }
 
   void hold(Duration alreadyHeld, VoidCallback onReached) {
@@ -162,18 +163,22 @@ class TouchEffort extends ValueNotifier<EffortProgress> {
     });
   }
 
-  bool swipe(double distance) {
+  bool swipe(double distance, {Duration elapsed = Duration.zero}) {
     _swipeDistance += distance;
+    final seconds = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
+    final speed = distance / (seconds > 0.008 ? seconds : 0.016);
+    final impulse = 0.28 + 0.72 * (speed / 1350).clamp(0.0, 1.0);
     return _add(TouchGesture.swipe, _swipeDistance / tuning.swipeDistance,
-        tuning.swipeGap);
+        tuning.swipeGap, impulse);
   }
 
-  bool _add(TouchGesture gesture, double progress, Duration gap) {
+  bool _add(
+      TouchGesture gesture, double progress, Duration gap, double impulse) {
     if (progress >= 1) {
       _finish(gesture);
       return true;
     }
-    value = EffortProgress(gesture: gesture, value: progress);
+    value = EffortProgress(gesture: gesture, value: progress, impulse: impulse);
     _setDeadline(gap);
     return false;
   }

@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import 'artwork.dart';
 import 'original_artwork_image.dart';
 import 'region_geometry.dart';
+import 'soft_surface.dart';
 
 class ArtworkCoordinates {
   const ArtworkCoordinates(this.image, this.transform);
@@ -42,6 +44,7 @@ class ArtworkCanvas extends StatelessWidget {
     this.feedback,
     this.pulse = false,
     this.animation,
+    this.contact,
     this.onDown,
     this.onMove,
     this.onUp,
@@ -61,10 +64,39 @@ class ArtworkCanvas extends StatelessWidget {
   final ImageRegion? feedback;
   final bool pulse;
   final Animation<double>? animation;
+  final ValueListenable<SurfaceContact?>? contact;
   final ArtworkPointer? onDown;
   final ArtworkPointer? onMove;
   final ArtworkPointer? onUp;
   final VoidCallback? onCancel;
+
+  static const _background = Color(0xFF131621);
+
+  Widget _photo(ImageProvider provider, {bool fallback = false}) {
+    final image = Image(
+      image: provider,
+      fit: BoxFit.contain,
+      filterQuality:
+          original && !fallback ? FilterQuality.high : FilterQuality.medium,
+      excludeFromSemantics: true,
+      errorBuilder: (context, error, stackTrace) {
+        final backup = fallbackFile;
+        return fallback || backup == null
+            ? _imageError
+            : _photo(FileImage(backup), fallback: true);
+      },
+    );
+    final touch = contact;
+    return touch == null
+        ? image
+        : SoftSurface(
+            photo: provider,
+            contact: touch,
+            transform: transform,
+            background: _background,
+            child: image,
+          );
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -73,7 +105,7 @@ class ArtworkCanvas extends StatelessWidget {
           final image = artworkRect(size, aspectRatio);
           final coordinates = ArtworkCoordinates(image, transform);
           return ColoredBox(
-            color: const Color(0xFF131621),
+            color: _background,
             child: Listener(
               behavior: HitTestBehavior.opaque,
               onPointerDown: (event) => onDown?.call(event, coordinates),
@@ -92,25 +124,9 @@ class ArtworkCanvas extends StatelessWidget {
                     children: [
                       Positioned.fromRect(
                         rect: image,
-                        child: Image(
-                          image: original
-                              ? OriginalArtworkImage(file)
-                              : FileImage(file),
-                          fit: BoxFit.contain,
-                          filterQuality: original
-                              ? FilterQuality.high
-                              : FilterQuality.medium,
-                          excludeFromSemantics: true,
-                          errorBuilder: (context, error, stackTrace) {
-                            final backup = fallbackFile;
-                            if (backup == null) return _imageError;
-                            return Image.file(backup,
-                                fit: BoxFit.contain,
-                                excludeFromSemantics: true,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    _imageError);
-                          },
-                        ),
+                        child: _photo(original
+                            ? OriginalArtworkImage(file)
+                            : FileImage(file)),
                       ),
                       IgnorePointer(
                         child: CustomPaint(

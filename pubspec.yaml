@@ -80,6 +80,8 @@ dependency_overrides:
   workmanager_platform_interface: 0.9.3
 flutter:
   uses-material-design: true
+  shaders:
+    - assets/interactive_image/soft_surface.frag
   fonts:
     - family: QuoteSignatureLatin
       fonts:

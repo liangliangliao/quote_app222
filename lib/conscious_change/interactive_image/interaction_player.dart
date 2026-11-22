@@ -12,6 +12,7 @@ import 'artwork_canvas.dart';
 import 'effort_meter.dart';
 import 'feedback_platform.dart';
 import 'region_geometry.dart';
+import 'soft_surface.dart';
 import 'touch_effort.dart' show TouchEffort;
 
 typedef OpenInteractionPage = Future<void> Function(TouchAction action);
@@ -49,6 +50,7 @@ class _InteractionPlayerState extends State<InteractionPlayer>
   static const _unlockTime = Duration(milliseconds: 180);
   final _transform = TransformationController();
   final _pointers = <int>{};
+  final _contact = ValueNotifier<SurfaceContact?>(null);
   late final _animation = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 530));
   late final _effort = TouchEffort(widget.settings.effortDifficulty,
@@ -68,12 +70,15 @@ class _InteractionPlayerState extends State<InteractionPlayer>
   Timer? _wakeTimer;
   Timer? _holdIntent;
   int? _primary;
+  int? _surfacePointer;
+  ({ImageRegion region, Path path})? _surface;
   Offset? _start;
   Offset? _imageStart;
   Offset? _lastSwipePosition;
   ImageRegion? _tapRegion;
   ImageRegion? _swipeRegion;
   Duration? _downAt;
+  Duration? _lastSwipeAt;
   bool _sliding = false;
   bool _holding = false;
   bool _paused = false;
@@ -161,6 +166,7 @@ class _InteractionPlayerState extends State<InteractionPlayer>
     if (audio != null) unawaited(audio.dispose().catchError((Object _) {}));
     unawaited(_immersion(false));
     _animation.dispose();
+    _contact.dispose();
     _effort.dispose();
     _transform.dispose();
     super.dispose();
@@ -169,6 +175,7 @@ class _InteractionPlayerState extends State<InteractionPlayer>
   void _onDown(PointerEvent event, ArtworkCoordinates coordinates) {
     _pointers.add(event.pointer);
     if (_pointers.length > 1) {
+      _clearSurface();
       _clearGesture();
       _effort.reset();
       _cancelRun();
@@ -176,6 +183,10 @@ class _InteractionPlayerState extends State<InteractionPlayer>
     }
     if (!_canInteract) return;
     final point = coordinates.pointAt(event.localPosition);
+    if (widget.settings.visual) {
+      _surfacePointer = event.pointer;
+      _moveSurface(event, point);
+    }
     if (point == null) {
       _effort.reset();
       return;
@@ -199,9 +210,12 @@ class _InteractionPlayerState extends State<InteractionPlayer>
   }
 
   void _onMove(PointerEvent event, ArtworkCoordinates coordinates) {
-    if (event.pointer != _primary) return;
+    if (event.pointer != _primary && event.pointer != _surfacePointer) return;
     final position = event.localPosition;
-    if (coordinates.pointAt(position) == null) {
+    final point = coordinates.pointAt(position);
+    if (event.pointer == _surfacePointer) _moveSurface(event, point);
+    if (event.pointer != _primary) return;
+    if (point == null) {
       _clearGesture();
       _effort.reset();
       return;
@@ -217,18 +231,28 @@ class _InteractionPlayerState extends State<InteractionPlayer>
       _effort.reset();
       _sliding = true;
       _lastSwipePosition = _start;
+      _lastSwipeAt = _downAt;
       _swipeRegion = target;
     }
     final region = _swipeRegion;
     if (region == null) return;
     final distance = (position - _lastSwipePosition!).distance;
     if (distance < math.min(_minimumSwipeStep, _swipeIntentDistance)) return;
+    final elapsed = event.timeStamp - _lastSwipeAt!;
     _lastSwipePosition = position;
-    if (_effort.swipe(distance)) _completeTouch(region, TouchGesture.swipe);
+    _lastSwipeAt = event.timeStamp;
+    if (_effort.swipe(distance, elapsed: elapsed)) {
+      _completeTouch(region, TouchGesture.swipe);
+    }
   }
 
   void _onUp(PointerEvent event, ArtworkCoordinates coordinates) {
     _pointers.remove(event.pointer);
+    if (event.pointer == _surfacePointer) {
+      _releaseSurface();
+      _surface = null;
+      _surfacePointer = null;
+    }
     if (event.pointer != _primary) return;
     final tap = _tapRegion;
     final isQuickTap = !_sliding &&
@@ -253,12 +277,54 @@ class _InteractionPlayerState extends State<InteractionPlayer>
     unawaited(_runChain(region, region.rules[gesture]!, fromTouch: true));
   }
 
+  void _moveSurface(PointerEvent event, Offset? point) {
+    if (point == null) {
+      _releaseSurface();
+      return;
+    }
+    var surface = _surface;
+    if (surface == null || !surface.path.contains(point)) {
+      final region = hitRegion(
+          widget.regions.where((region) => region.enabled), point,
+          editing: true);
+      if (region == null) {
+        _releaseSurface();
+        return;
+      }
+      surface = _surface = (
+        region: region,
+        path: regionPath(region.polygon, const Rect.fromLTWH(0, 0, 1, 1)),
+      );
+    }
+    final range = event.pressureMax - event.pressureMin;
+    final pressure = range > 0.01
+        ? ((event.pressure - event.pressureMin) / range).clamp(0.0, 1.0)
+        : 0.52;
+    final movement = event.localDelta;
+    _contact.value = SurfaceContact(
+        surface.region, point, 0.27 + pressure * 0.36,
+        drag: movement / math.max(12, movement.distance));
+  }
+
+  void _releaseSurface() {
+    final contact = _contact.value;
+    if (contact != null && !contact.released)
+      _contact.value = contact.release();
+  }
+
+  void _clearSurface() {
+    _surfacePointer = null;
+    _surface = null;
+    _contact.value = null;
+  }
+
   void _clearGesture() {
     _holdIntent?.cancel();
     _primary = null;
     _start = null;
     _imageStart = null;
     _lastSwipePosition = null;
+    _lastSwipeAt = null;
     _tapRegion = null;
     _swipeRegion = null;
     _downAt = null;
@@ -277,6 +343,7 @@ class _InteractionPlayerState extends State<InteractionPlayer>
 
   void _clearPointers() {
     _pointers.clear();
+    _clearSurface();
     _clearGesture();
     _effort.reset();
   }
@@ -623,6 +690,7 @@ class _InteractionPlayerState extends State<InteractionPlayer>
         feedback: _feedback,
         pulse: _pulse,
         animation: _animation,
+        contact: widget.settings.visual ? _contact : null,
         onDown: _onDown,
         onMove: _onMove,
         onUp: _onUp,

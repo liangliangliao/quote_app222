@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 
 import 'touch_effort.dart';
 
@@ -70,16 +71,12 @@ class EffortMeter extends StatelessWidget {
                           curve: Curves.easeOut,
                           builder: (context, fraction, _) => SizedBox(
                             width: double.infinity,
-                            height: 16,
-                            child: progress.reached && !reduceMotion
-                                ? TweenAnimationBuilder<double>(
-                                    tween: Tween<double>(begin: 1, end: 0),
-                                    duration: const Duration(milliseconds: 660),
-                                    curve: Curves.easeOut,
-                                    builder: (context, burst, _) => CustomPaint(
-                                        painter: _GoldGauge(fraction, burst)),
-                                  )
-                                : CustomPaint(painter: _GoldGauge(fraction, 0)),
+                            height: 19,
+                            child: _EffortRail(
+                              progress: progress,
+                              fraction: fraction,
+                              animate: !reduceMotion,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 3),
@@ -95,16 +92,106 @@ class EffortMeter extends StatelessWidget {
       );
 }
 
-class _GoldGauge extends CustomPainter {
-  const _GoldGauge(this.progress, this.burst);
+class _EffortRail extends StatefulWidget {
+  const _EffortRail(
+      {required this.progress, required this.fraction, required this.animate});
 
-  final double progress;
-  final double burst;
+  final EffortProgress progress;
+  final double fraction;
+  final bool animate;
+
+  @override
+  State<_EffortRail> createState() => _EffortRailState();
+}
+
+class _EffortRailState extends State<_EffortRail>
+    with SingleTickerProviderStateMixin {
+  static const _pulseTime = 0.42;
+  static const _burstTime = 0.66;
+  final _clock = ValueNotifier(0.0);
+  late final Ticker _ticker = createTicker(_tick);
+  double _lastImpulse = 0;
+
+  bool get _steady =>
+      widget.progress.gesture == TouchGesture.hold && !widget.progress.reached;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncClock();
+  }
+
+  @override
+  void didUpdateWidget(covariant _EffortRail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate ||
+        (!identical(oldWidget.progress, widget.progress) &&
+            (!_steady || oldWidget.progress.gesture != TouchGesture.hold))) {
+      _syncClock();
+    }
+  }
+
+  void _syncClock() {
+    if (!widget.animate || widget.progress.gesture == null) {
+      _ticker.stop();
+      return;
+    }
+    if (!_ticker.isActive) {
+      _clock.value = 0;
+      _ticker.start();
+    }
+    _lastImpulse = _clock.value;
+  }
+
+  void _tick(Duration elapsed) {
+    _clock.value = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
+    final duration = widget.progress.reached ? _burstTime : _pulseTime;
+    if (!_steady && _clock.value - _lastImpulse >= duration) _ticker.stop();
+  }
+
+  double get _burst => widget.animate && widget.progress.reached
+      ? (1 - (_clock.value - _lastImpulse) / _burstTime).clamp(0.0, 1.0)
+      : 0;
+
+  double get _energy {
+    if (!widget.animate || widget.progress.gesture == null) return 0;
+    if (_steady) return 0.54 + 0.19 * math.sin(_clock.value * 6);
+    if (widget.progress.reached) return _burst;
+    final remaining =
+        (1 - (_clock.value - _lastImpulse) / _pulseTime).clamp(0.0, 1.0);
+    return widget.progress.impulse * remaining * remaining;
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _clock.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      RepaintBoundary(child: CustomPaint(painter: _GoldGauge(this)));
+}
+
+class _GoldGauge extends CustomPainter {
+  _GoldGauge(this.motion) : super(repaint: motion._clock);
+
+  final _EffortRailState motion;
 
   @override
   void paint(Canvas canvas, Size size) {
     const segments = 20;
     const gap = 2.0;
+    final progress = motion.widget.fraction;
+    final burst = motion._burst;
+    final energy = motion._energy;
+    final speed = switch (motion.widget.progress.gesture) {
+      TouchGesture.swipe => 17.0,
+      TouchGesture.tap => 13.0,
+      _ => 8.0,
+    };
+    final phase = motion._clock.value * speed;
     final bounds = (Offset.zero & size).deflate(1);
     final inner = bounds.deflate(2);
     if (inner.width <= (segments - 1) * gap || inner.height <= 0) return;
@@ -127,36 +214,53 @@ class _GoldGauge extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1);
 
-    final gold = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Color(0xFFFFF0B2), Color(0xFFFFC453), Color(0xFFC57726)],
-      ).createShader(inner);
+    final tilePaint = Paint();
+    final gold = Paint();
     for (var index = 0; index < segments; index++) {
       final left = inner.left + index * (segmentWidth + gap);
       final segment =
           Rect.fromLTWH(left, inner.top, segmentWidth, inner.height);
       final tile = RRect.fromRectAndRadius(segment, const Radius.circular(1.2));
-      canvas.drawRRect(tile, Paint()..color = const Color(0xFF583520));
+      final wave = (1 + math.sin(index * 0.76 - phase)) / 2;
+      final heat = wave * wave * energy;
+      tilePaint.color =
+          Color.lerp(const Color(0xFF583520), const Color(0xFFA44C19), heat)!;
+      canvas.drawRRect(tile, tilePaint);
       if (fillEnd <= left) continue;
+      final molten = Rect.fromLTRB(left, inner.top + energy * (1 - wave) * 4,
+          segment.right, inner.bottom);
+      gold.shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color.lerp(const Color(0xFFFFE39C), const Color(0xFFFFFFE7), heat)!,
+          Color.lerp(const Color(0xFFF9AD40), const Color(0xFFFFD95E), heat)!,
+          const Color(0xFFBD6B1C),
+        ],
+      ).createShader(molten);
       canvas.save();
       canvas.clipRect(Rect.fromLTRB(
           left, inner.top, math.min(fillEnd, segment.right), inner.bottom));
-      canvas.drawRRect(tile, gold);
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(molten, const Radius.circular(1.2)), gold);
       canvas.restore();
     }
 
     if (progress > 0 && progress < 1) {
       final spark = Rect.fromCenter(
-          center: Offset(fillEnd, inner.center.dy), width: 20, height: 14);
+          center: Offset(fillEnd, inner.center.dy),
+          width: 12 + energy * 28,
+          height: 10 + energy * 14);
       canvas.save();
       canvas.clipRRect(rail);
       canvas.drawOval(
           spark,
           Paint()
-            ..shader = const RadialGradient(
-              colors: [Color(0xF0FFF4BE), Color(0x00FFCA6B)],
+            ..shader = RadialGradient(
+              colors: [
+                const Color(0xFFFFF4BE).withValues(alpha: 0.64 + energy * 0.36),
+                const Color(0x00FFCA6B),
+              ],
             ).createShader(spark));
       canvas.restore();
     } else if (burst > 0) {
@@ -168,6 +272,5 @@ class _GoldGauge extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GoldGauge oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.burst != burst;
+  bool shouldRepaint(covariant _GoldGauge oldDelegate) => true;
 }
