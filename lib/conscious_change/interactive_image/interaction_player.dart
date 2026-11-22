@@ -529,7 +529,7 @@ class _InteractionPlayerState extends State<InteractionPlayer>
                     : !hasRules && widget.trial == null
                         ? '返回编辑器，为区域设置手势或语音反馈。'
                         : null);
-    return Scaffold(
+    final screen = Scaffold(
       backgroundColor: const Color(0xFF131621),
       body: Stack(fit: StackFit.expand, children: [
         ArtworkCanvas(
@@ -643,6 +643,15 @@ class _InteractionPlayerState extends State<InteractionPlayer>
             ),
           ),
       ]),
+    );
+    return PopScope<void>(
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          _clearPointers();
+          _cancelRun();
+        }
+      },
+      child: screen,
     );
   }
 }

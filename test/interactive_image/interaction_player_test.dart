@@ -204,4 +204,65 @@ void main() {
     expect(actions, [TouchAction.learning, TouchAction.books]);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+      'exiting the preview cancels unfinished effort during the exit animation',
+      (tester) async {
+    final folder = Directory.systemTemp.createTempSync('interaction-exit-');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    final file = File('${folder.path}/preview.png')
+      ..writeAsBytesSync(image.encodePng(image.Image(120, 60)));
+    final actions = <TouchAction>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+          body: Builder(
+              builder: (context) => TextButton(
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed('/preview'),
+                    child: const Text('打开预览'),
+                  ))),
+      routes: {
+        '/preview': (context) => InteractionPlayer(
+              artwork: Artwork(
+                  id: 'test',
+                  title: '图片',
+                  format: 'png',
+                  width: 120,
+                  height: 60,
+                  createdAt: DateTime(2026)),
+              file: file,
+              settings: const FeedbackSettings(
+                  effortDifficulty: EffortDifficulty.easy),
+              openPage: (action) async => actions.add(action),
+              regions: const [
+                ImageRegion(
+                    id: 'region',
+                    label: '区域',
+                    group: RegionGroup.object,
+                    polygon: [
+                      Offset(0.2, 0.2),
+                      Offset(0.8, 0.2),
+                      Offset(0.8, 0.8),
+                      Offset(0.2, 0.8)
+                    ],
+                    rules: {
+                      TouchGesture.hold: [FeedbackStep(TouchAction.books)]
+                    })
+              ],
+            )
+      },
+    ));
+    await tester.tap(find.text('打开预览'));
+    await tester.pumpAndSettle();
+    final held =
+        await tester.startGesture(tester.getCenter(find.byType(ArtworkCanvas)));
+    await tester.pump(const Duration(milliseconds: 880));
+    expect(find.text('继续按住'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(milliseconds: 200));
+    await held.up();
+    await tester.pumpAndSettle();
+    expect(actions, isEmpty);
+    expect(find.text('打开预览'), findsOneWidget);
+  });
 }
