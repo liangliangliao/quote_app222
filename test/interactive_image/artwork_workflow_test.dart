@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -9,6 +10,7 @@ import 'package:image/image.dart' as image;
 import 'package:quote_app/conscious_change/interactive_image/artwork.dart';
 import 'package:quote_app/conscious_change/interactive_image/artwork_repository.dart';
 import 'package:quote_app/conscious_change/interactive_image/local_recognition.dart';
+import 'package:quote_app/conscious_change/interactive_image/original_artwork_image.dart';
 import 'package:quote_app/conscious_change/interactive_image/region_geometry.dart';
 
 const _box = [
@@ -97,8 +99,8 @@ void main() {
         group: RegionGroup.object,
         polygon: _box,
         rules: {
-          TouchGesture.tap: TouchAction.learning,
-          TouchGesture.hold: TouchAction.vibration
+          TouchGesture.tap: [FeedbackStep(TouchAction.learning)],
+          TouchGesture.hold: [FeedbackStep(TouchAction.vibration)]
         });
     await repository.saveEdits(
         folder,
@@ -142,8 +144,8 @@ void main() {
         group: RegionGroup.head,
         polygon: _box,
         rules: {
-          TouchGesture.tap: TouchAction.sound,
-          TouchGesture.swipe: TouchAction.pulse
+          TouchGesture.tap: [FeedbackStep(TouchAction.sound)],
+          TouchGesture.swipe: [FeedbackStep(TouchAction.pulse)]
         });
     const child = ImageRegion(
         id: 'nose',
@@ -151,7 +153,9 @@ void main() {
         label: '鼻部',
         group: RegionGroup.head,
         polygon: _nested,
-        rules: {TouchGesture.tap: TouchAction.highlight});
+        rules: {
+          TouchGesture.tap: [FeedbackStep(TouchAction.highlight)]
+        });
     const point = Offset(0.5, 0.5);
     expect(
         hitRegion([base, child], point, gesture: TouchGesture.tap)?.id, 'nose');
@@ -201,8 +205,9 @@ void main() {
         left.regions.singleWhere((region) => region.group == RegionGroup.legs);
     expect(torso.source, RegionSource.detected);
     expect(leg.source, RegionSource.proposed);
-    final reviewed = leg.copyWith(
-        edited: true, rules: {TouchGesture.tap: TouchAction.highlight});
+    final reviewed = leg.copyWith(edited: true, rules: {
+      TouchGesture.tap: [FeedbackStep(TouchAction.highlight)]
+    });
     final edits = ArtworkEdits(regions: [reviewed], dismissed: {torso.id})
         .withTarget(right.id, result.id, right.regions);
     expect(edits.visibleRegions.map((region) => region.targetId).toSet(),
@@ -210,5 +215,35 @@ void main() {
     final next = edits.withTarget(left.id, result.id, left.regions);
     expect(next.visibleRegions, [reviewed]);
     expect(next.resetRecognition().visibleRegions, [reviewed]);
+  });
+
+  test('full-screen image provider decodes above the editor preview resolution',
+      () async {
+    final dir = await Directory.systemTemp.createTemp('artwork-original-');
+    addTearDown(() => dir.delete(recursive: true));
+    final repository =
+        ArtworkRepository(directory: Directory('${dir.path}/works'));
+    final source = await File('${dir.path}/original.png')
+        .writeAsBytes(image.encodePng(image.Image(2300, 120)));
+    final work = await repository.importImage(source, 'original.png');
+    final folder = await repository.folderFor(work);
+    final preview =
+        image.decodePng(await repository.previewFile(folder).readAsBytes())!;
+    expect(preview.width, 1920);
+    final provider =
+        OriginalArtworkImage(repository.originalFile(folder, work));
+    final stream = provider.resolve(ImageConfiguration.empty);
+    final resolution = Completer<(int, int)>();
+    final listener = ImageStreamListener((frame, _) {
+      resolution.complete((frame.image.width, frame.image.height));
+      frame.dispose();
+    }, onError: resolution.completeError);
+    stream.addListener(listener);
+    try {
+      expect(await resolution.future, (2300, 120));
+    } finally {
+      stream.removeListener(listener);
+      await provider.evict();
+    }
   });
 }

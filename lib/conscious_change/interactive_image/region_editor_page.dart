@@ -8,6 +8,7 @@ import 'artwork.dart';
 import 'artwork_canvas.dart';
 import 'artwork_repository.dart';
 import 'editor_dialogs.dart';
+import 'feedback_editor.dart';
 import 'interaction_player.dart';
 import 'local_recognition.dart';
 import 'region_geometry.dart';
@@ -281,11 +282,14 @@ class _RegionEditorPageState extends State<RegionEditorPage> {
     _showStatus('已删除「${region.label}」，可撤销。');
   }
 
-  Future<void> _previewInteraction({(ImageRegion, TouchAction)? trial}) async {
+  Future<void> _previewInteraction(
+      {(ImageRegion, List<FeedbackStep>)? trial}) async {
     await Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (context) => InteractionPlayer(
               artwork: widget.artwork,
-              file: _preview,
+              file:
+                  widget.repository.originalFile(widget.folder, widget.artwork),
+              fallback: _preview,
               regions: _regions,
               settings: widget.settings,
               openPage: widget.openPage,
@@ -294,8 +298,12 @@ class _RegionEditorPageState extends State<RegionEditorPage> {
   }
 
   Future<void> _editRules(ImageRegion region) async {
-    final updated = await editRegionRules(context, region,
-        (region, action) => _previewInteraction(trial: (region, action)));
+    final updated = await editRegionRules(
+        context,
+        widget.artwork,
+        region,
+        widget.settings,
+        (region, steps) => _previewInteraction(trial: (region, steps)));
     if (mounted && updated != null) {
       // Preserve rule edits on a candidate even if recognition is run again.
       _setRegion(updated.copyWith(edited: true));
@@ -592,7 +600,7 @@ class _RegionEditorPageState extends State<RegionEditorPage> {
             _buttons([
               FilledButton.tonal(
                   onPressed: () => _editRules(selected),
-                  child: const Text('手势与反馈')),
+                  child: const Text('手势与语音反馈')),
               OutlinedButton(
                   onPressed: () => _startPolygon(selected),
                   child: const Text('调整轮廓')),
@@ -646,5 +654,6 @@ class _RegionEditorPageState extends State<RegionEditorPage> {
           '已停用'
         else if (region.rules.isNotEmpty)
           '${region.rules.length} 个手势',
+        if (region.voiceRules.isNotEmpty) '${region.voiceRules.length} 个语音口令',
       ].join(' · ');
 }

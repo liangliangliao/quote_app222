@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -39,9 +40,9 @@ void main() {
               Offset(0.2, 0.65)
             ],
             rules: {
-              TouchGesture.tap: TouchAction.learning,
-              TouchGesture.hold: TouchAction.books,
-              TouchGesture.swipe: TouchAction.books
+              TouchGesture.tap: [FeedbackStep(TouchAction.learning)],
+              TouchGesture.hold: [FeedbackStep(TouchAction.books)],
+              TouchGesture.swipe: [FeedbackStep(TouchAction.books)]
             },
           ),
         ],
@@ -100,6 +101,61 @@ void main() {
     await tester.tapAt(transformedTarget);
     expect(actions, hasLength(4));
     expect(find.text('互动已暂停'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'runs feedback steps in order and uses the full canvas with the original image',
+      (tester) async {
+    final folder = Directory.systemTemp.createTempSync('interaction-chain-');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    final file = File('${folder.path}/original.png')
+      ..writeAsBytesSync(image.encodePng(image.Image(120, 60)));
+    final firstStep = Completer<void>();
+    final actions = <TouchAction>[];
+    await tester.pumpWidget(MaterialApp(
+        home: InteractionPlayer(
+      artwork: Artwork(
+          id: 'test',
+          title: '图片',
+          format: 'png',
+          width: 120,
+          height: 60,
+          createdAt: DateTime(2026)),
+      file: file,
+      settings: const FeedbackSettings(),
+      regions: const [
+        ImageRegion(
+            id: 'region',
+            label: '区域',
+            group: RegionGroup.object,
+            polygon: [
+              Offset(0.2, 0.2),
+              Offset(0.8, 0.2),
+              Offset(0.8, 0.8),
+              Offset(0.2, 0.8)
+            ],
+            rules: {
+              TouchGesture.tap: [
+                FeedbackStep(TouchAction.learning),
+                FeedbackStep(TouchAction.books)
+              ]
+            })
+      ],
+      openPage: (action) async {
+        actions.add(action);
+        if (action == TouchAction.learning) await firstStep.future;
+      },
+    )));
+    final finder = find.byType(ArtworkCanvas);
+    expect(tester.getRect(finder), tester.getRect(find.byType(Scaffold)));
+    expect(tester.widget<ArtworkCanvas>(finder).original, isTrue);
+    await tester.tapAt(tester.getCenter(finder));
+    await tester.pump();
+    expect(actions, [TouchAction.learning]);
+    firstStep.complete();
+    await tester.pump();
+    expect(actions, [TouchAction.learning, TouchAction.books]);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'artwork.dart';
+import 'original_artwork_image.dart';
 import 'region_geometry.dart';
 
 class ArtworkCoordinates {
@@ -19,6 +20,9 @@ class ArtworkCoordinates {
       MatrixUtils.transformPoint(transform.value, imagePoint(point, image));
 }
 
+const _imageError =
+    Center(child: Text('图片预览不可用', style: TextStyle(color: Colors.white)));
+
 typedef ArtworkPointer = void Function(
     PointerEvent event, ArtworkCoordinates coordinates);
 
@@ -29,6 +33,8 @@ class ArtworkCanvas extends StatelessWidget {
     required this.aspectRatio,
     required this.transform,
     required this.panEnabled,
+    this.original = false,
+    this.fallbackFile,
     this.regions = const [],
     this.selectedId,
     this.draft,
@@ -46,6 +52,8 @@ class ArtworkCanvas extends StatelessWidget {
   final double aspectRatio;
   final TransformationController transform;
   final bool panEnabled;
+  final bool original;
+  final File? fallbackFile;
   final List<ImageRegion> regions;
   final String? selectedId;
   final PolygonDraft? draft;
@@ -84,15 +92,24 @@ class ArtworkCanvas extends StatelessWidget {
                     children: [
                       Positioned.fromRect(
                         rect: image,
-                        child: Image.file(
-                          file,
-                          fit: BoxFit.fill,
+                        child: Image(
+                          image: original
+                              ? OriginalArtworkImage(file)
+                              : FileImage(file),
+                          fit: BoxFit.contain,
+                          filterQuality: original
+                              ? FilterQuality.high
+                              : FilterQuality.medium,
                           excludeFromSemantics: true,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Center(
-                            child: Text('图片预览不可用',
-                                style: TextStyle(color: Colors.white)),
-                          ),
+                          errorBuilder: (context, error, stackTrace) {
+                            final backup = fallbackFile;
+                            if (backup == null) return _imageError;
+                            return Image.file(backup,
+                                fit: BoxFit.contain,
+                                excludeFromSemantics: true,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    _imageError);
+                          },
                         ),
                       ),
                       IgnorePointer(

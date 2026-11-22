@@ -10,11 +10,13 @@ import io.flutter.embedding.engine.FlutterEngine
 import android.content.Intent
 
 import com.example.quote_app.interactiveimage.InteractiveImageChannel
+import com.example.quote_app.interactiveimage.InteractiveFeedbackChannel
 import com.example.quote_app.ppg.PpgCamera2Channel
 import com.example.quote_app.wallpaper.MystifyPreviewPlatformViewFactory
 
 class MainActivity : FlutterActivity() {
     private var interactiveImageChannel: InteractiveImageChannel? = null
+    private var interactiveFeedbackChannel: InteractiveFeedbackChannel? = null
 
 
     private fun maybeHandleNotificationIntent(intent: Intent?) {
@@ -94,6 +96,7 @@ class MainActivity : FlutterActivity() {
 
     @Deprecated("Deprecated in Android framework; kept for Health Connect permission contract bridge.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (interactiveFeedbackChannel?.onActivityResult(requestCode, resultCode, data) == true) return
         if (interactiveImageChannel?.onActivityResult(requestCode, resultCode, data) == true) return
         if (MentalHealthCheckupPlatform.handleActivityResult(requestCode, resultCode, data)) return
         if (HealthDietHealthConnectChannel.handleActivityResult(requestCode, resultCode, data)) return
@@ -105,6 +108,7 @@ class MainActivity : FlutterActivity() {
         // 仅注册通道；不引入业务逻辑，避免后续维护成本
         Channels.register(flutterEngine, applicationContext)
         interactiveImageChannel = InteractiveImageChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        interactiveFeedbackChannel = InteractiveFeedbackChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         PrpAlarmBridge.register(flutterEngine, applicationContext)
         WillMirrorV28Vault(flutterEngine.dartExecutor.binaryMessenger)
 		// 高精度 PPG：Android Camera2（含可选预览）
@@ -126,7 +130,14 @@ class MainActivity : FlutterActivity() {
 	        // 为避免 handler 被覆盖导致系统/权限相关方法丢失，这里不再重复注册 SysChannel。
     }
 
+    override fun onPause() {
+        interactiveFeedbackChannel?.stopVoice()
+        super.onPause()
+    }
+
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        interactiveFeedbackChannel?.dispose()
+        interactiveFeedbackChannel = null
         interactiveImageChannel?.dispose()
         interactiveImageChannel = null
         super.cleanUpFlutterEngine(flutterEngine)

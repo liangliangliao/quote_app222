@@ -8,6 +8,7 @@ import 'artwork.dart';
 import 'artwork_repository.dart';
 import 'editor_dialogs.dart';
 import 'local_recognition.dart';
+import 'original_artwork_image.dart';
 import 'region_editor_page.dart';
 
 class InteractiveImageHomePage extends StatefulWidget {
@@ -116,6 +117,12 @@ class _InteractiveImageHomePageState extends State<InteractiveImageHomePage> {
                 settings: settings,
                 openPage: _openMappedPage,
               )));
+      try {
+        await _repository.cleanUnusedMedia(
+            folder, await _repository.loadEdits(folder));
+      } on FileSystemException {
+        // Keep the last saved rules and retry cleanup when the work is opened again.
+      }
     } catch (_) {
       if (mounted) _message('无法打开这件作品，或读取交互设置。');
     } finally {
@@ -199,7 +206,9 @@ class _InteractiveImageHomePageState extends State<InteractiveImageHomePage> {
   Future<void> _clearCache() async {
     if (Platform.isAndroid)
       await interactiveImageChannel.invokeMethod<void>('clearImportCache');
-    for (final (_, folder) in _works ?? const <(Artwork, Directory)>[]) {
+    for (final (artwork, folder) in _works ?? const <(Artwork, Directory)>[]) {
+      await OriginalArtworkImage(_repository.originalFile(folder, artwork))
+          .evict();
       await FileImage(_repository.previewFile(folder)).evict();
       await FileImage(_repository.thumbnailFile(folder)).evict();
     }
@@ -383,6 +392,14 @@ class _SettingsSheetState extends State<_SettingsSheet> {
       });
   }
 
+  Future<void> _changeWakePhrase() async {
+    final value = await askForName(context,
+        title: '更改唤醒提示词', field: '唤醒提示词', initial: _settings.wakePhrase);
+    if (mounted && value != null && normalizeCommand(value).isNotEmpty) {
+      setState(() => _settings = _settings.copyWith(wakePhrase: value));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => SafeArea(
         child: SingleChildScrollView(
@@ -415,11 +432,25 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 value: _settings.vibration,
                 onChanged: (value) => setState(
                     () => _settings = _settings.copyWith(vibration: value))),
+            const Divider(),
+            ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.mic_none),
+                title: const Text('语音唤醒提示词'),
+                subtitle: Text(_settings.wakePhrase),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: _changeWakePhrase),
+            SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('允许系统语音识别'),
+                subtitle: const Text('端侧识别不可用时，允许系统服务识别预览中的语音，服务可能联网。'),
+                value: _settings.allowSystemSpeech,
+                onChanged: (value) => setState(() =>
+                    _settings = _settings.copyWith(allowSystemSpeech: value))),
             Wrap(spacing: 8, children: [
               TextButton(
-                  onPressed: () => setState(() => _settings =
-                      const FeedbackSettings(
-                          visual: false, sound: false, vibration: false)),
+                  onPressed: () => setState(() => _settings = _settings
+                      .copyWith(visual: false, sound: false, vibration: false)),
                   child: const Text('关闭全部反馈')),
               TextButton(
                   onPressed: () =>

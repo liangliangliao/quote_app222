@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'artwork.dart';
+import 'original_artwork_image.dart';
 
 const maxArtworkBytes = 25 * 1024 * 1024;
 const _maxSourcePixels = 32 * 1000 * 1000;
@@ -43,6 +44,29 @@ class ArtworkRepository {
       }
     }
     return root;
+  }
+
+  File originalFile(Directory folder, Artwork artwork) =>
+      File(p.join(folder.path, 'original.${artwork.format}'));
+
+  File mediaFile(Directory folder, String name) {
+    if (!validFeedbackMediaName(name)) throw const FormatException();
+    return File(p.join(folder.path, 'media', name));
+  }
+
+  Future<void> cleanUnusedMedia(Directory folder, ArtworkEdits saved) async {
+    final media = Directory(p.join(folder.path, 'media'));
+    if (!await media.exists()) return;
+    final referenced = {
+      for (final region in saved.regions)
+        for (final step in region.allSteps)
+          if (step.action.isFile) step.value,
+    };
+    await for (final file in media.list(followLinks: false)) {
+      if (file is File && !referenced.contains(p.basename(file.path))) {
+        await file.delete();
+      }
+    }
   }
 
   File previewFile(Directory folder) =>
@@ -236,6 +260,7 @@ class ArtworkRepository {
 
   Future<void> delete(Artwork artwork) async {
     final source = await _folder(artwork.id);
+    await OriginalArtworkImage(originalFile(source, artwork)).evict();
     await FileImage(previewFile(source)).evict();
     await FileImage(thumbnailFile(source)).evict();
     final removed = await source

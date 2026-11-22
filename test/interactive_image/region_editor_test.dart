@@ -60,20 +60,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('书架'), findsWidgets);
 
-    await tester.scrollUntilVisible(find.text('手势与反馈'), 120,
+    await tester.scrollUntilVisible(find.text('手势与语音反馈'), 120,
         scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('手势与反馈'));
+    await tester.tap(find.text('手势与语音反馈'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<TouchAction>).first);
+    await tester.ensureVisible(find.text('点击'));
+    await tester.tap(find.text('点击'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('高亮区域').last);
+    for (final feedback in ['高亮区域', '轻震动']) {
+      await tester.tap(find.text('添加反馈'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(feedback).last);
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.byTooltip('反馈步骤选项').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('上移'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存顺序'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('保存规则'));
     await tester.tap(find.text('保存规则'));
     await tester.pumpAndSettle();
     expect(find.textContaining('1 个手势'), findsWidgets);
-    expect(repository.saved.regions.single.rules[TouchGesture.tap],
-        TouchAction.highlight);
+    expect(repository.saved.regions.single.rules[TouchGesture.tap], const [
+      FeedbackStep(TouchAction.vibration),
+      FeedbackStep(TouchAction.highlight),
+    ]);
   });
 }
 

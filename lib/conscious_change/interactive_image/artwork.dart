@@ -2,6 +2,9 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'feedback.dart';
+export 'feedback.dart';
+
 String newArtworkId() {
   final random = Random.secure();
   return List.generate(
@@ -94,18 +97,6 @@ enum TouchGesture {
   final String label;
 }
 
-enum TouchAction {
-  highlight('高亮区域'),
-  pulse('区域脉冲动画'),
-  sound('短提示音'),
-  vibration('轻震动'),
-  learning('打开学习模块'),
-  books('打开书籍下载');
-
-  const TouchAction(this.label);
-  final String label;
-}
-
 class ImageRegion {
   const ImageRegion({
     required this.id,
@@ -120,6 +111,7 @@ class ImageRegion {
     this.enabled = true,
     this.edited = false,
     this.rules = const {},
+    this.voiceRules = const [],
   });
 
   factory ImageRegion.fromJson(Map<String, dynamic> json) => ImageRegion(
@@ -136,10 +128,14 @@ class ImageRegion {
         edited: json['edited'] as bool? ?? false,
         rules: {
           for (final gesture in TouchGesture.values)
-            for (final action in TouchAction.values)
-              if ((json['rules'] as Map?)?[gesture.name] == action.name)
-                gesture: action,
+            if (feedbackChainFromJson((json['rules'] as Map?)?[gesture.name])
+                case final steps when steps.isNotEmpty)
+              gesture: steps,
         },
+        voiceRules: [
+          for (final entry in json['voiceRules'] as List? ?? const [])
+            if (VoiceFeedback.fromJson(entry) case final rule?) rule,
+        ],
       );
 
   final String id;
@@ -153,7 +149,17 @@ class ImageRegion {
   final int priority;
   final bool enabled;
   final bool edited;
-  final Map<TouchGesture, TouchAction> rules;
+  final Map<TouchGesture, List<FeedbackStep>> rules;
+  final List<VoiceFeedback> voiceRules;
+
+  Iterable<FeedbackStep> get allSteps sync* {
+    for (final chain in rules.values) {
+      yield* chain;
+    }
+    for (final voiceRule in voiceRules) {
+      yield* voiceRule.steps;
+    }
+  }
 
   ImageRegion copyWith({
     String? label,
@@ -163,7 +169,8 @@ class ImageRegion {
     int? priority,
     bool? enabled,
     bool? edited,
-    Map<TouchGesture, TouchAction>? rules,
+    Map<TouchGesture, List<FeedbackStep>>? rules,
+    List<VoiceFeedback>? voiceRules,
   }) =>
       ImageRegion(
         id: id,
@@ -178,6 +185,7 @@ class ImageRegion {
         enabled: enabled ?? this.enabled,
         edited: edited ?? this.edited,
         rules: rules ?? this.rules,
+        voiceRules: voiceRules ?? this.voiceRules,
       );
 
   Map<String, Object?> toJson() => {
@@ -192,8 +200,9 @@ class ImageRegion {
         'priority': priority,
         'enabled': enabled,
         'edited': edited,
-        'rules':
-            rules.map((gesture, action) => MapEntry(gesture.name, action.name)),
+        'rules': rules.map((gesture, steps) => MapEntry(
+            gesture.name, steps.map((step) => step.toJson()).toList())),
+        'voiceRules': voiceRules.map((rule) => rule.toJson()).toList(),
       };
 }
 
@@ -290,7 +299,7 @@ class ArtworkEdits {
       );
 
   Map<String, Object?> toJson() => {
-        'version': 1,
+        'version': 2,
         'regions': regions.map((region) => region.toJson()).toList(),
         'targetId': targetId,
         'lastAnalysisId': lastAnalysisId,
@@ -304,6 +313,8 @@ class FeedbackSettings {
     this.visual = true,
     this.sound = true,
     this.vibration = true,
+    this.wakePhrase = defaultWakePhrase,
+    this.allowSystemSpeech = false,
   });
 
   factory FeedbackSettings.fromJson(Map<String, dynamic> json) =>
@@ -311,19 +322,35 @@ class FeedbackSettings {
         visual: json['visual'] as bool? ?? true,
         sound: json['sound'] as bool? ?? true,
         vibration: json['vibration'] as bool? ?? true,
+        wakePhrase: json['wakePhrase'] as String? ?? defaultWakePhrase,
+        allowSystemSpeech: json['allowSystemSpeech'] as bool? ?? false,
       );
 
   final bool visual;
   final bool sound;
   final bool vibration;
+  final String wakePhrase;
+  final bool allowSystemSpeech;
 
-  FeedbackSettings copyWith({bool? visual, bool? sound, bool? vibration}) =>
+  FeedbackSettings copyWith(
+          {bool? visual,
+          bool? sound,
+          bool? vibration,
+          String? wakePhrase,
+          bool? allowSystemSpeech}) =>
       FeedbackSettings(
         visual: visual ?? this.visual,
         sound: sound ?? this.sound,
         vibration: vibration ?? this.vibration,
+        wakePhrase: wakePhrase ?? this.wakePhrase,
+        allowSystemSpeech: allowSystemSpeech ?? this.allowSystemSpeech,
       );
 
-  Map<String, bool> toJson() =>
-      {'visual': visual, 'sound': sound, 'vibration': vibration};
+  Map<String, Object> toJson() => {
+        'visual': visual,
+        'sound': sound,
+        'vibration': vibration,
+        'wakePhrase': wakePhrase,
+        'allowSystemSpeech': allowSystemSpeech,
+      };
 }
