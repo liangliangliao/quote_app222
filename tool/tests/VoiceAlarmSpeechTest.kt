@@ -78,10 +78,53 @@ fun main() {
   fun route(text: String, sources: List<String> = emptyList(), mixed: Boolean = false,
             final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed,
             local: Boolean = false, overlapConfirmed: Boolean = false, stableDraft: Boolean = false,
-            nearEndSpeech: Boolean = false, spokenPlayback: Boolean = false) =
+            nearEndSpeech: Boolean = false, spokenPlayback: Boolean = false,
+            systemOverlap: VoiceAlarmConversationGate.SystemOverlap? = null) =
     VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = local,
       passive = passive, overlapConfirmed = overlapConfirmed, stableDraft = stableDraft,
-      nearEndSpeech = nearEndSpeech, spokenPlayback = spokenPlayback)
+      nearEndSpeech = nearEndSpeech, spokenPlayback = spokenPlayback, systemOverlap = systemOverlap)
+
+  scenario("both reported system questions go straight to chat over music without RMS or manual confirmation") {
+    val music = VoiceAlarmCapture(1, true, "music", 9).finish(2, false)
+    check(!music.quietSpeech && music.systemOverlap == VoiceAlarmConversationGate.SystemOverlap.MUSIC)
+    for (text in listOf("今天有没有大的新闻发生啊", "今天有什么大的新闻吗")) {
+      val result = route(text, music.sources, mixed = music.mixed, systemOverlap = music.systemOverlap)
+      check(result.route == send && result.text == text)
+      check(route(text, mixed = true, reliable = false, systemOverlap = music.systemOverlap).route == relisten)
+    }
+    check(route("我不知道今天有没有大的新闻", mixed = true, systemOverlap = music.systemOverlap).route == ignore)
+    check(route("关闭闹钟", mixed = true, local = true, systemOverlap = music.systemOverlap).route == relisten)
+  }
+  scenario("a new system question can interrupt spoken playback even without a partial or wake phrase") {
+    val reminder = listOf("早上好，新的一天开始了。愿你平静、专注、充满力量。")
+    val capture = VoiceAlarmCapture(3, true, "voice", 9, initialSpokenEpoch = 4L, startedDuringSpokenOutput = true)
+    capture.note(reminder)
+    val atEnd = capture.finish(3, true, "voice", spokenEpoch = 4L, recentSpokenOutput = true)
+    val question = "今天有什么大的新闻吗"
+    check(atEnd.systemOverlap == VoiceAlarmConversationGate.SystemOverlap.SPOKEN)
+    check(route(question, atEnd.sources, atEnd.mixed, spokenPlayback = atEnd.spokenPlayback,
+      systemOverlap = atEnd.systemOverlap).let { it.route == send && it.text == question })
+    check(route(question, mixed = true, spokenPlayback = true, systemOverlap = atEnd.systemOverlap).route == ignore)
+    check(route("愿你平静专注充满力量", reminder, mixed = true, spokenPlayback = true,
+      systemOverlap = atEnd.systemOverlap).route == echo)
+    check(route("今天的天汽如何", listOf("今天的天气如何？"), mixed = true, spokenPlayback = true,
+      systemOverlap = atEnd.systemOverlap).route in setOf(ignore, echo))
+    check(route("关闭闹钟", reminder, mixed = true, spokenPlayback = true,
+      local = true, systemOverlap = atEnd.systemOverlap).route == relisten)
+  }
+  scenario("stable system words pause playback and retain the recognizer for the final sentence") {
+    val reminder = listOf("早上好，先喝水，再活动一下。")
+    val capture = VoiceAlarmCapture(3, true, "voice")
+    check(!capture.confirmedPause("今天有什么", 100L, reminder, system = true))
+    check(!capture.confirmedPause("今天有什么大新闻", 200L, reminder, system = true))
+    check(capture.confirmedPause("今天有什么大新闻吗", 400L, reminder, system = true))
+    check(!capture.confirmedPause("今天有什么大新闻吗", 600L, reminder, system = true))
+    val wake = VoiceAlarmCapture(3, true, "voice")
+    check(!wake.confirmedPause("我来说", 100L, reminder, system = true))
+    check(wake.confirmedPause("我来说", 300L, reminder, system = true))
+    check(route("暂停播报", reminder, mixed = true, spokenPlayback = true,
+      systemOverlap = VoiceAlarmConversationGate.SystemOverlap.SPOKEN).route == mic)
+  }
 
   scenario("native final remembers an entire spoken playback with no speech-start, RMS, or partial callbacks") {
     val capture = VoiceAlarmCapture(10, false, initialSpokenEpoch = 4L)

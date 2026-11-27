@@ -99,16 +99,18 @@ object VoiceAlarmSpeechPolicy {
 /** Accept a clean final from an open conversation or a direct question during alarm standby. */
 object VoiceAlarmConversationGate {
   enum class Route { ECHO, DRAFT, IGNORE, REVIEW, RELISTEN, OPEN_MIC, LOCAL, SEND }
+  enum class SystemOverlap { MUSIC, SPOKEN }
   enum class RetryReason { INCOMPLETE, PLAYBACK_OVERLAP }
   data class Decision(val route: Route, val text: String, val retryReason: RetryReason? = null)
-  private val interruptPhrases = setOf("打断一下", "请打断一下", "先听我说", "请先听我说", "先暂停播报", "请暂停播报")
+  private val interruptPhrases = setOf("打断一下", "请打断一下", "先听我说", "请先听我说", "先暂停播报", "请暂停播报",
+    "暂停播报", "暂停一下", "先等一下", "我来说", "让我说")
   private val address = Regex("""^(小名小名|闹钟助手|你好AI|AI助手|(?:小名|助手)(?=$|[\s，。！？、：,:.!?]))[\s，。！？、：,:.!?]*""", RegexOption.IGNORE_CASE)
   // Android recognition often omits question marks. Use grammatical cues, keeping the original transcript.
   private val questionStart = Regex("^(?:为什么|为何|怎么|怎样|如何|能否|可否|能不能|可不可以|是不是|要不要|有没有).+")
-  private val questionWords = Regex("(?:什么|谁|哪里|哪儿|哪[个位种些天年本条项部]|多少|几[个位种天点分秒次岁条件篇项名本部]|为什么|为何|怎么|怎样|如何|在不在|听不听得[见到])")
+  private val questionWords = Regex("(?:什么|谁|哪里|哪儿|哪[个位种些天年本条项部]|多少|几[个位种天点分秒次岁条件篇项名本部]|为什么|为何|怎么|怎样|如何|有没有|是不是|在不在|听不听得[见到])")
   private val reportedSpeech = Regex("^(?:[我你他她您]们?|大家|有人|别人)?(?:已经|早就|也)?(?:不知道|知道|记得|听说|在讨论|问过|告诉过|说过|想知道)")
   private val indefinite = Regex("^(?:无论|不管|随便).+|.+(?:都可以|都行|都一样|都没关系)$")
-  private val directRequest = Regex("^(?:请问|能帮我|请?(?:帮我|提醒我|告诉我|介绍一下|解释一下|说说|讲讲)).+|^(?:继续说|继续讲|接着说|接着讲|换一个|陪我聊聊|跟我聊聊|我(?:已经|刚)?(?:起床|起来|醒)了)$")
+  private val directRequest = Regex("^(?:请问|能帮我|请?(?:帮我|提醒我|告诉我|介绍一下|解释一下|说说|讲讲|查一下|搜一下)).+|^(?:继续说|继续讲|接着说|接着讲|换一个|陪我聊聊|跟我聊聊|我(?:已经|刚)?(?:起床|起来|醒)了)$")
 
   private fun isDirectQuestion(text: String): Boolean {
     val normalized = VoiceAlarmSpeechPolicy.normalized(text)
@@ -128,9 +130,32 @@ object VoiceAlarmConversationGate {
 
   private fun looksDirected(text: String): Boolean = isDirectQuestion(text) || directRequest.matches(VoiceAlarmSpeechPolicy.normalized(text))
 
+  private fun specificRequest(text: String, minimumLength: Int = 6): Boolean {
+    val body = withoutAddress(text)
+    val addressed = body != text
+    return VoiceAlarmSpeechPolicy.normalized(body).length >= (if (addressed) 4 else minimumLength) &&
+      (looksDirected(body) || addressed)
+  }
+
+  // A single misrecognized character changes at most two adjacent pairs. A
+  // question made up of playback words, even with such a typo, is not a barge-in.
+  private fun distinctFromSpoken(text: String, sources: List<String>): Boolean {
+    val playback = sources.map(VoiceAlarmSpeechPolicy::normalized).filter { it.isNotEmpty() }
+    if (playback.isEmpty()) return false
+    val pairs = VoiceAlarmSpeechPolicy.normalized(withoutAddress(text)).windowed(2).toSet()
+    return pairs.count { pair -> playback.none { it.contains(pair) } } >= maxOf(3, pairs.size / 2)
+  }
+
+  fun canPauseSystemPlayback(text: String, sources: List<String>): Boolean {
+    val addressed = withoutAddress(text)
+    return isInterruption(text) || addressed.isEmpty() ||
+      ((specificRequest(text, minimumLength = 5) || VoiceAlarmCommands.isStop(text)) && distinctFromSpoken(text, sources))
+  }
+
   fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
              armed: Boolean, localCommand: Boolean, passive: Boolean, overlapConfirmed: Boolean = false,
-             stableDraft: Boolean = false, nearEndSpeech: Boolean = false, spokenPlayback: Boolean = false): Decision {
+             stableDraft: Boolean = false, nearEndSpeech: Boolean = false, spokenPlayback: Boolean = false,
+             systemOverlap: SystemOverlap? = null): Decision {
     val text = raw.trim()
     val prefix = address.find(text)
     val question = prefix?.let { text.substring(it.range.last + 1).trim() }
@@ -141,13 +166,20 @@ object VoiceAlarmConversationGate {
     val corroboratedRequest = nearEndSpeech && reliable && !localCommand && matchesRequest
     val unverifiedOverlap = (mixed || sources.isNotEmpty()) && !overlapConfirmed && !corroboratedRequest
     val usableDraft = stableDraft && !unverifiedOverlap && !localCommand && !opensMic && looksDirected(question ?: text)
+    val distinctSystemSpeech = systemOverlap == SystemOverlap.SPOKEN && distinctFromSpoken(text, sources)
+    val completeSystemRequest = reliable && !opensMic && !localCommand && specificRequest(text) && when (systemOverlap) {
+      SystemOverlap.MUSIC -> !spokenPlayback && sources.isEmpty()
+      SystemOverlap.SPOKEN -> distinctSystemSpeech
+      null -> false
+    }
     val route = when {
       text.isEmpty() -> Route.DRAFT
       VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
       !final -> Route.DRAFT
-      // A delayed final from a turn that heard our speaker cannot become a chat
-      // message or execute a command, even if the microphone was quiet later.
-      spokenPlayback && !opensMic -> return if (localCommand || question != null || (matchesRequest && overlapConfirmed)) {
+      // Only a complete, directed system final may cross the playback guard.
+      completeSystemRequest -> Route.SEND
+      spokenPlayback && !opensMic -> return if (localCommand || question != null ||
+        (matchesRequest && (overlapConfirmed || distinctSystemSpeech))) {
         Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP)
       } else Decision(Route.IGNORE, "")
       !reliable && !usableDraft -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.INCOMPLETE) else Decision(Route.IGNORE, "")
@@ -189,6 +221,12 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
     val spokenPlayback: Boolean = false,
   ) {
     val hasPlaybackOverlap get() = spokenPlayback || mixed || sources.isNotEmpty()
+    val systemOverlap get() = when {
+      spokenPlayback -> VoiceAlarmConversationGate.SystemOverlap.SPOKEN
+      sources.isEmpty() && mixCause in setOf("start_music", "frame_music", "end_music") ->
+        VoiceAlarmConversationGate.SystemOverlap.MUSIC
+      else -> null
+    }
     fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
     fun matchesConfirmedCue(text: String) =
       confirmedCue.isNotEmpty() && VoiceAlarmSpeechPolicy.normalized(text).startsWith(confirmedCue)
@@ -213,10 +251,12 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
     private set
 
   // A stable, directed partial may pause spoken playback while the same turn keeps recording.
-  @Synchronized fun confirmedPause(text: String, now: Long, currentSources: List<String>): Boolean {
+  @Synchronized fun confirmedPause(text: String, now: Long, currentSources: List<String>, system: Boolean = false): Boolean {
     val cue = VoiceAlarmSpeechPolicy.normalized(text)
     val allSources = (sources + currentSources).toList()
-    if (sealed || allSources.isEmpty() || cue.length < 4 || !VoiceAlarmConversationGate.canPauseForSpeech(text) ||
+    val directed = if (system) VoiceAlarmConversationGate.canPauseSystemPlayback(text, allSources)
+      else VoiceAlarmConversationGate.canPauseForSpeech(text)
+    if (sealed || confirmedCue.isNotEmpty() || allSources.isEmpty() || cue.length < 3 || !directed ||
         VoiceAlarmSpeechPolicy.isEcho(text, allSources, true, partial = true)) {
       pendingCue = ""
       return false

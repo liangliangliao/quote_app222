@@ -123,6 +123,23 @@ class VoiceAlarmNativeRecovery {
   }
   fun localUnavailable() { onDevice = false }
 
+  // The default recognizer may use a remote service even in system mode.
+  // Only request offline proactively when it reports installed Chinese.
+  fun preferInstalledChinese() {
+    if (!onDevice && !triedDefaultOffline) {
+      triedDefaultOffline = true
+      preferOffline = true
+    }
+  }
+
+  private fun tryOnDevice(localAvailable: Boolean): Retry? {
+    if (!localAvailable || triedOnDevice) return null
+    triedOnDevice = true
+    onDevice = true
+    missedSpeech = 0
+    return Retry(100, replaceEngine = true)
+  }
+
   fun failed(kind: Failure, localAvailable: Boolean, expectedSpeech: Boolean = false,
              allowDefaultOffline: Boolean = false, recoverEmptyQuietTurn: Boolean = false): Retry? {
     if (kind == Failure.PERMISSION) return null
@@ -138,15 +155,11 @@ class VoiceAlarmNativeRecovery {
       offlineVerified = false
       trialEmptyResults = 0
       missedSpeech = 0
+      if (kind == Failure.NETWORK || repeatMiss) tryOnDevice(localAvailable)?.let { return it }
       return Retry(120, replaceEngine = true)
     }
     if (kind == Failure.NETWORK || repeatMiss) {
-      if (!triedOnDevice && localAvailable) {
-        triedOnDevice = true
-        onDevice = true
-        missedSpeech = 0
-        return Retry(100, replaceEngine = true)
-      }
+      tryOnDevice(localAvailable)?.let { return it }
       if (!triedDefaultOffline && allowDefaultOffline && !onDevice) {
         triedDefaultOffline = true
         preferOffline = true

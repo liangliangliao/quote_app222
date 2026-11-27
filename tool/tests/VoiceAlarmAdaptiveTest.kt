@@ -77,6 +77,19 @@ fun main() {
     check(policy.failed(VoiceAlarmNativeRecovery.Failure.LANGUAGE, true)!!.replaceEngine && !policy.onDevice)
     check(!policy.failed(network, true)!!.replaceEngine && !policy.onDevice)
   }
+  scenario("installed Chinese prefers offline on the default engine and timeout can still try dedicated local") {
+    val policy = VoiceAlarmNativeRecovery()
+    val network = VoiceAlarmNativeRecovery.Failure.NETWORK
+    check(!policy.preferOffline && !policy.onDevice)
+    policy.preferInstalledChinese()
+    check(policy.preferOffline && !policy.onDevice)
+    check(policy.failed(network, true)!!.replaceEngine)
+    check(policy.onDevice && !policy.preferOffline)
+    check(policy.failed(network, true)!!.replaceEngine)
+    check(!policy.onDevice && !policy.preferOffline)
+    policy.preferInstalledChinese()
+    check(!policy.preferOffline)
+  }
   scenario("empty no-match rearms fast while persistent network failure has a bounded retry delay") {
     val policy = VoiceAlarmNativeRecovery()
     val network = VoiceAlarmNativeRecovery.Failure.NETWORK
