@@ -73,7 +73,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "voice_turn_reliability_v52"
+  private val batchChatPipelineVersion = "voice_turn_reliability_v53"
   private val batchChatPipelineSummary = "持续收音、完整转写、云识别重试与系统识别兜底"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
@@ -768,6 +768,7 @@ class VoiceAlarmActivity : Activity() {
   }
   private var listenReason: ListenReason? = null
   private val requestedTurn get() = listenReason != null
+  private val quietNativeTurn get() = listenReason?.interrupt == true && selectedSttProvider() == "native"
   private var conversationActiveUntil = 0L
   private var listenWindow = VoiceAlarmListenWindow(25000L)
   private var nextWindowId = 0L
@@ -792,7 +793,7 @@ class VoiceAlarmActivity : Activity() {
     if (requestedTurn) listenWindow.ready(nowUptime())
     micStatus(when (listenReason) {
       ListenReason.AFTER_REPLY -> "可以直接追问"
-      ListenReason.RETRY -> "可以说话了 · 请再说一遍"
+      ListenReason.RETRY -> if (quietNativeTurn) "可以说话了 · 背景音乐已临时静音" else "可以说话了 · 请再说一遍"
       ListenReason.AFTER_REMINDER, ListenReason.MANUAL -> "可以说话了"
       null -> when {
         VoiceAlarmRingingService.hasRecentVoiceOutput() -> "麦克风待命 · 听到提问时自动暂停播放"
@@ -813,15 +814,21 @@ class VoiceAlarmActivity : Activity() {
         return
       }
       val needsRestart = waitingForQuiet
+      val expiredNativeCapture = quietNativeTurn && nativeTurn.active
       endRequestedTurn()
+      if (expiredNativeCapture) stopNativeRecognizer()
       micStatus("语音待命 · 安静时可以直接提问")
-      if (needsRestart && !destroyed && !closingAlarm) startVoiceAssistant()
+      if ((needsRestart || expiredNativeCapture) && !destroyed && !closingAlarm) startVoiceAssistant()
     }
   }
   private val startQuietCapture = object : Runnable {
     override fun run() {
       if (!requestedTurn || destroyed || closingAlarm) return
-      if (VoiceAlarmRingingService.hasRecentVoiceOutput()) {
+      val needsQuiet = quietNativeTurn
+      if (needsQuiet) muteForQuietCapture(true)
+      val outputStillAudible = if (needsQuiet) VoiceAlarmRingingService.outputKind() != "quiet"
+        else VoiceAlarmRingingService.hasRecentVoiceOutput()
+      if (outputStillAudible) {
         speechHandler.postDelayed(this, 60L)
         return
       }
@@ -836,6 +843,7 @@ class VoiceAlarmActivity : Activity() {
     speechHandler.removeCallbacks(startQuietCapture)
     waitingForQuiet = false
     listenReason = null
+    muteForQuietCapture(false)
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.LISTEN_REQUEST, mixerOwner, false)
   }
 
@@ -857,6 +865,7 @@ class VoiceAlarmActivity : Activity() {
       interruptPlaybackForUserSpeech("重新聆听")
       stopNativeRecognizer()
       if (reason == ListenReason.MANUAL) stopCloudStt()
+      if (quietNativeTurn) muteForQuietCapture(true)
       speechHandler.post(startQuietCapture)
     } else if (nativeTurn.ready || sharedCaptureRecord != null) {
       micReady()
@@ -866,6 +875,9 @@ class VoiceAlarmActivity : Activity() {
 
 
   private val mixerOwner = Any()
+  private fun muteForQuietCapture(active: Boolean) =
+    VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.QUIET_CAPTURE, mixerOwner, active)
+
   private fun userSpeaking(active: Boolean) =
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.USER, mixerOwner, active)
 
@@ -975,7 +987,8 @@ class VoiceAlarmActivity : Activity() {
   private var nativeTurnNumber = 0L
   private fun logNative(stage: String, error: Int? = null, chars: Int? = null) {
     logVoice("stt.native.$stage", "system recognizer", mapOf("turn" to nativeTurnNumber,
-      "epoch" to nativeRecognizerEpoch, "engine" to nativeEngine(), "error" to error, "chars" to chars))
+      "epoch" to nativeRecognizerEpoch, "engine" to nativeEngine(), "error" to error, "chars" to chars,
+      "quietCapture" to quietNativeTurn, "output" to VoiceAlarmRingingService.outputKind()))
   }
   private var nativeRestart: Runnable? = null
   private var nativeRestartDue = 0L
@@ -1230,6 +1243,7 @@ class VoiceAlarmActivity : Activity() {
   private fun startVoiceAssistant() {
     if (destroyed || waitingForQuiet) return
     if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+      endRequestedTurn()
       stopCloudStt()
       transcriptView?.text = "无法录音：麦克风权限未授权。请在应用设置中授权；也可以输入文字继续对话。"
       return
@@ -1276,12 +1290,14 @@ class VoiceAlarmActivity : Activity() {
     stopCloudStt()
     stopNativeRecognizer()
     if (!nativeRecovery.onDevice && !SpeechRecognizer.isRecognitionAvailable(this)) {
+      endRequestedTurn()
       micStatus("系统识别不可用")
       transcriptView?.text = "当前设备没有可用语音识别服务，可使用屏幕按钮。"
       return
     }
     val epoch = nativeRecognizerEpoch
     val engine = try { createSpeechRecognizerCompat() } catch (e: RuntimeException) {
+      endRequestedTurn()
       logVoice("stt.native.create.error", "recognizer unavailable", mapOf("type" to e.javaClass.simpleName))
       transcriptView?.text = "系统语音识别服务暂不可用，可点重新聆听。"
       return
@@ -1357,6 +1373,7 @@ class VoiceAlarmActivity : Activity() {
           }
           if (retained.isNotBlank()) onSpeechChunk(retained, finalChunk = true, evidence = evidence, reliable = false, stableDraft = stableDraft)
           if (retry == null) {
+            endRequestedTurn()
             transcriptView?.text = if (kind == VoiceAlarmNativeRecovery.Failure.PERMISSION) "麦克风权限不可用，请授权后重试。"
               else "系统识别服务暂不支持中文，请安装中文识别或选择已配置的服务商。"
             return
@@ -1370,7 +1387,7 @@ class VoiceAlarmActivity : Activity() {
             micIssue = if (retained.isBlank()) "上一轮网络超时，未返回文字。" else "上一轮网络超时，已保留转写草稿。"
             micStatus(if (nativeRecovery.onDevice || nativeRecovery.preferOffline) "网络识别超时，正在尝试本机识别…" else "网络识别超时，正在重连…")
           }
-          if (kind == VoiceAlarmNativeRecovery.Failure.NO_MATCH && expectedSpeech && retained.isBlank()) {
+          if (kind == VoiceAlarmNativeRecovery.Failure.NO_MATCH && retained.isBlank() && (expectedSpeech || quietNativeTurn)) {
             micIssue = if (nativeSignal.detected) "上一轮检测到了声音，识别服务未返回文字。" else "上一轮未返回文字。"
             micStatus("正在恢复收音…")
           }
@@ -1398,6 +1415,7 @@ class VoiceAlarmActivity : Activity() {
             nativeTurn.notePlayback(currentVoiceSources())
             nativeEvidence()
             userSpeaking(false)
+            if (quietNativeTurn) muteForQuietCapture(false)
             nativeTurn.endSpeech()
             if (nativeTurn.ready && requestedTurn) listenWindow.awaitingFinal(nowUptime())
             logNative("speechEnd")
@@ -3475,6 +3493,11 @@ class VoiceAlarmActivity : Activity() {
         startVoiceAssistant()
         if (recognizer == null) return@Runnable
       }
+      val needsQuiet = quietNativeTurn
+      if (needsQuiet) {
+        muteForQuietCapture(true)
+        if (VoiceAlarmRingingService.outputKind() != "quiet") { listenAgain(60L); return@Runnable }
+      }
       val endpoint = endpointingConfig()
       val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -3491,7 +3514,8 @@ class VoiceAlarmActivity : Activity() {
       try {
         val r = recognizer ?: return@Runnable
         if (!nativeTurn.begin()) return@Runnable
-        nativeCapture = null
+        // Some engines return a final without reporting speech start, partials or RMS.
+        nativeCapture = if (needsQuiet) newCapture() else null
         nativeSignal = VoiceAlarmNativeSignal()
         nativeStartedAt = nowUptime()
         nativeReadyAt = 0L
@@ -4019,9 +4043,12 @@ class VoiceAlarmActivity : Activity() {
       VoiceAlarmConversationGate.Route.RELISTEN -> {
         if (aiBusy || speechBuffer.isNotBlank()) return
         if (listenReason != ListenReason.RETRY) startRequestedTurn(ListenReason.RETRY)
-        if (reliable && evidence.nearEndSpeech && decision.retryReason == VoiceAlarmConversationGate.RetryReason.PLAYBACK_OVERLAP) {
+        val nativeMusicOverlap = quietNativeTurn && evidence.sources.isEmpty() &&
+          evidence.mixCause in setOf("start_music", "frame_music", "end_music")
+        if (reliable && (evidence.nearEndSpeech || nativeMusicOverlap) &&
+            decision.retryReason == VoiceAlarmConversationGate.RetryReason.PLAYBACK_OVERLAP) {
           speechForReview = text
-          transcriptView?.text = "刚才的语音与播报重叠。可重新说一次，或在文字对话中确认：\n$text"
+          transcriptView?.text = "刚才的语音与播放声重叠。可重新说一次，或在文字对话中确认：\n$text"
         } else transcriptView?.text = if (decision.retryReason == VoiceAlarmConversationGate.RetryReason.PLAYBACK_OVERLAP)
           "刚才混入了播放声。请在暂停后再说一遍。" else "刚才没有听完整，请再说一遍。"
         return

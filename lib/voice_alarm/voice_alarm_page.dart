@@ -66,6 +66,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   String _provider = 'native';
   String _sttProvider = 'native';
   String _sttMode = 'realtime';
+  String get _effectiveSttMode => _sttProvider == 'native' ? 'realtime' : _sttMode;
   bool _batchAutoSubmit = true;
   double _batchAutoSubmitSilenceMs = 1200;
   double _batchMaxRecordMs = 60000;
@@ -661,7 +662,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     // 长句不等到 maxRecord 才提交；但不要切得太碎，否则短片段更容易被服务商识别成残句。
     final segmentMax = maxRecord < 30000 ? maxRecord : 30000;
     return {
-      'mode': _sttMode,
+      'mode': _effectiveSttMode,
       'autoSubmit': _batchAutoSubmit,
       'autoSubmitSilenceMs': silence,
       'manualSubmit': true,
@@ -1039,7 +1040,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'text': _alarmText,
       'provider': _provider,
       'sttProvider': _sttProvider,
-      'sttMode': _sttMode,
+      'sttMode': _effectiveSttMode,
       'batchStt': _batchSttMap(),
       'voicePath': _provider == 'native' ? '' : (voicePath ?? ''),
       'alarmId': alarmId ?? '',
@@ -1339,7 +1340,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   onChanged: (value) => setState(() => _sttProvider = value ?? 'native'),
                 ),
                 const SizedBox(height: 8),
-                SegmentedButton<String>(
+                if (_sttProvider != 'native') SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'realtime', label: Text('实时识别'), icon: Icon(Icons.graphic_eq_outlined)),
                     ButtonSegment(value: 'batch', label: Text('非实时录音识别'), icon: Icon(Icons.upload_file_outlined)),
@@ -1350,14 +1351,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 const SizedBox(height: 8),
                 Text(
                   _sttProvider == 'native'
-                      ? '使用手机系统默认中文识别服务；准备好后显示正在聆听。系统未安装识别服务时会提示，不会自动调用其他云服务。'
+                      ? '使用手机系统的实时中文识别。重新聆听时会暂时静音背景音乐。设备需要可用的中文系统识别。'
                       : _sttMode == 'batch'
                       ? '非实时模式采用自动待命的聊天输入框逻辑：无需手动开启录音，空闲时自动监听；确认你开始说话后才保存本轮 utterance，说完静音或手动发送后只上传这一条完整录音。'
                       : '实时模式会持续收音并边识别边显示候选文本；xAI 使用 WebSocket 流式 STT，讯飞支持动态修正，微软使用短句连续识别。',
                   style: const TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                if (_sttProvider != 'native') Text(
                   _sttProvider == 'iflytek'
                       ? '讯飞实时模式支持动态修正；非实时模式会录完整段后走 IAT 引擎，并使用 eos 后端点参数避免服务端在自然停顿处提前结束。'
                       : _sttProvider == 'xai'
@@ -1373,7 +1374,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     label: Text(_showAdvanced ? '收起自动提交/句段微调' : '自动提交与句段微调（高级，可选）'),
                   ),
                 ),
-                if (_showAdvanced && _sttMode == 'batch') ...[
+                if (_showAdvanced && _effectiveSttMode == 'batch') ...[
                   const SizedBox(height: 12),
                   Card(
                     color: Colors.amber.withOpacity(0.08),
@@ -1407,7 +1408,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     ),
                   ),
                 ],
-                if (_showAdvanced && _sttMode == 'realtime') ...[
+                if (_showAdvanced && _effectiveSttMode == 'realtime') ...[
                 const SizedBox(height: 12),
                 Card(
                   color: Colors.blueGrey.withOpacity(0.06),

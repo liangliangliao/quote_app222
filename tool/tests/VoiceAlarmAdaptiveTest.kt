@@ -166,6 +166,41 @@ fun main() {
     window.recovering(14600, 180)
     check(window.expiresAt == 15430L)
   }
+  scenario("a native retry accepts its final after a quiet recording without RMS callbacks") {
+    val mix = VoiceAlarmMusicState()
+    val owner = Any()
+    val listening = VoiceAlarmMusicState.Speaker.LISTEN_REQUEST
+    val quiet = VoiceAlarmMusicState.Speaker.QUIET_CAPTURE
+    val text = "帮我起床"
+    fun route(evidence: VoiceAlarmCapture.Evidence, armed: Boolean) =
+      VoiceAlarmConversationGate.decide(text, evidence.sources, evidence.mixed, final = true,
+        reliable = true, armed = armed, localCommand = false, passive = !armed).route
+
+    val first = VoiceAlarmCapture(6, true, "music", 1).finish(6, true, "music")
+    check(route(first, armed = false) == VoiceAlarmConversationGate.Route.RELISTEN)
+    mix.setSpeaking(listening, owner, true)
+    check(mix.gain(.4f) == .4f)
+    mix.setSpeaking(quiet, owner, true)
+    check(mix.gain(.4f) == 0f)
+
+    val native = VoiceAlarmNativeTurn()
+    val signal = VoiceAlarmNativeSignal()
+    check(native.begin() && !signal.began(native.ready))
+    native.ready()
+    val retry = VoiceAlarmCapture(8, false, "quiet", 2)
+    check(!native.hasSpeech && signal.earlyBegin && signal.rmsCallbacks == 0)
+    check(native.finish(text) == text)
+    check(route(retry.finish(8, false), armed = true) == VoiceAlarmConversationGate.Route.SEND)
+    mix.setSpeaking(quiet, owner, false)
+    check(mix.gain(.4f) == .4f)
+  }
+  scenario("music returning at native speech end cannot change the saved capture evidence") {
+    val capture = VoiceAlarmCapture(10, false, "quiet", 3)
+    check(!capture.finish(10, false).hasPlaybackOverlap)
+    check(!capture.finish(11, true, "music").hasPlaybackOverlap)
+    val interrupted = VoiceAlarmCapture(10, false, "quiet", 4)
+    check(interrupted.finish(11, true, "music").hasPlaybackOverlap)
+  }
   scenario("a silent system recognizer with no levels is replaced sooner without cutting off observed speech") {
     val turn = VoiceAlarmNativeTurn()
     check(turn.begin())

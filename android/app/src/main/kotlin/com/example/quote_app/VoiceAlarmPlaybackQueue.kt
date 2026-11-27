@@ -27,7 +27,7 @@ class VoiceAlarmPlaybackQueue {
 
 /** The foreground service and its activity update this mixer on the main thread. */
 class VoiceAlarmMusicState {
-  enum class Speaker { REMINDER, ASSISTANT, USER, LISTEN_REQUEST }
+  enum class Speaker { REMINDER, ASSISTANT, USER, LISTEN_REQUEST, QUIET_CAPTURE }
   private val speakers = mutableMapOf<Speaker, Any>()
   var enabled = true
     private set
@@ -44,7 +44,7 @@ class VoiceAlarmMusicState {
   }
 
   fun gain(volume: Float): Float {
-    if (!enabled || speaking(Speaker.USER)) return 0f
+    if (!enabled || speaking(Speaker.USER) || speaking(Speaker.QUIET_CAPTURE)) return 0f
     val configured = volume.coerceIn(0f, 1f)
     return if (speaking(Speaker.REMINDER) || speaking(Speaker.ASSISTANT)) configured * 0.22f else configured
   }
