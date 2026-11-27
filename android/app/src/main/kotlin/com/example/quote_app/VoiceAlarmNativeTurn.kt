@@ -213,11 +213,13 @@ class VoiceAlarmNativeSignal {
 }
 
 /** A person gets a full response interval once the mic is ready, bounded even if callbacks repeat. */
-class VoiceAlarmListenWindow(private val idleMs: Long, private val connectingMs: Long = 12000L) {
+class VoiceAlarmListenWindow(private val idleMs: Long, private val connectingMs: Long = 12000L,
+                            private val reconnectBudgetMs: Long = 15000L) {
   private var readyAt: Long? = null
   private var openedAt = 0L
   private var finalGraceUsed = false
   private var recoveryGraceUsed = false
+  private var waitingForReconnect = false
   var expiresAt = 0L; private set
   fun open(now: Long) {
     openedAt = now
@@ -225,9 +227,18 @@ class VoiceAlarmListenWindow(private val idleMs: Long, private val connectingMs:
     expiresAt = now + connectingMs
     finalGraceUsed = false
     recoveryGraceUsed = false
+    waitingForReconnect = false
   }
   fun ready(now: Long) {
-    if (readyAt == null) { readyAt = now; expiresAt = now + idleMs }
+    if (readyAt == null) {
+      readyAt = now
+      val initialDeadline = now + idleMs
+      expiresAt = if (waitingForReconnect) maxOf(expiresAt, minOf(reconnectDeadline(), initialDeadline)) else initialDeadline
+    }
+    if (waitingForReconnect) {
+      expiresAt = maxOf(expiresAt, minOf(reconnectDeadline(), now + 8000L))
+      waitingForReconnect = false
+    }
   }
   fun activity(now: Long) {
     if (readyAt != null) expiresAt = maxOf(expiresAt, minOf(openedAt + 75000L, now + 8000L))
@@ -242,5 +253,13 @@ class VoiceAlarmListenWindow(private val idleMs: Long, private val connectingMs:
     if (readyAt == null || recoveryGraceUsed || expiresAt - now >= delayMs + 6000L) return
     recoveryGraceUsed = true
     expiresAt = maxOf(expiresAt, minOf(openedAt + 75000L, now + delayMs + 6000L))
+  }
+
+  private fun reconnectDeadline() = openedAt + minOf(75000L, idleMs + connectingMs + reconnectBudgetMs)
+
+  fun reconnecting(now: Long, delayMs: Long) {
+    if (now >= reconnectDeadline()) return
+    waitingForReconnect = true
+    expiresAt = maxOf(expiresAt, minOf(reconnectDeadline(), now + delayMs + connectingMs))
   }
 }

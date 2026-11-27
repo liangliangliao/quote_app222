@@ -52,6 +52,62 @@ fun main() {
     check(recording.packet(3200, finishing = true) == null)
     check(recording.toByteArray().size == 3200)
   }
+  scenario("iFlytek streams music-only PCM without a local onset and finalizes the idle interval") {
+    val audio = VoiceAlarmIflytekAudio()
+    val capture = VoiceAlarmCapture(0L, false, windowId = 1L, acceptedFramesOnly = true)
+    val voice = VoiceAlarmFrameStamp(1L, 1L, "voice")
+    capture.noteFrame(voice, voice)
+    check(!audio.appendCapture(ByteArray(640) { 1 }, spokenOutput = true, allowSpoken = false))
+    val music = VoiceAlarmFrameStamp(1L, 2L, "music")
+    capture.noteFrame(music, music)
+    repeat(4) {
+      check(audio.appendCapture(ByteArray(640) { 2 }, spokenOutput = false, allowSpoken = false))
+      capture.noteAcceptedFrame()
+    }
+    val evidence = capture.finish(3L, true, "voice")
+    check(evidence.mixCause == "frame_music" && !evidence.spokenPlayback && evidence.sources.isEmpty())
+    val first = audio.packet(0, finishing = false)!!
+    check(first.status == 0 && first.pcm.all { it == 2.toByte() })
+    val last = audio.packet(first.pcm.size, finishing = true)!!
+    check(last.status == 2 && last.pcm.size == 1280)
+
+    val result = VoiceAlarmConversationGate.decide("今天有没有大的新闻发生啊", evidence.sources, evidence.mixed,
+      final = true, reliable = true, armed = false, localCommand = false, passive = true,
+      spokenPlayback = evidence.spokenPlayback, playbackOverlap = evidence.playbackOverlap)
+    check(result.route == VoiceAlarmConversationGate.Route.SEND)
+  }
+  scenario("nearby speech during a spoken prompt retains onset audio and keeps its echo provenance") {
+    val audio = VoiceAlarmIflytekAudio()
+    val capture = VoiceAlarmCapture(0L, false, windowId = 1L, acceptedFramesOnly = true)
+    val voice = VoiceAlarmFrameStamp(1L, 1L, "voice")
+    capture.noteFrame(voice, voice)
+    check(!audio.appendCapture(ByteArray(640) { 5 }, spokenOutput = true, allowSpoken = false))
+    check(audio.appendCapture(ByteArray(640) { 6 }, spokenOutput = true, allowSpoken = true))
+    val prompt = listOf("早上好，新的一天开始了。")
+    capture.noteAcceptedFrame(prompt)
+    val evidence = capture.finish(2L, false)
+    check(audio.toByteArray().take(640).all { it == 5.toByte() })
+    check(audio.size() == 1280 && evidence.spokenPlayback && evidence.sources == prompt)
+    check(!evidence.canRetryAudio)
+    val result = VoiceAlarmConversationGate.decide(prompt.single(), evidence.sources, evidence.mixed,
+      final = true, reliable = true, armed = true, localCommand = false, passive = false,
+      spokenPlayback = evidence.spokenPlayback, playbackOverlap = evidence.playbackOverlap)
+    check(result.route == VoiceAlarmConversationGate.Route.ECHO)
+  }
+  scenario("an idle iFlytek socket is distinguished from a missing utterance final") {
+    val stream = VoiceAlarmIflytekTranscript()
+    check(stream.outcome(false, 0, 0, null, speechExpected = false) == "idle_no_words")
+    check(stream.outcome(false, 0, 92160, null, speechExpected = false) == "idle_no_words")
+    check(stream.outcome(false, 3200, 3200, null) == "missing_final")
+    check(stream.outcome(false, 0, 0, "open_failed", speechExpected = false) == "open_failed")
+  }
+  scenario("iFlytek keeps regular packet timing and catches up a queued microphone without a burst") {
+    val audio = VoiceAlarmIflytekAudio()
+    audio.write(ByteArray(167040))
+    check(audio.nextSendAt(0L, 92160, 100L) == 130L)
+    check(audio.nextSendAt(130L, 93440, 142L) == 162L)
+    check(audio.nextSendAt(162L, 160000, 166L) == 202L)
+  }
   scenario("a second cloud failure switches the microphone to system recognition for this alarm") {
     val recovery = VoiceAlarmCloudRecovery()
     check(!recovery.failed())
@@ -69,6 +125,32 @@ fun main() {
     check(listening.expiresAt == 20000L)
     check(listening.mayFinishCloudTurn(40000L))
     check(!listening.mayFinishCloudTurn(131000L))
+  }
+  scenario("system network recovery keeps a quiet turn open after a late ready callback but remains bounded") {
+    val listening = VoiceAlarmListenWindow(12000L)
+    listening.open(0L)
+    listening.ready(150L)
+    listening.recovering(11500L, 100L)
+    val oldExpiry = listening.expiresAt
+    listening.reconnecting(oldExpiry - 600L, 400L)
+    val readyAfterReconnect = oldExpiry - 300L
+    listening.ready(readyAfterReconnect)
+    check(listening.expiresAt - readyAfterReconnect >= 8000L)
+    listening.reconnecting(38000L, 3200L)
+    listening.ready(38500L)
+    check(listening.expiresAt == 39000L)
+    listening.reconnecting(39000L, 3200L)
+    check(listening.expiresAt == 39000L)
+
+    val automatic = VoiceAlarmListenWindow(6000L, connectingMs = 5000L, reconnectBudgetMs = 8000L)
+    automatic.open(0L)
+    automatic.ready(200L)
+    automatic.reconnecting(5600L, 400L)
+    automatic.ready(6150L)
+    check(automatic.expiresAt == 14150L)
+    automatic.reconnecting(13800L, 800L)
+    automatic.ready(14700L)
+    check(automatic.expiresAt == 19000L)
   }
   scenario("network timeout selects local once then falls back if Chinese is unavailable") {
     val policy = VoiceAlarmNativeRecovery()

@@ -99,7 +99,7 @@ object VoiceAlarmSpeechPolicy {
 /** Accept a clean final from an open conversation or a direct question during alarm standby. */
 object VoiceAlarmConversationGate {
   enum class Route { ECHO, DRAFT, IGNORE, REVIEW, RELISTEN, OPEN_MIC, LOCAL, SEND }
-  enum class SystemOverlap { MUSIC, SPOKEN }
+  enum class PlaybackOverlap { MUSIC, SPOKEN }
   enum class RetryReason { INCOMPLETE, PLAYBACK_OVERLAP }
   data class Decision(val route: Route, val text: String, val retryReason: RetryReason? = null)
   private val interruptPhrases = setOf("打断一下", "请打断一下", "先听我说", "请先听我说", "先暂停播报", "请暂停播报",
@@ -146,7 +146,7 @@ object VoiceAlarmConversationGate {
     return pairs.count { pair -> playback.none { it.contains(pair) } } >= maxOf(3, pairs.size / 2)
   }
 
-  fun canPauseSystemPlayback(text: String, sources: List<String>): Boolean {
+  fun canPauseWithDistinctSpeech(text: String, sources: List<String>): Boolean {
     val addressed = withoutAddress(text)
     return isInterruption(text) || addressed.isEmpty() ||
       ((specificRequest(text, minimumLength = 5) || VoiceAlarmCommands.isStop(text)) && distinctFromSpoken(text, sources))
@@ -155,7 +155,7 @@ object VoiceAlarmConversationGate {
   fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
              armed: Boolean, localCommand: Boolean, passive: Boolean, overlapConfirmed: Boolean = false,
              stableDraft: Boolean = false, nearEndSpeech: Boolean = false, spokenPlayback: Boolean = false,
-             systemOverlap: SystemOverlap? = null): Decision {
+             playbackOverlap: PlaybackOverlap? = null): Decision {
     val text = raw.trim()
     val prefix = address.find(text)
     val question = prefix?.let { text.substring(it.range.last + 1).trim() }
@@ -166,20 +166,20 @@ object VoiceAlarmConversationGate {
     val corroboratedRequest = nearEndSpeech && reliable && !localCommand && matchesRequest
     val unverifiedOverlap = (mixed || sources.isNotEmpty()) && !overlapConfirmed && !corroboratedRequest
     val usableDraft = stableDraft && !unverifiedOverlap && !localCommand && !opensMic && looksDirected(question ?: text)
-    val distinctSystemSpeech = systemOverlap == SystemOverlap.SPOKEN && distinctFromSpoken(text, sources)
-    val completeSystemRequest = reliable && !opensMic && !localCommand && specificRequest(text) && when (systemOverlap) {
-      SystemOverlap.MUSIC -> !spokenPlayback && sources.isEmpty()
-      SystemOverlap.SPOKEN -> distinctSystemSpeech
+    val distinctDirectedSpeech = playbackOverlap == PlaybackOverlap.SPOKEN && distinctFromSpoken(text, sources)
+    val completeRequestDuringPlayback = reliable && !opensMic && !localCommand && specificRequest(text) && when (playbackOverlap) {
+      PlaybackOverlap.MUSIC -> !spokenPlayback && sources.isEmpty()
+      PlaybackOverlap.SPOKEN -> distinctDirectedSpeech
       null -> false
     }
     val route = when {
       text.isEmpty() -> Route.DRAFT
       VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
       !final -> Route.DRAFT
-      // Only a complete, directed system final may cross the playback guard.
-      completeSystemRequest -> Route.SEND
+      // Only a complete, directed realtime final may cross the playback guard.
+      completeRequestDuringPlayback -> Route.SEND
       spokenPlayback && !opensMic -> return if (localCommand || question != null ||
-        (matchesRequest && (overlapConfirmed || distinctSystemSpeech))) {
+        (matchesRequest && (overlapConfirmed || distinctDirectedSpeech))) {
         Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP)
       } else Decision(Route.IGNORE, "")
       !reliable && !usableDraft -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.INCOMPLETE) else Decision(Route.IGNORE, "")
@@ -203,12 +203,14 @@ data class VoiceAlarmFrameStamp(val windowId: Long, val outputEpoch: Long, val o
 /** Immutable at the microphone endpoint. Network delays cannot erase a playback overlap. */
 class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
                         initialOutput: String = if (initiallyMixed) "active" else "quiet", val windowId: Long = 0L,
-                        private val initialSpokenEpoch: Long? = null, startedDuringSpokenOutput: Boolean = false) {
+                        private val initialSpokenEpoch: Long? = null, startedDuringSpokenOutput: Boolean = false,
+                        private val acceptedFramesOnly: Boolean = false) {
   private val sources = linkedSetOf<String>()
   private var mixed = initiallyMixed
   private var cause = if (initiallyMixed) "start_" + initialOutput else "none"
   private var spokenPlayback = startedDuringSpokenOutput
-  private var frameSpokenOutput = false
+  var frameSpokenOutput = false
+    private set
   private var sealed = false
   data class Evidence(
     val sources: List<String>,
@@ -221,10 +223,10 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
     val spokenPlayback: Boolean = false,
   ) {
     val hasPlaybackOverlap get() = spokenPlayback || mixed || sources.isNotEmpty()
-    val systemOverlap get() = when {
-      spokenPlayback -> VoiceAlarmConversationGate.SystemOverlap.SPOKEN
+    val playbackOverlap get() = when {
+      spokenPlayback -> VoiceAlarmConversationGate.PlaybackOverlap.SPOKEN
       sources.isEmpty() && mixCause in setOf("start_music", "frame_music", "end_music") ->
-        VoiceAlarmConversationGate.SystemOverlap.MUSIC
+        VoiceAlarmConversationGate.PlaybackOverlap.MUSIC
       else -> null
     }
     fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
@@ -251,10 +253,10 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
     private set
 
   // A stable, directed partial may pause spoken playback while the same turn keeps recording.
-  @Synchronized fun confirmedPause(text: String, now: Long, currentSources: List<String>, system: Boolean = false): Boolean {
+  @Synchronized fun confirmedPause(text: String, now: Long, currentSources: List<String>, requireDistinctSpeech: Boolean = false): Boolean {
     val cue = VoiceAlarmSpeechPolicy.normalized(text)
     val allSources = (sources + currentSources).toList()
-    val directed = if (system) VoiceAlarmConversationGate.canPauseSystemPlayback(text, allSources)
+    val directed = if (requireDistinctSpeech) VoiceAlarmConversationGate.canPauseWithDistinctSpeech(text, allSources)
       else VoiceAlarmConversationGate.canPauseForSpeech(text)
     if (sealed || confirmedCue.isNotEmpty() || allSources.isEmpty() || cue.length < 3 || !directed ||
         VoiceAlarmSpeechPolicy.isEcho(text, allSources, true, partial = true)) {
@@ -280,14 +282,27 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
       changed -> "tail"
       else -> after.output
     }
-    if (!mixed && frameOutput != "quiet") {
+    if (!acceptedFramesOnly && !mixed && frameOutput != "quiet") {
       mixed = true
       cause = if (changed && before.output == "quiet" && after.output == "quiet") "frame_output_changed" else "frame_" + frameOutput
     }
   }
+
+  // A discarded speaker frame must not contaminate a later cloud result.
+  @Synchronized fun noteAcceptedFrame(texts: List<String> = emptyList()) {
+    if (sealed) return
+    if (!mixed && frameOutput != "quiet") {
+      mixed = true
+      cause = "frame_" + frameOutput
+    }
+    if (frameSpokenOutput) {
+      spokenPlayback = true
+      sources.addAll(texts.filter { it.isNotBlank() })
+    }
+  }
   @Synchronized fun notePcmVoice(voice: Boolean, bytes: Int, rms: Int = 0, peak: Int = 0) {
     if (sealed) return
-    if (voice && frameSpokenOutput) spokenPlayback = true
+    if (!acceptedFramesOnly && voice && frameSpokenOutput) spokenPlayback = true
     recordQuietVoice(voice && frameOutput == "quiet", bytes.toLong() / VoiceAlarmSpeechPolicy.PCM_BYTES_PER_MS)
     if (nearEndSpeech) return
     if (frameOutput != lastPlaybackKind) {
@@ -321,9 +336,11 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
   @Synchronized fun finish(epoch: Long, audible: Boolean, output: String = if (audible) "active" else "quiet",
                            spokenEpoch: Long? = null, recentSpokenOutput: Boolean = false): Evidence {
     if (!sealed) {
-      if (!mixed) cause = when { audible -> "end_" + output; epoch != initialEpoch -> "output_changed"; else -> "none" }
-      mixed = mixed || epoch != initialEpoch || audible
-      spokenPlayback = spokenPlayback || recentSpokenOutput || (initialSpokenEpoch != null && spokenEpoch != initialSpokenEpoch)
+      if (!acceptedFramesOnly) {
+        if (!mixed) cause = when { audible -> "end_" + output; epoch != initialEpoch -> "output_changed"; else -> "none" }
+        mixed = mixed || epoch != initialEpoch || audible
+        spokenPlayback = spokenPlayback || recentSpokenOutput || (initialSpokenEpoch != null && spokenEpoch != initialSpokenEpoch)
+      }
       sealed = true
     }
     return Evidence(sources.toList(), mixed, cause, windowId, quietSpeech, confirmedCue, nearEndSpeech, spokenPlayback)

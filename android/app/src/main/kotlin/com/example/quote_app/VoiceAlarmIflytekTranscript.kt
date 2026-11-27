@@ -8,6 +8,30 @@ import java.io.ByteArrayOutputStream
 internal class VoiceAlarmIflytekAudio : ByteArrayOutputStream() {
   data class Packet(val status: Int, val pcm: ByteArray)
 
+  private val spokenLeadIn = ArrayDeque<ByteArray>()
+  private var leadInBytes = 0
+
+  /** Stream music/quiet frames immediately; retain spoken lead-in only for a local speech onset. */
+  fun appendCapture(pcm: ByteArray, spokenOutput: Boolean, allowSpoken: Boolean): Boolean {
+    if (spokenOutput && !allowSpoken) {
+      spokenLeadIn.addLast(pcm)
+      leadInBytes += pcm.size
+      while (leadInBytes > 38400) leadInBytes -= spokenLeadIn.removeFirst().size
+      return false
+    }
+    if (spokenOutput) for (frame in spokenLeadIn) write(frame)
+    spokenLeadIn.clear()
+    leadInBytes = 0
+    write(pcm)
+    return true
+  }
+
+  fun nextSendAt(previousDue: Long, sentBytes: Int, now: Long): Long {
+    // Make up a small backlog from connecting/finalizing without sending a burst.
+    val interval = if (size() - sentBytes >= 12800) 30L else 40L
+    return maxOf((previousDue.takeIf { it > 0L } ?: now) + interval, now + 20L)
+  }
+
   fun packet(offset: Int, finishing: Boolean): Packet? {
     val remaining = size() - offset
     if (remaining <= 0 || (!finishing && remaining < 2560)) return null
@@ -32,11 +56,13 @@ class VoiceAlarmIflytekTranscript {
     private set
 
   fun outcome(audioInterrupted: Boolean, voiceEndByte: Int, sentBytes: Int, transportFailure: String?,
-              microphoneTimedOut: Boolean = false, quietSpeech: Boolean = false): String = when {
+              microphoneTimedOut: Boolean = false, quietSpeech: Boolean = false,
+              speechExpected: Boolean = true): String = when {
     audioInterrupted -> "microphone_interrupted"
     complete && voiceEndByte > sentBytes -> "unsent_speech_tail"
     transportFailure != null -> transportFailure
     microphoneTimedOut -> "microphone_no_frames"
+    !speechExpected && text.isBlank() -> "idle_no_words"
     !complete -> "missing_final"
     text.isBlank() && voiceEndByte > 0 && quietSpeech -> "empty_final_with_speech"
     text.isBlank() -> "empty_final"
