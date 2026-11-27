@@ -93,11 +93,11 @@ fun main() {
     val turn = VoiceAlarmNativeTurn()
     turn.begin()
     if (signal.began(ready = false)) turn.speechStarted()
-    check(signal.earlyBegin && !turn.hasSpeech)
+    check(signal.onlyEarlyBegin && !turn.hasSpeech)
     turn.ready()
     check(turn.timeoutMs(20000) == 18000L)
     check(!signal.sample(3f, true) && signal.sample(3f, true))
-    check(signal.detected && signal.rmsCallbacks == 2 && signal.peakDb == 3f)
+    check(signal.detected && !signal.onlyEarlyBegin && signal.rmsCallbacks == 2 && signal.peakDb == 3f)
     check(!signal.sample(Float.NaN, true))
   }
   scenario("empty idle turns do not change engines, repeated intentional misses do") {
@@ -275,20 +275,42 @@ fun main() {
   }
   scenario("consecutive empty music turns open a bounded quiet retry without treating early begin as speech") {
     val policy = VoiceAlarmNativeRecovery()
-    check(!policy.retryInQuiet(true, 5000L))
-    check(policy.retryInQuiet(true, 10000L))
-    check(!policy.retryInQuiet(false, 16000L))
-    check(!policy.retryInQuiet(true, 21000L))
-    check(!policy.retryInQuiet(true, 26000L))
-    check(policy.retryInQuiet(true, 35000L))
-    policy.success()
-    check(!policy.retryInQuiet(true, 65000L))
+    val music = VoiceAlarmNativeRecovery.Interference.MUSIC
+    check(!policy.retryInQuiet(music, 5000L))
+    check(policy.retryInQuiet(music, 10000L))
+    check(!policy.retryInQuiet(null, 16000L))
+    check(!policy.retryInQuiet(music, 21000L))
+    check(!policy.retryInQuiet(music, 26000L))
+    check(policy.retryInQuiet(music, 35000L))
+    check(!policy.retryInQuiet(music, 65000L))
 
     val quiet = VoiceAlarmListenWindow(idleMs = 6000L, connectingMs = 5000L)
     quiet.open(10000L)
     check(quiet.expiresAt == 15000L)
     quiet.ready(12000L)
     check(quiet.expiresAt == 18000L)
+  }
+  scenario("a spoken echo following a reminder miss triggers a quiet turn without trusting the early begin") {
+    val policy = VoiceAlarmNativeRecovery()
+    val music = VoiceAlarmNativeRecovery.Interference.MUSIC
+    val reminder = VoiceAlarmNativeRecovery.Interference.REMINDER
+    check(!policy.retryInQuiet(music, 5000L))
+    check(!policy.retryInQuiet(reminder, 9500L))
+    policy.success() // An echo shows that the engine returned text, but is unusable as user speech.
+    check(policy.retryInQuiet(reminder, 14000L))
+    check(!policy.retryInQuiet(reminder, 28000L))
+    check(!policy.retryInQuiet(null, 32000L))
+    check(!policy.retryInQuiet(reminder, 40000L))
+    check(policy.retryInQuiet(reminder, 44500L))
+  }
+  scenario("two empty quiet turns can recover a silent recognizer and return to default if offline remains empty") {
+    val policy = VoiceAlarmNativeRecovery()
+    val miss = VoiceAlarmNativeRecovery.Failure.NO_MATCH
+    check(!policy.failed(miss, true, recoverEmptyQuietTurn = true)!!.replaceEngine)
+    check(policy.failed(miss, true, recoverEmptyQuietTurn = true)!!.replaceEngine && policy.onDevice)
+    check(!policy.failed(miss, true, recoverEmptyQuietTurn = true)!!.replaceEngine)
+    check(policy.failed(miss, true, recoverEmptyQuietTurn = true)!!.replaceEngine && !policy.onDevice)
+    check(!policy.failed(miss, true)!!.replaceEngine && !policy.onDevice)
   }
   scenario("first Wakeup body is exact and bypasses generation") {
     val s = VoiceAlarmWakeSession("固定朗读。"); val original = "  当日正式提醒。\n先坐起。  "

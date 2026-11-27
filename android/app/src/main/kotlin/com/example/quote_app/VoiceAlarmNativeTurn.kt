@@ -86,6 +86,7 @@ class VoiceAlarmNativeTurn {
 /** Recovery decisions are scoped to one alarm. Network loss and an empty recognition are distinct. */
 class VoiceAlarmNativeRecovery {
   enum class Failure { NETWORK, NO_MATCH, BUSY, LANGUAGE, PERMISSION, OTHER }
+  enum class Interference { MUSIC, REMINDER }
   data class Retry(val delayMs: Long, val replaceEngine: Boolean = false)
   var onDevice = false
     private set
@@ -97,13 +98,19 @@ class VoiceAlarmNativeRecovery {
   private var missedSpeech = 0
   private var trialEmptyResults = 0
   private var offlineVerified = false
-  private var musicMisses = 0
+  private var interference: Interference? = null
+  private var interferenceMisses = 0
   private var lastQuietRetryAt: Long? = null
 
-  fun retryInQuiet(emptyMusicTurn: Boolean, now: Long): Boolean {
-    musicMisses = if (emptyMusicTurn) (musicMisses + 1).coerceAtMost(2) else 0
-    if (musicMisses < 2 || lastQuietRetryAt?.let { now - it < 25000L } == true) return false
-    musicMisses = 0
+  fun retryInQuiet(output: Interference?, now: Long): Boolean {
+    interferenceMisses = when {
+      output == null -> 0
+      output != interference -> 1
+      else -> (interferenceMisses + 1).coerceAtMost(2)
+    }
+    interference = output
+    if (interferenceMisses < 2 || lastQuietRetryAt?.let { now - it < 25000L } == true) return false
+    interferenceMisses = 0
     lastQuietRetryAt = now
     return true
   }
@@ -112,15 +119,15 @@ class VoiceAlarmNativeRecovery {
     networkFailures = 0
     missedSpeech = 0
     trialEmptyResults = 0
-    musicMisses = 0
     offlineVerified = onDevice || preferOffline
   }
   fun localUnavailable() { onDevice = false }
 
   fun failed(kind: Failure, localAvailable: Boolean, expectedSpeech: Boolean = false,
-             allowDefaultOffline: Boolean = false): Retry? {
+             allowDefaultOffline: Boolean = false, recoverEmptyQuietTurn: Boolean = false): Retry? {
     if (kind == Failure.PERMISSION) return null
-    if (kind == Failure.NO_MATCH && expectedSpeech) missedSpeech++ else if (kind != Failure.NETWORK) missedSpeech = 0
+    if (kind == Failure.NO_MATCH && (expectedSpeech || recoverEmptyQuietTurn)) missedSpeech++
+    else if (kind != Failure.NETWORK) missedSpeech = 0
     val repeatMiss = missedSpeech >= 2
     if ((onDevice || preferOffline) && !offlineVerified && kind == Failure.NO_MATCH) trialEmptyResults++
     val failedTrial = trialEmptyResults >= 2
@@ -170,6 +177,7 @@ class VoiceAlarmNativeSignal {
   var peakDb: Float? = null; private set
   var earlyBegin = false; private set
   var detected = false; private set
+  val onlyEarlyBegin get() = earlyBegin && rmsCallbacks == 0 && !detected
   private var consecutive = 0
 
   fun began(ready: Boolean): Boolean {

@@ -21,6 +21,24 @@ fun main() {
     val old = q.current!!; val next = q.resume()!!
     check(old.text == next.text && old.id != next.id && !q.done(old.id) && q.done(next.id))
   }
+  scenario("a quiet listening pause resumes from the unread chunk and ignores callbacks from before the pause") {
+    val text = "第一句已听完。第二句被暂停。第三句继续播。"
+    val q = VoiceAlarmPlaybackQueue()
+    val first = q.start(text, limit = 7)!!
+    check(q.done(first.id))
+    val interrupted = q.current!!
+    q.resume() // Invalidate the TTS callback before stopping the speaker.
+    check(!q.done(interrupted.id))
+    q.resume()
+    val rest = StringBuilder()
+    check(q.current!!.text == interrupted.text)
+    while (q.pending) {
+      val item = q.current!!
+      rest.append(item.text)
+      check(q.done(item.id))
+    }
+    check(first.text + rest.toString() == text)
+  }
   scenario("TTS retry is bounded and does not discard unread text") {
     val q = VoiceAlarmPlaybackQueue(); q.start("测试")
     repeat(2) { check(q.retry(q.current!!.id) != null) }

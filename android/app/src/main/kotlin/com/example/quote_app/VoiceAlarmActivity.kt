@@ -73,7 +73,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "voice_turn_reliability_v54"
+  private val batchChatPipelineVersion = "voice_turn_reliability_v55"
   private val batchChatPipelineSummary = "持续收音、完整转写、云识别重试与系统识别兜底"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
@@ -764,13 +764,13 @@ class VoiceAlarmActivity : Activity() {
     if (!isFinishing) finish()
   }
 
-  private enum class ListenReason(val idleMs: Long, val interrupt: Boolean) {
+  private enum class ListenReason(val idleMs: Long, val interrupt: Boolean, val automatic: Boolean = false) {
     MANUAL(25000L, true), AFTER_REMINDER(18000L, false), AFTER_REPLY(12000L, false), RETRY(12000L, true),
-    MUSIC_RETRY(6000L, false)
+    MUSIC_RETRY(6000L, false, automatic = true), REMINDER_RETRY(10000L, false, automatic = true)
   }
   private var listenReason: ListenReason? = null
   private val requestedTurn get() = listenReason != null
-  private val quietCaptureRequested get() = listenReason?.interrupt == true || listenReason == ListenReason.MUSIC_RETRY
+  private val quietCaptureRequested get() = listenReason?.let { it.interrupt || it.automatic } == true
   private val quietNativeTurn get() =
     quietCaptureRequested && selectedSttProvider() == "native"
   private var conversationActiveUntil = 0L
@@ -799,8 +799,11 @@ class VoiceAlarmActivity : Activity() {
       ListenReason.AFTER_REPLY -> "可以直接追问"
       ListenReason.RETRY -> "可以说话了 · 请再说一遍"
       ListenReason.MUSIC_RETRY -> "可以说话了 · 背景音乐已临时静音"
+      ListenReason.REMINDER_RETRY -> "播报已暂停 · 可以说闹钟指令或提问"
       ListenReason.AFTER_REMINDER, ListenReason.MANUAL -> "可以说话了"
       null -> when {
+        selectedSttProvider() == "native" && VoiceAlarmRingingService.hasRecentVoiceOutput() ->
+          "播报中 · 可点「我来说」暂停并收音"
         VoiceAlarmRingingService.hasRecentVoiceOutput() -> "麦克风待命 · 听到提问时自动暂停播放"
         nowUptime() < conversationActiveUntil -> "麦克风已就绪 · 可以继续说"
         else -> "麦克风已就绪 · 可以直接提问"
@@ -854,12 +857,12 @@ class VoiceAlarmActivity : Activity() {
     endRequestedTurn()
     listenReason = reason
     if (reason == ListenReason.MANUAL) conversationActiveUntil = nowUptime() + 45000L
-    listenWindow = if (reason == ListenReason.MUSIC_RETRY) VoiceAlarmListenWindow(reason.idleMs, connectingMs = 5000L)
+    listenWindow = if (reason.automatic) VoiceAlarmListenWindow(reason.idleMs, connectingMs = 5000L)
       else VoiceAlarmListenWindow(reason.idleMs)
     listenWindow.open(nowUptime())
     logVoice("stt.listen.open", "reserved time for a user turn", mapOf("reason" to reason.name, "idleMs" to reason.idleMs, "pipeline" to batchChatPipelineVersion))
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.LISTEN_REQUEST, mixerOwner, true)
-    postponeAlarmVoiceReplay(reason.idleMs + 4000L)
+    if (reason != ListenReason.REMINDER_RETRY) postponeAlarmVoiceReplay(reason.idleMs + 4000L)
     if (quietCaptureRequested) {
       waitingForQuiet = true
       captureWindowId = ++nextWindowId
@@ -1008,7 +1011,33 @@ class VoiceAlarmActivity : Activity() {
   private fun logNative(stage: String, error: Int? = null, chars: Int? = null) {
     logVoice("stt.native.$stage", "system recognizer", mapOf("turn" to nativeTurnNumber,
       "epoch" to nativeRecognizerEpoch, "engine" to nativeEngine(), "error" to error, "chars" to chars,
-      "quietCapture" to quietNativeTurn, "output" to VoiceAlarmRingingService.outputKind()))
+      "quietCapture" to quietNativeTurn, "output" to VoiceAlarmRingingService.outputKind(), "pipeline" to batchChatPipelineVersion))
+  }
+
+  private fun maybeRetryNativeWithoutPlayback(evidence: VoiceAlarmCapture.Evidence,
+                                              emptyTurn: Boolean, echo: Boolean = false): Boolean {
+    val now = nowUptime()
+    val interference = when {
+      quietNativeTurn || destroyed || closingAlarm || aiBusy || speechBuffer.isNotBlank() -> null
+      evidence.spokenPlayback && (emptyTurn || echo) && nativeSignal.onlyEarlyBegin &&
+          VoiceAlarmRingingService.canPauseReminderForListening() -> VoiceAlarmNativeRecovery.Interference.REMINDER
+      !evidence.spokenPlayback && emptyTurn && VoiceAlarmRingingService.outputKind() == "music" &&
+          !VoiceAlarmRingingService.isMusicIntroPending() -> VoiceAlarmNativeRecovery.Interference.MUSIC
+      else -> null
+    }
+    if (!nativeRecovery.retryInQuiet(interference, now)) return false
+    val reason = if (interference == VoiceAlarmNativeRecovery.Interference.REMINDER) {
+      if (!VoiceAlarmRingingService.pauseReminderForListening()) {
+        logVoice("stt.native.quietRetry.unavailable", "reminder could not be paused")
+        return false
+      }
+      ListenReason.REMINDER_RETRY
+    } else ListenReason.MUSIC_RETRY
+    if (requestedTurn) conversationActiveUntil = maxOf(conversationActiveUntil, now + reason.idleMs + 5000L)
+    logVoice("stt.native.quietRetry", "opening clean playback recovery window", mapOf(
+      "output" to interference?.name, "echo" to echo, "pipeline" to batchChatPipelineVersion))
+    startRequestedTurn(reason)
+    return true
   }
   private var nativeRestart: Runnable? = null
   private var nativeRestartDue = 0L
@@ -1353,6 +1382,8 @@ class VoiceAlarmActivity : Activity() {
           listening = false; listeningStartedAt = 0L
           if (text.isNotBlank()) onSpeechChunk(text, finalChunk = true, evidence = evidence,
             reliable = finalText.isNotBlank(), stableDraft = stableDraft)
+          val echo = evidence.spokenPlayback && VoiceAlarmSpeechPolicy.isEcho(text, evidence.sources, evidence.sources.isNotEmpty())
+          if (maybeRetryNativeWithoutPlayback(evidence, emptyTurn = false, echo = echo)) return
           listenAgain(80)
         }
         override fun onPartialResults(partialResults: Bundle?) {
@@ -1375,6 +1406,8 @@ class VoiceAlarmActivity : Activity() {
           val evidence = nativeEvidence()
           val stableDraft = nativeTurn.hasStableEndpointDraft
           val expectedSpeech = nativeTurn.hasSpeech && (evidence.quietSpeech || !evidence.hasPlaybackOverlap || requestedTurn)
+          val emptyQuietTurn = quietNativeTurn && nativeTurn.ready && !evidence.hasPlaybackOverlap &&
+            nativeSignal.onlyEarlyBegin && !nativeTurn.hasDraft
           val retained = nativeTurn.finish().orEmpty()
           userSpeaking(false)
           logNative(if (emptyFinal) "emptyFinal" else "error", if (emptyFinal) null else error, retained.length)
@@ -1387,13 +1420,16 @@ class VoiceAlarmActivity : Activity() {
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> VoiceAlarmNativeRecovery.Failure.PERMISSION
             else -> VoiceAlarmNativeRecovery.Failure.OTHER
           }
-          val checkLocal = kind == VoiceAlarmNativeRecovery.Failure.NETWORK || (expectedSpeech && kind == VoiceAlarmNativeRecovery.Failure.NO_MATCH)
+          val checkLocal = kind == VoiceAlarmNativeRecovery.Failure.NETWORK ||
+            ((expectedSpeech || emptyQuietTurn) && kind == VoiceAlarmNativeRecovery.Failure.NO_MATCH)
           val localAvailable = checkLocal && Build.VERSION.SDK_INT >= 31 &&
             runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(this@VoiceAlarmActivity) }.getOrDefault(false)
           val retry = nativeRecovery.failed(kind, localAvailable, expectedSpeech,
-            allowDefaultOffline = defaultOfflineChinese == true || (defaultOfflineChinese == null && (requestedTurn || kind == VoiceAlarmNativeRecovery.Failure.NETWORK)))
+            allowDefaultOffline = defaultOfflineChinese == true || (defaultOfflineChinese == null && (requestedTurn || kind == VoiceAlarmNativeRecovery.Failure.NETWORK)),
+            recoverEmptyQuietTurn = emptyQuietTurn)
           nativeRetryAt = android.os.SystemClock.uptimeMillis() + (retry?.delayMs ?: 0L)
-          if (retry != null && requestedTurn && listenReason != ListenReason.MUSIC_RETRY &&
+          val recoveringQuietEngine = listenReason == ListenReason.REMINDER_RETRY && retry?.replaceEngine == true
+          if (retry != null && requestedTurn && (listenReason?.automatic != true || recoveringQuietEngine) &&
               (kind == VoiceAlarmNativeRecovery.Failure.NO_MATCH || kind == VoiceAlarmNativeRecovery.Failure.NETWORK)) {
             listenWindow.recovering(nowUptime(), retry.delayMs)
           }
@@ -1408,16 +1444,11 @@ class VoiceAlarmActivity : Activity() {
             "nextEngine" to nativeEngine(), "retryMs" to retry.delayMs, "retainedChars" to retained.length,
             "preferOffline" to nativeRecovery.preferOffline, "dedicatedLocal" to localAvailable, "defaultChinese" to defaultOfflineChinese,
             "requested" to requestedTurn, "earlyBegin" to nativeSignal.earlyBegin, "rmsSamples" to nativeSignal.rmsCallbacks,
+            "emptyQuietTurn" to emptyQuietTurn, "rebind" to retry.replaceEngine, "pipeline" to batchChatPipelineVersion,
             "peakDb" to nativeSignal.peakDb, "signalDetected" to nativeSignal.detected, "readyDelayMs" to (nativeReadyAt.takeIf { it > 0 }?.minus(nativeStartedAt))))
-          val now = nowUptime()
-          val emptyMusicTurn = kind == VoiceAlarmNativeRecovery.Failure.NO_MATCH && !expectedSpeech &&
-            retained.isBlank() && !quietNativeTurn && !evidence.spokenPlayback &&
-            VoiceAlarmRingingService.outputKind() == "music" && !VoiceAlarmRingingService.isMusicIntroPending()
-          if (nativeRecovery.retryInQuiet(emptyMusicTurn, now)) {
-            if (requestedTurn) conversationActiveUntil = maxOf(conversationActiveUntil, now + 11000L)
-            startRequestedTurn(ListenReason.MUSIC_RETRY)
-            return
-          }
+          val emptyTurn = retained.isBlank() && !expectedSpeech &&
+            (kind == VoiceAlarmNativeRecovery.Failure.NO_MATCH || (kind == VoiceAlarmNativeRecovery.Failure.NETWORK && evidence.spokenPlayback))
+          if (maybeRetryNativeWithoutPlayback(evidence, emptyTurn)) return
           if (kind == VoiceAlarmNativeRecovery.Failure.NETWORK) {
             micIssue = if (retained.isBlank()) "上一轮网络超时，未返回文字。" else "上一轮网络超时，已保留转写草稿。"
             micStatus(if (nativeRecovery.onDevice || nativeRecovery.preferOffline) "网络识别超时，正在尝试本机识别…" else "网络识别超时，正在重连…")
@@ -3871,12 +3902,14 @@ class VoiceAlarmActivity : Activity() {
         (now - listeningStartedAt >= nativeTimeout || stalledAfterSignal || nowUptime() - nativeStartedAt >= 75000L)) {
       val evidence = nativeEvidence()
       val stableDraft = nativeTurn.hasStableEndpointDraft
+      val noSpeech = !nativeTurn.hasSpeech
       val retained = nativeTurn.finish().orEmpty()
       logNative("timeout", chars = retained.length)
       // Invalidate old callbacks before dispatch; a late final must not duplicate this turn.
-      if (requestedTurn && listenReason != ListenReason.MUSIC_RETRY && retained.isBlank()) listenWindow.recovering(nowUptime(), 120L)
+      if (requestedTurn && listenReason?.automatic != true && retained.isBlank()) listenWindow.recovering(nowUptime(), 120L)
       stopNativeRecognizer()
       if (retained.isNotBlank()) onSpeechChunk(retained, true, evidence, reliable = false, stableDraft = stableDraft)
+      else if (maybeRetryNativeWithoutPlayback(evidence, emptyTurn = noSpeech)) return
       if (!destroyed && !closingAlarm && recognizer == null) startVoiceAssistant()
     }
   }
@@ -4082,7 +4115,7 @@ class VoiceAlarmActivity : Activity() {
       return
     }
     val local = isLocalCommand(text)
-    val armed = (requestedTurn && listenReason != ListenReason.MUSIC_RETRY) || nowUptime() < conversationActiveUntil
+    val armed = (requestedTurn && listenReason?.automatic != true) || nowUptime() < conversationActiveUntil
     val overlapConfirmed = evidence.quietSpeech || (reliable && !local && evidence.matchesConfirmedCue(text))
     val decision = VoiceAlarmConversationGate.decide(text, evidence.sources, evidence.mixed, finalChunk,
       reliable, armed = armed, localCommand = local, passive = !armed, overlapConfirmed = overlapConfirmed,
