@@ -32,8 +32,8 @@ class VoiceAlarmNativeTurn {
   fun notePlayback(sources: List<String>) {
     if (active && !awaitingFinal) overlappingSources.addAll(sources.filter { it.isNotBlank() })
   }
-  // A new capture must never postpone delivery of the preceding confirmed result.
-  fun shouldWaitForFinal(bufferIsFinal: Boolean): Boolean = active && hasSpeech && !bufferIsFinal
+  fun shouldWaitForFinal(bufferIsFinal: Boolean): Boolean =
+    active && (hasDraft || (hasSpeech && !bufferIsFinal))
 
   fun timeoutMs(maxUtteranceMs: Long, hasLevelCallbacks: Boolean = true): Long = when {
     awaitingFinal && draft.isNotBlank() -> 2500L

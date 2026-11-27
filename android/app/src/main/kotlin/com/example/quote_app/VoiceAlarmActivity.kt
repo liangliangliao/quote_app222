@@ -73,7 +73,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "voice_turn_reliability_v58"
+  private val batchChatPipelineVersion = "voice_turn_reliability_v59"
   private val batchChatPipelineSummary = "持续收音、完整转写、云识别重试与系统识别兜底"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
@@ -160,6 +160,11 @@ class VoiceAlarmActivity : Activity() {
   private var cloudSttRecognizeThread: Thread? = null
   private data class RecordedSpeech(val pcm: ByteArray, val evidence: VoiceAlarmCapture.Evidence)
   private val microsoftPcmQueue = LinkedBlockingDeque<RecordedSpeech>(32)
+  private val microsoftSpeech by lazy { VoiceAlarmMicrosoftSpeech() }
+  @Volatile private var microsoftActiveRecognition: RecordedSpeech? = null
+  private var cloudUserSpeechActive = false
+  private val speechCommit = VoiceAlarmSpeechPolicy.TranscriptCommit()
+  private var microsoftTtsUnavailable = false
   private val batchPcmQueue = LinkedBlockingDeque<BatchPcmJob>(3)
   private var iflytekSttClient: OkHttpClient? = null
   private var iflytekTurns: IflytekTurns? = null
@@ -346,7 +351,7 @@ class VoiceAlarmActivity : Activity() {
     }
     tts = TextToSpeech(this) { status ->
       if (status == TextToSpeech.SUCCESS) {
-        val languageResult = try { tts?.setLanguage(Locale.CHINA) ?: TextToSpeech.ERROR } catch (_: Throwable) { TextToSpeech.ERROR }
+        val languageResult = tts?.selectAlarmChineseVoice() ?: TextToSpeech.ERROR
         ttsReady = languageResult != TextToSpeech.LANG_MISSING_DATA && languageResult != TextToSpeech.LANG_NOT_SUPPORTED && languageResult != TextToSpeech.ERROR
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) { runOnUiThread {
@@ -462,6 +467,7 @@ class VoiceAlarmActivity : Activity() {
     micIssue = ""
     speechForReview = ""
     cloudRecovery = VoiceAlarmCloudRecovery()
+    microsoftTtsUnavailable = false
     replyAllowsFollowUp = false
     nativeRecovery = VoiceAlarmNativeRecovery()
     defaultOfflineChinese = null
@@ -497,6 +503,7 @@ class VoiceAlarmActivity : Activity() {
     batchPcmQueue.clear()
     microsoftPcmQueue.clear()
     speechBuffer.clear()
+    resetUtteranceSessionIfIdle()
     speaking = false
     alarmVoicePlaying = false
     alarmSignalPlaying = false
@@ -749,6 +756,7 @@ class VoiceAlarmActivity : Activity() {
     if (closingAlarm) return
     closingAlarm = true
     restoreStartupMusic.run()
+    muteForSpeechContinuation(false)
     backgroundMedia?.close()
     backgroundMedia = null
     endRequestedTurn()
@@ -813,7 +821,7 @@ class VoiceAlarmActivity : Activity() {
     }
     micStatus(when (listenReason) {
       ListenReason.AFTER_REPLY -> "可以直接追问"
-      ListenReason.RETRY -> "可以说话了 · 请再说一遍"
+      ListenReason.RETRY -> if (speechBuffer.isBlank()) "可以说话了 · 请再说一遍" else "可以继续说"
       ListenReason.MUSIC_RETRY -> "可以说话了 · 背景音乐已临时静音"
       ListenReason.REMINDER_RETRY -> "播报已暂停 · 可以说闹钟指令或提问"
       ListenReason.IFLYTEK_QUIET_RETRY -> "已降低收音干扰 · 可以直接提问"
@@ -852,7 +860,7 @@ class VoiceAlarmActivity : Activity() {
         return
       }
       waitingForQuiet = false
-      micStatus("麦克风正在连接…")
+      micStatus(if (selectedSttProvider() == "native") "正在启动系统识别…" else "正在启动收音…")
       startVoiceAssistant()
     }
   }
@@ -919,11 +927,15 @@ class VoiceAlarmActivity : Activity() {
   private fun muteForQuietCapture(active: Boolean) =
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.QUIET_CAPTURE, mixerOwner, active)
 
+  private fun muteForSpeechContinuation(active: Boolean) =
+    VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.USER_CONTINUATION, mixerOwner, active)
+
   private fun userSpeaking(active: Boolean) =
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.USER, mixerOwner, active)
 
   private fun cloudUserSpeaking(session: Int, active: Boolean) = runOnUiThread {
     if (!destroyed && cloudSttActive && cloudSttSession == session) {
+      cloudUserSpeechActive = active
       userSpeaking(active)
       if (active && requestedTurn) listenWindow.activity(nowUptime())
     }
@@ -1119,12 +1131,9 @@ class VoiceAlarmActivity : Activity() {
     batchSubmitButton?.visibility = View.GONE
     batchRetryButton?.visibility = View.GONE
     batchStatusView?.visibility = View.GONE
-    val onDevice = Build.VERSION.SDK_INT >= 31 &&
-      runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(this) }.getOrDefault(false)
-    if (onDevice) nativeRecovery.failed(VoiceAlarmNativeRecovery.Failure.NETWORK, true)
   }
 
-  private fun cloudSttFailure(session: Int, reason: String, attempts: Int = 1) = runOnUiThread {
+  private fun cloudSttFailure(session: Int, reason: String, attempts: Int = 1, retryUserSpeech: Boolean = false) = runOnUiThread {
     if (destroyed || closingAlarm || !cloudSttActive || cloudSttSession != session) return@runOnUiThread
     val provider = selectedSttProvider()
     val switch = cloudRecovery.failed(if (reason == "open_http_401" || reason == "open_http_403") 2 else attempts)
@@ -1138,11 +1147,21 @@ class VoiceAlarmActivity : Activity() {
       micStatus("正在恢复语音识别…")
       return@runOnUiThread
     }
-    micIssue = "${sttProviderLabel(provider)}暂不可用，已切换到系统语音识别。"
-    micStatus("正在连接麦克风…")
     preferSystemRecognizer()
-    stopCloudStt()
-    startVoiceAssistant()
+    if (retryUserSpeech && !aiBusy && !speaking) {
+      startRequestedTurn(ListenReason.RETRY)
+      if (speechBuffer.isBlank()) {
+        transcriptView?.text = "系统识别已接管，请继续说话。"
+      } else if (!speechCommit.manuallySubmitted) {
+        speechCommit.waitThrough(listenWindow.expiresAt)
+        transcriptView?.text = "你：${speechBuffer}\n已保留上半句，可以继续说。"
+      }
+    } else {
+      stopCloudStt()
+    }
+    micIssue = "${sttProviderLabel(provider)}暂不可用，已切换到系统语音识别。"
+    micStatus("正在启动系统识别…")
+    if (!waitingForQuiet) startVoiceAssistant()
   }
 
   private fun cloudSttSuccess(session: Int) = runOnUiThread {
@@ -1165,6 +1184,8 @@ class VoiceAlarmActivity : Activity() {
     cloudSttActive = false
     cloudSttSession++
     iflytekTurns = null
+    cloudUserSpeechActive = false
+    microsoftActiveRecognition = null
     try { cloudSttThread?.interrupt() } catch (_: Throwable) {}
     try { cloudSttRecognizeThread?.interrupt() } catch (_: Throwable) {}
     cloudSttThread = null
@@ -1354,15 +1375,16 @@ class VoiceAlarmActivity : Activity() {
       return
     }
     val selectedSttProvider = selectedSttProvider()
-    if (selectedSttProvider == "native" || (selectedSttProvider == "iflytek" && selectedSttMode() == "realtime")) {
-      beginStartupListening()
-    }
     val cloudCfg = cloudSttConfigForSelected()
     logVoice("voiceAssistant.start", "starting voice assistant", mapOf("mode" to selectedSttMode(), "provider" to selectedSttProvider, "hasCloudConfig" to (cloudCfg != null)))
     if (selectedSttProvider in setOf("microsoft", "iflytek", "xai") && cloudCfg == null) {
       cloudRecovery.failed(2)
       micIssue = "${sttProviderLabel(selectedSttProvider)}配置不完整，已切换到系统语音识别。"
       preferSystemRecognizer()
+    }
+    if (selectedSttProvider() == "native" ||
+        (selectedSttProvider in setOf("iflytek", "microsoft") && selectedSttMode() == "realtime")) {
+      beginStartupListening()
     }
     if (cloudCfg != null && selectedSttMode() == "batch") {
       stopNativeRecognizer()
@@ -1398,10 +1420,15 @@ class VoiceAlarmActivity : Activity() {
     stopCloudStt()
     stopNativeRecognizer()
     if (!nativeRecovery.onDevice && !SpeechRecognizer.isRecognitionAvailable(this)) {
-      endRequestedTurn()
-      micStatus("系统识别不可用")
-      transcriptView?.text = "当前设备没有可用语音识别服务，可使用屏幕按钮。"
-      return
+      val localAvailable = Build.VERSION.SDK_INT >= 31 &&
+        runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(this) }.getOrDefault(false)
+      if (localAvailable) nativeRecovery.failed(VoiceAlarmNativeRecovery.Failure.NETWORK, true)
+      if (!nativeRecovery.onDevice) {
+        endRequestedTurn()
+        micStatus("系统识别不可用")
+        transcriptView?.text = "当前设备没有可用语音识别服务，可使用屏幕按钮。"
+        return
+      }
     }
     val epoch = nativeRecognizerEpoch
     val engine = try { createSpeechRecognizerCompat() } catch (e: RuntimeException) {
@@ -1592,10 +1619,13 @@ class VoiceAlarmActivity : Activity() {
         val endpoint = endpointingConfig()
         val duration = endpoint.maxUtteranceMs.toInt()
         val sources = newCapture()
-        val pcm = try { recordPcmChunk(duration, sources) } catch (t: Throwable) {
-          runOnUiThread { transcriptView?.text = "微软录音启动失败：${t.message ?: t.javaClass.simpleName}；稍后重试…" }
-          Thread.sleep(600)
-          ByteArray(0)
+        val pcm = try {
+          recordPcmChunk(duration, sources)
+        } catch (_: InterruptedException) {
+          break
+        } catch (_: Exception) {
+          cloudSttFailure(session, "microphone_start_failed", attempts = 2)
+          break
         }
         if (pcm.isEmpty() || destroyed || !cloudSttActive || cloudSttSession != session) continue
         // 队列容量足够覆盖短时间网络抖动。极端情况下宁可合并到队尾，也不要静默丢弃最新语音。
@@ -1612,6 +1642,7 @@ class VoiceAlarmActivity : Activity() {
           }
         }
         runOnUiThread {
+          if (destroyed || cloudSttSession != session) return@runOnUiThread
           val base = speechBuffer.toString().trim()
           transcriptView?.text = if (base.isBlank()) {
             "正在收音并等待微软云端返回最终文字…"
@@ -1630,23 +1661,21 @@ class VoiceAlarmActivity : Activity() {
     cloudSttRecognizeThread = Thread {
       while (!destroyed && cloudSttActive && cloudSttSession == session) {
         val job = try { microsoftPcmQueue.poll(500, TimeUnit.MILLISECONDS) } catch (_: InterruptedException) { null } ?: continue
-        var failures = 1
+        microsoftActiveRecognition = job
         val text = try {
-          try {
-            recognizeWithMicrosoft(cfg, job.pcm)
-          } catch (error: Exception) {
-            if (!isCloudTransportFailure(error) || cloudSttSession != session || Thread.currentThread().isInterrupted) throw error
-            failures++
-            recognizeWithMicrosoft(cfg, job.pcm)
-          }.also { cloudSttSuccess(session) }
+          recognizeWithMicrosoft(cfg, job.pcm, budgetMs = 4500L).also { cloudSttSuccess(session) }
         } catch (error: Exception) {
-          if (isCloudTransportFailure(error)) cloudSttFailure(session, "microsoft_${error.javaClass.simpleName}", failures)
+          cloudSttFailure(session, "microsoft_${error.javaClass.simpleName}", attempts = 2,
+            retryUserSpeech = job.evidence.canRetryAudio)
           ""
         }
         if (!destroyed && cloudSttSession == session) runOnUiThread {
+          if (microsoftActiveRecognition === job) microsoftActiveRecognition = null
           if (destroyed || cloudSttSession != session || !job.evidence.belongsTo(captureWindowId)) return@runOnUiThread
           if (text.isNotBlank()) onSpeechChunk(text, finalChunk = true, evidence = job.evidence)
-          else if (job.evidence.canRetryAudio) transcriptView?.text = "微软未返回可用文字，可以继续说话或输入文字。"
+          else if (job.evidence.canRetryAudio && speechBuffer.isBlank()) {
+            transcriptView?.text = "微软未返回可用文字，可以继续说话或输入文字。"
+          }
         }
       }
     }.apply {
@@ -1880,8 +1909,14 @@ class VoiceAlarmActivity : Activity() {
           try { Thread.sleep(250L) } catch (_: Throwable) {}
           continue
         }
-        val segment = try { recordBatchPcmUntilSubmit() } catch (t: Throwable) {
+        val segment = try { recordBatchPcmUntilSubmit() } catch (_: InterruptedException) {
+          break
+        } catch (t: Exception) {
           logVoice("batch.record.error", t.message ?: t.javaClass.simpleName)
+          if (provider == "microsoft") {
+            cloudSttFailure(session, "microphone_start_failed", attempts = 2)
+            break
+          }
           setBatchStatus("非实时录音失败：${t.message ?: t.javaClass.simpleName}；稍后重试…")
           Thread.sleep(600)
           null
@@ -2000,8 +2035,12 @@ class VoiceAlarmActivity : Activity() {
         }
         val text = raw.trim()
         if (destroyed || !cloudSttActive || cloudSttSession != session) continue
-        if (transportError) cloudSttFailure(session, "batch_transport", attempts = 2)
-        else if (lastError.isBlank() || autoEmptyRecognitionError) cloudSttSuccess(session)
+        if (transportError) {
+          cloudSttFailure(session, "batch_transport", attempts = 2,
+            retryUserSpeech = provider == "microsoft" && job.evidence.canRetryAudio)
+          break
+        }
+        if (lastError.isBlank() || autoEmptyRecognitionError) cloudSttSuccess(session)
         batchAwaitingAiCommit = text.isNotBlank()
         batchRecognitionInFlight = false
         val stillSubmitting = batchPcmQueue.isNotEmpty()
@@ -2013,7 +2052,7 @@ class VoiceAlarmActivity : Activity() {
           runOnUiThread {
             if (destroyed || cloudSttSession != session) return@runOnUiThread
             updateBatchRetryButton(false)
-            onSpeechChunk(text, finalChunk = true, evidence = job.evidence)
+            onSpeechChunk(text, finalChunk = true, evidence = job.evidence, submittedManually = job.submittedManually)
           }
         } else if (!destroyed && cloudSttActive && cloudSttSession == session) {
           batchAwaitingAiCommit = false
@@ -2451,6 +2490,7 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun recognizeBatchWithProvider(provider: String, cfg: JSONObject, pcm: ByteArray): String {
+    if (provider == "microsoft") return recognizeWithMicrosoft(cfg, pcm)
     val audioMs = pcmDurationMs(pcm)
     if (provider == "iflytek" && audioMs >= 22_000L) {
       val chunked = recognizeBatchByChunks(provider, cfg, pcm, reason = "iflytek_long_file_${audioMs}ms")
@@ -2581,7 +2621,7 @@ class VoiceAlarmActivity : Activity() {
     val music = CaptureMusic(session)
     val sampleRate = 16000
     val minBuffer = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-    if (minBuffer <= 0) return ByteArray(0)
+    check(minBuffer > 0) { "Invalid microphone buffer size" }
     val playbackEchoGuard = isStrictPlaybackActiveForCapture()
     val audioRecord = obtainContinuousAudioRecord(playbackEchoGuard) ?: throw IllegalStateException("麦克风不可用，请检查权限或其他应用占用")
     val out = ByteArrayOutputStream()
@@ -2888,53 +2928,21 @@ class VoiceAlarmActivity : Activity() {
     return VoiceAudioEffects(aec, ns, agc)
   }
 
-  private fun recognizeWithMicrosoft(cfg: JSONObject, pcm: ByteArray): String {
+  private fun recognizeWithMicrosoft(cfg: JSONObject, pcm: ByteArray, budgetMs: Long = 10000L): String {
     val region = cfg.optString("region", "eastasia").ifBlank { "eastasia" }
     val language = cfg.optString("language", "zh-CN").ifBlank { "zh-CN" }
     val endpoint = microsoftSttEndpoint(region, cfg.optString("endpoint", ""), language)
     val apiKey = cfg.optString("apiKey", "")
-    val first = recognizeWithMicrosoftOnce(endpoint, apiKey, language, pcm, attempt = "primary")
-    if (first.isNotBlank()) return first
-    // Microsoft occasionally returns RecognitionStatus=Success with empty DisplayText/NBest for short
-    // conversational recordings.  Retrying with a small leading/trailing silence pad often helps
-    // the service endpointing model lock onto the speech rather than treating the whole file as no-match.
-    val padded = padPcmSilence(pcm, 16000, leadMs = 500, tailMs = 900)
-    if (padded.size != pcm.size) {
-      logVoice("stt.microsoft.http.retryPadded", "retry Microsoft STT with padded WAV after empty success", mapOf("originalBytes" to pcm.size, "paddedBytes" to padded.size))
-      val second = recognizeWithMicrosoftOnce(endpoint, apiKey, language, padded, attempt = "padded")
-      if (second.isNotBlank()) return second
-    }
-    return ""
-  }
+    val deadline = nowUptime() + budgetMs
+    logVoice("stt.microsoft.http.start", "Microsoft speech recognition request", mapOf("language" to language, "bytes" to pcm.size, "budgetMs" to budgetMs))
+    val text = microsoftSpeech.recognize(endpoint, apiKey, wavFromPcm(pcm, 16000), budgetMs)
+    val remaining = deadline - nowUptime()
+    if (text.isNotBlank() || pcm.isEmpty() || remaining < 1200L) return text
 
-  private fun recognizeWithMicrosoftOnce(endpoint: String, apiKey: String, language: String, pcm: ByteArray, attempt: String): String {
-    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-      requestMethod = "POST"
-      connectTimeout = 12000
-      readTimeout = 30000
-      doOutput = true
-      setRequestProperty("Ocp-Apim-Subscription-Key", apiKey)
-      setRequestProperty("Content-Type", "audio/wav; codecs=audio/pcm; samplerate=16000")
-      setRequestProperty("Accept", "application/json")
-    }
-    logVoice("stt.microsoft.http.start", "Microsoft batch STT request", mapOf("endpoint" to endpoint.take(160), "language" to language, "bytes" to pcm.size, "attempt" to attempt))
-    conn.outputStream.use { it.write(wavFromPcm(pcm, 16000)) }
-    val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
-    val resp = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
-    logVoice("stt.microsoft.http.result", "Microsoft batch STT response", mapOf("status" to conn.responseCode, "attempt" to attempt, "resp" to resp.take(260)))
-    if (conn.responseCode !in 200..299) throw IllegalStateException("HTTP ${conn.responseCode} ${resp.take(120)}")
-    val obj = JSONObject(resp)
-    val display = obj.optString("DisplayText", "")
-    if (display.isNotBlank()) return display.trim()
-    val nBest = obj.optJSONArray("NBest")
-    val bestObj = nBest?.optJSONObject(0)
-    val best = if (bestObj != null) {
-      bestObj.optString("Display", bestObj.optString("Lexical", bestObj.optString("ITN", ""))).trim()
-    } else ""
-    if (best.isNotBlank()) return best
-    val status = obj.optString("RecognitionStatus", obj.optString("status", ""))
-    if (status.isNotBlank() && status != "Success") throw IllegalStateException("微软 RecognitionStatus=$status")
-    return ""
+    // Some short utterances need extra audio at either end for Azure endpointing.
+    val padded = padPcmSilence(pcm, 16000, leadMs = 500, tailMs = 900)
+    logVoice("stt.microsoft.http.retryPadded", "retry empty recognition with padded audio", mapOf("remainingMs" to remaining))
+    return microsoftSpeech.recognize(endpoint, apiKey, wavFromPcm(padded, 16000), remaining)
   }
 
   private fun padPcmSilence(pcm: ByteArray, sampleRate: Int, leadMs: Int, tailMs: Int): ByteArray {
@@ -3701,6 +3709,10 @@ class VoiceAlarmActivity : Activity() {
         muteForQuietCapture(true)
         if (VoiceAlarmRingingService.outputKind() != "quiet") { listenAgain(60L); return@Runnable }
       }
+      if (speechBuffer.isNotBlank() && !speechCommit.manuallySubmitted && VoiceAlarmRingingService.outputKind() == "tail") {
+        listenAgain(60L)
+        return@Runnable
+      }
       val endpoint = endpointingConfig()
       if (defaultOfflineChinese == true) nativeRecovery.preferInstalledChinese()
       val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -3725,7 +3737,12 @@ class VoiceAlarmActivity : Activity() {
         nativeReadyAt = 0L
         nativeTurnNumber++
         logNative("start")
-        micStatus("麦克风正在连接…")
+        val epoch = nativeRecognizerEpoch
+        val turn = nativeTurnNumber
+        speechHandler.postDelayed({
+          if (!destroyed && !closingAlarm && epoch == nativeRecognizerEpoch && turn == nativeTurnNumber &&
+              nativeTurn.active && !nativeTurn.ready) micStatus("正在启动系统识别…")
+        }, 400L)
         r.startListening(i)
         listening = true
         listeningStartedAt = System.currentTimeMillis()
@@ -3874,6 +3891,7 @@ class VoiceAlarmActivity : Activity() {
     listenAgain(0L)
     processSpeechRunnable?.let { speechHandler.removeCallbacks(it) }
     if (speechBuffer.isBlank()) {
+      muteForSpeechContinuation(false)
       transcriptView?.text = "闹钟正在播报。听到提问时会暂停播放，单独收音。"
     } else {
       transcriptView?.text = "闹钟语音播报中，已保留用户已说内容并继续准备发送给 AI…\n你：$speechBuffer"
@@ -4214,6 +4232,7 @@ class VoiceAlarmActivity : Activity() {
     if (speechBuffer.isBlank()) {
       utteranceSessionStartedAt = 0L
       lastSpeechChunkAt = 0L
+      speechCommit.reset()
       semanticHoldExtended = false
       lastTranscriptRevisionAt = 0L
       lastDraftTextNormalized = ""
@@ -4223,7 +4242,7 @@ class VoiceAlarmActivity : Activity() {
 
   private fun onSpeechChunk(chunk: String, finalChunk: Boolean, evidence: VoiceAlarmCapture.Evidence,
                             reliable: Boolean = true, stableDraft: Boolean = false, system: Boolean = false,
-                            iflytekRealtime: Boolean = false) {
+                            iflytekRealtime: Boolean = false, submittedManually: Boolean = false) {
     if (destroyed || closingAlarm) return
     val text = chunk.trim()
     if (waitingForQuiet || !evidence.belongsTo(captureWindowId)) {
@@ -4283,8 +4302,11 @@ class VoiceAlarmActivity : Activity() {
     if (speaking || alarmVoicePlaying || VoiceAlarmRingingService.liveVoiceText != null) interruptPlaybackForUserSpeech(decision.text)
     postponeAlarmVoiceReplay(30_000L)
     appendSpeechChunk(decision.text, finalChunk = true)
-    transcriptView?.text = "你：${speechBuffer}"
-    scheduleBufferedSpeechProcessing(VoiceAlarmSpeechPolicy.FINAL_COMMIT_MS)
+    muteForSpeechContinuation(!submittedManually)
+    val commitDelay = speechCommit.accept(decision.text, endpointingConfig().finalCommitDelayMs, nowUptime(), submittedManually)
+    transcriptView?.text = if (submittedManually) "你：${speechBuffer}" else "你：${speechBuffer}\n可以继续说"
+    logVoice("stt.commit.wait", "holding transcript for continuation", mapOf("delayMs" to commitDelay, "manual" to submittedManually))
+    scheduleBufferedSpeechProcessing(commitDelay)
   }
 
   private fun appendSpeechChunk(text: String, finalChunk: Boolean = false) {
@@ -4407,7 +4429,7 @@ class VoiceAlarmActivity : Activity() {
     val recentConfirmedSpeech = batchCurrentConfirmedSpeech && batchLastSpeechAt > 0L && now - batchLastSpeechAt < batchAutoSubmitSilenceMs() + 1200L
     // 只要还有非实时 STT 请求正在识别，就不要提前把尚未稳定的文本发给 AI。
     // 之前的 forceRelease 允许 inFlight=true 时放行，造成“前半段先触发 AI，后半段还没转出来”。
-    if (batchRecognitionInFlight || batchPcmQueue.isNotEmpty() || batchSubmitInProgress) return true
+    if (batchRecognitionInFlight || batchPcmQueue.isNotEmpty() || batchSubmitInProgress || batchAwaitingAiCommit) return true
     // 如果下一条完整录音已经确认有人声，说明用户可能还在连续说话。
     // 暂缓把已识别文本发给 AI，等本次完整转写稳定后再提交。
     if (recentConfirmedSpeech) return true
@@ -4426,14 +4448,6 @@ class VoiceAlarmActivity : Activity() {
     processSpeechRunnable = Runnable {
       processSpeechRunnable = null
       val merged = speechBuffer.toString().trim()
-      if (merged.isNotBlank() && iflytekTurns?.hasSpeech(captureWindowId) == true &&
-          System.currentTimeMillis() - lastSpeechChunkAt < 75000L) {
-        scheduleBufferedSpeechProcessing(350L)
-        return@Runnable
-      }
-      if (nativeTurn.shouldWaitForFinal(lastSpeechWasFinal) && merged.isNotBlank()) {
-        scheduleBufferedSpeechProcessing(350L); return@Runnable
-      }
       if (merged.isBlank()) {
         batchAwaitingAiCommit = false
         resetUtteranceSessionIfIdle()
@@ -4441,11 +4455,25 @@ class VoiceAlarmActivity : Activity() {
         return@Runnable
       }
       val urgent = isLocalCommand(merged)
+      if (!urgent && !speechCommit.manuallySubmitted) {
+        val remaining = speechCommit.remaining(nowUptime())
+        if (remaining > 0L) {
+          scheduleBufferedSpeechProcessing(remaining)
+          return@Runnable
+        }
+        val moreCloudSpeech = cloudUserSpeechActive || iflytekTurns?.hasSpeech(captureWindowId) == true ||
+          microsoftActiveRecognition?.evidence?.belongsTo(captureWindowId) == true ||
+          microsoftPcmQueue.any { it.evidence.belongsTo(captureWindowId) }
+        val moreNativeSpeech = nativeTurn.shouldWaitForFinal(lastSpeechWasFinal) ||
+          (nativeTurn.active && nativeSignal.detected && (nativeSignal.peakDb ?: 0f) >= 2f && nativeCapture?.frameOutput == "quiet")
+        if ((moreCloudSpeech || moreNativeSpeech) && remaining > -75000L) {
+          scheduleBufferedSpeechProcessing(350L)
+          return@Runnable
+        }
+      }
       recoverStuckPlaybackStateIfNeeded()
       if (shouldHoldBatchAiCommit(urgent)) {
-        transcriptView?.text = "非实时识别结果：$merged\n（严格单轮模式：当前文字准备发送给 AI，录音暂停）"
-        setBatchStatus("严格单轮处理中：当前文字准备发送给 AI，录音暂停，避免混入下一轮。")
-        scheduleBufferedSpeechProcessing(900L)
+        scheduleBufferedSpeechProcessing(350L)
         return@Runnable
       }
       if (selectedSttMode() == "batch") {
@@ -4861,7 +4889,7 @@ class VoiceAlarmActivity : Activity() {
   // 缺少所选服务配置时返回 null，使用系统默认；不擅自切换到别的付费服务。
   private fun resolveAiTtsProvider(cfg: JSONObject): String? {
     when (cfg.optString("provider", "")) {
-      "microsoft" -> if (ttsHasMicrosoft(cfg)) return "microsoft"
+      "microsoft" -> if (!microsoftTtsUnavailable && ttsHasMicrosoft(cfg)) return "microsoft"
       "elevenlabs" -> if (ttsHasElevenLabs(cfg)) return "elevenlabs"
       "iflytek" -> if (ttsHasIflytek(cfg)) return "iflytek"
     }
@@ -4924,9 +4952,10 @@ class VoiceAlarmActivity : Activity() {
       if (destroyed || !replyGate.isCurrent(token)) return@Runnable
       invalidateReply()
       appendTranscriptLine("云端语音合成超时，已切换系统语音；文字回答已保留。")
-      speakWithLocalTts(text, utteranceId, restart)
+      fallBackToLocalAiTts(provider, text, utteranceId, restart)
     }
-    speechHandler.postDelayed(cloudTtsDeadline!!, VoiceAlarmSpeechPolicy.CLOUD_TTS_DEADLINE_MS)
+    val deadlineMs = if (provider == "microsoft") 3500L else VoiceAlarmSpeechPolicy.CLOUD_TTS_DEADLINE_MS
+    speechHandler.postDelayed(cloudTtsDeadline!!, deadlineMs)
     Thread {
       val path = try { synthesizeAiTtsWithProvider(cfg, provider, text) } catch (t: Throwable) {
         logVoice("ai.tts.cloud.error", t.javaClass.simpleName, mapOf("provider" to provider))
@@ -4941,16 +4970,21 @@ class VoiceAlarmActivity : Activity() {
         cloudTtsDeadline = null
         if (path == null) {
           appendTranscriptLine("云端语音合成失败，已切换系统语音；请检查语音服务配置或网络。")
-          speakWithLocalTts(text, utteranceId, restart)
+          fallBackToLocalAiTts(provider, text, utteranceId, restart)
         } else {
           updateTtsProviderDisplay(provider)
-          playCloudAiTtsFile(path, text, utteranceId, restart)
+          playCloudAiTtsFile(provider, path, text, utteranceId, restart)
         }
       }
     }.apply { name = "voice-alarm-ai-tts"; isDaemon = true }.start()
   }
 
-  private fun playCloudAiTtsFile(path: String, text: String, utteranceId: String, restart: Boolean) {
+  private fun fallBackToLocalAiTts(provider: String, text: String, utteranceId: String, restart: Boolean) {
+    if (provider == "microsoft") microsoftTtsUnavailable = true
+    speakWithLocalTts(text, utteranceId, restart)
+  }
+
+  private fun playCloudAiTtsFile(provider: String, path: String, text: String, utteranceId: String, restart: Boolean) {
     try { aiTtsPlayer?.release() } catch (_: Throwable) {}
     aiTtsPlayer = null
     val token = replyToken
@@ -4959,7 +4993,7 @@ class VoiceAlarmActivity : Activity() {
       if (!destroyed && replyGate.isCurrent(token) && aiTtsPlayer === player && !currentAppTtsStartedByEngine) {
         cleanupCloudAiTtsPlayer(path, player)
         appendTranscriptLine("语音文件播放启动超时，已切换系统语音。")
-        speakWithLocalTts(text, utteranceId, restart)
+        fallBackToLocalAiTts(provider, text, utteranceId, restart)
       }
     }
     currentAppTtsStartedByEngine = false
@@ -4986,7 +5020,10 @@ class VoiceAlarmActivity : Activity() {
         // 复用既有的“播报卡死自动恢复”看门狗，避免云端播放异常导致 speaking 卡住。
         scheduleAppTtsWatchdog(utteranceId, text, restart)
         mp.setVolume(playbackGain("voiceVolume", 1f), playbackGain("voiceVolume", 1f))
-        try { mp.start() } catch (_: Throwable) { cleanupCloudAiTtsPlayer(path); speakWithLocalTts(text, utteranceId, restart) }
+        try { mp.start() } catch (_: Throwable) {
+          cleanupCloudAiTtsPlayer(path, mp)
+          fallBackToLocalAiTts(provider, text, utteranceId, restart)
+        }
       }
       player.setOnCompletionListener { mp ->
         speechHandler.removeCallbacks(prepareDeadline)
@@ -5000,7 +5037,7 @@ class VoiceAlarmActivity : Activity() {
         logVoice("ai.tts.cloud.playError", "cloud TTS playback error; fall back to local TTS", mapOf("what" to what, "extra" to extra, "utteranceId" to utteranceId))
         cleanupCloudAiTtsPlayer(path, mp)
         // 播放失败：回退本地 TTS，保证用户仍能听到回复。
-        speakWithLocalTts(text, utteranceId, restart)
+        fallBackToLocalAiTts(provider, text, utteranceId, restart)
         true
       }
       aiTtsPlayer = player
@@ -5011,7 +5048,7 @@ class VoiceAlarmActivity : Activity() {
       try { player.release() } catch (_: Throwable) {}
       if (aiTtsPlayer === player) aiTtsPlayer = null
       try { File(path).delete() } catch (_: Throwable) {}
-      speakWithLocalTts(text, utteranceId, restart)
+      fallBackToLocalAiTts(provider, text, utteranceId, restart)
     }
   }
 
@@ -5364,6 +5401,7 @@ class VoiceAlarmActivity : Activity() {
 
   override fun onDestroy() {
     restoreStartupMusic.run()
+    muteForSpeechContinuation(false)
     backgroundMedia?.close()
     backgroundMedia = null
     endRequestedTurn()

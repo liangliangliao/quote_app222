@@ -303,6 +303,7 @@ class VoiceAlarmRingingService : Service() {
 
   private val voiceQueue = VoiceAlarmPlaybackQueue()
   private var voiceChunkWatchdog: Runnable? = null
+  private val failedVoiceFiles = mutableSetOf<String>()
   private val wakeupGate = VoiceAlarmReplyGate()
   private var wakeSession: VoiceAlarmWakeSession? = null
   private var historyLoading = false
@@ -871,13 +872,15 @@ class VoiceAlarmRingingService : Service() {
     currentVoiceText = data.optString("text", "").trim()
     reminderOfferedQuietWindow = false
     val voicePath = data.optString("voicePath", "")
+    val voiceFile = File(voicePath)
     logVoice("voice.playOnce", "playing voice prompt", mapOf("hasVoicePath" to voicePath.isNotBlank(), "textLen" to data.optString("text", "").length))
     val volume = data.optDouble("voiceVolume", currentVoiceVolume.toDouble()).toFloat().coerceIn(0f, 1f)
-    if (voicePath.isNotBlank() && File(voicePath).isFile) {
+    if (voicePath.isNotBlank() && voiceFile.absolutePath !in failedVoiceFiles && voiceFile.isFile) {
       try { voicePlayer?.stop() } catch (_: Throwable) {}
       try { voicePlayer?.release() } catch (_: Throwable) {}
-      voicePlayer = createPlayer(Uri.fromFile(File(voicePath)), false, volume = volume, notifyVoice = true)
+      voicePlayer = createPlayer(Uri.fromFile(voiceFile), false, volume = volume, notifyVoice = true)
       if (voicePlayer != null) return
+      failedVoiceFiles.add(voiceFile.absolutePath)
       // Corrupt/inaccessible custom voice file should not make the alarm silent.
       // Fall through to platform TTS using the saved alarm text.
     }
@@ -930,7 +933,7 @@ class VoiceAlarmRingingService : Service() {
       return
     }
     alarmTtsReady = true
-    try { alarmTts?.language = Locale.CHINA } catch (_: Throwable) {}
+    alarmTts?.selectAlarmChineseVoice()
     alarmTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
       override fun onStart(utteranceId: String?) { replayHandler.post {
         if (utteranceId == voiceQueue.current?.id) notifyVoicePlaybackStart()
@@ -1166,8 +1169,12 @@ class VoiceAlarmRingingService : Service() {
 
   private fun createPlayer(uri: Uri, looping: Boolean, volume: Float = 0.75f, notifyVoice: Boolean = false): MediaPlayer? {
     if (looping) musicPrepared = false
+    val media = runCatching { MediaPlayer() }.getOrNull() ?: return null
+    val voicePrepareDeadline = Runnable {
+      if (media === voicePlayer) fallBackFromVoiceFile(media, uri)
+    }
     return try {
-      MediaPlayer().apply {
+      media.apply {
         setAudioAttributes(
           AudioAttributes.Builder()
             .setUsage(playbackUsage())
@@ -1180,6 +1187,7 @@ class VoiceAlarmRingingService : Service() {
         setVolume(initialGain, initialGain)
         applyPreferredOutputDevice(this)
         setOnPreparedListener { player ->
+          replayHandler.removeCallbacks(voicePrepareDeadline)
           try {
             logVoice("media.prepared", "MediaPlayer prepared", mapOf("notifyVoice" to notifyVoice, "looping" to looping, "volume" to volume))
             if (notifyVoice && player !== voicePlayer) return@setOnPreparedListener
@@ -1195,9 +1203,11 @@ class VoiceAlarmRingingService : Service() {
             if (looping) applyMusicGain()
           } catch (t: Throwable) {
             logVoice("media.start.error", t.message ?: t.javaClass.simpleName, mapOf("notifyVoice" to notifyVoice))
-            if (looping && player === musicPlayer) clearMusicPlayer()
-            if (notifyVoice && player === voicePlayer) notifyVoicePlaybackEnd()
-            try { player.release() } catch (_: Throwable) {}
+            if (notifyVoice) fallBackFromVoiceFile(player, uri)
+            else {
+              if (looping && player === musicPlayer) clearMusicPlayer()
+              runCatching { player.release() }
+            }
           }
         }
         setOnCompletionListener { player ->
@@ -1205,18 +1215,33 @@ class VoiceAlarmRingingService : Service() {
           if (notifyVoice && player === voicePlayer) notifyVoicePlaybackEnd(completed = true)
         }
         setOnErrorListener { player, what, extra ->
-          if (looping && player === musicPlayer) clearMusicPlayer()
+          replayHandler.removeCallbacks(voicePrepareDeadline)
           logVoice("media.error", "MediaPlayer error", mapOf("notifyVoice" to notifyVoice, "what" to what, "extra" to extra))
-          if (notifyVoice && player === voicePlayer) notifyVoicePlaybackEnd()
-          try { player.release() } catch (_: Throwable) {}
+          if (notifyVoice) fallBackFromVoiceFile(player, uri)
+          else {
+            if (looping && player === musicPlayer) clearMusicPlayer()
+            runCatching { player.release() }
+          }
           true
         }
         try { setWakeMode(this@VoiceAlarmRingingService, PowerManager.PARTIAL_WAKE_LOCK) } catch (_: Throwable) {}
         prepareAsync()
+        if (notifyVoice) replayHandler.postDelayed(voicePrepareDeadline, 2500L)
       }
     } catch (_: Throwable) {
+      runCatching { media.release() }
       null
     }
+  }
+
+  private fun fallBackFromVoiceFile(player: MediaPlayer, uri: Uri) {
+    if (player !== voicePlayer) return
+    voicePlayer = null
+    runCatching { player.release() }
+    uri.path?.let { failedVoiceFiles.add(it) }
+    logVoice("media.voice.fallback", "alarm voice file unavailable; using platform TTS")
+    notifyVoicePlaybackEnd()
+    if (!reminderPausedForListening) speakAlarmTextOnce(currentVoiceText, currentVoiceVolume)
   }
 
   private fun clearMusicPlayer() {
@@ -1249,6 +1274,7 @@ class VoiceAlarmRingingService : Service() {
     activeSignalPlayback = false
     if (shouldNotifySignalEnd) sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName))
     voiceQueue.cancel()
+    failedVoiceFiles.clear()
     liveVoiceText = null
     voiceChunkWatchdog?.let { replayHandler.removeCallbacks(it) }; voiceChunkWatchdog = null
     logVoice("signals.stop", "stopping alarm signals")

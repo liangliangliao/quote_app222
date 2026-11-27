@@ -11,6 +11,66 @@ fun main() {
   var passed = 0
   fun scenario(name: String, body: () -> Unit) { body(); passed++; println("PASS $name") }
   fun rejects(body: () -> Unit) { check(runCatching(body).isFailure) }
+  scenario("Microsoft speech distinguishes a normal no-match from a failed service") {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/") { exchange ->
+      check(exchange.requestHeaders.getFirst("Ocp-Apim-Subscription-Key") == "test-key")
+      check(exchange.requestHeaders.getFirst("Content-Type") == "audio/wav; codecs=audio/pcm; samplerate=16000")
+      check(exchange.requestBody.use { it.readBytes() }.contentEquals(byteArrayOf(1, 2)))
+      val (status, body) = when (exchange.requestURI.path) {
+        "/result" -> 200 to """{"RecognitionStatus":"Success","NBest":[{"Display":"","Lexical":"查一下天气"}]}"""
+        "/silent" -> 200 to """{"RecognitionStatus":"InitialSilenceTimeout"}"""
+        "/no-match" -> 200 to """{"RecognitionStatus":"NoMatch"}"""
+        "/missing-status" -> 200 to "{}"
+        "/bad-json" -> 200 to "Unexpected response"
+        else -> 401 to "unauthorized"
+      }
+      val bytes = body.toByteArray()
+      exchange.sendResponseHeaders(status, bytes.size.toLong())
+      exchange.responseBody.use { it.write(bytes) }
+    }
+    server.start()
+    try {
+      val speech = VoiceAlarmMicrosoftSpeech()
+      fun recognize(path: String) =
+        speech.recognize("http://127.0.0.1:${server.address.port}/$path", "test-key", byteArrayOf(1, 2), 1500L)
+      check(recognize("result") == "查一下天气")
+      check(recognize("silent").isEmpty())
+      check(recognize("no-match").isEmpty())
+      val denied = runCatching { recognize("bad-key") }.exceptionOrNull()
+      check(denied is java.io.IOException && denied.message == "Microsoft Speech HTTP 401")
+      check(runCatching { recognize("missing-status") }.exceptionOrNull() is java.io.IOException)
+      check(runCatching { recognize("bad-json") }.exceptionOrNull() is java.io.IOException)
+    } finally {
+      server.stop(0)
+    }
+  }
+  scenario("Microsoft speech has one total deadline even if the response stalls mid-body") {
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    val headersSent = CountDownLatch(1)
+    val releaseBody = CountDownLatch(1)
+    server.createContext("/slow") { exchange ->
+      exchange.requestBody.use { it.readBytes() }
+      exchange.sendResponseHeaders(200, 100)
+      headersSent.countDown()
+      releaseBody.await(3L, TimeUnit.SECONDS)
+      exchange.close()
+    }
+    server.start()
+    try {
+      val started = System.nanoTime()
+      val result = runCatching {
+        VoiceAlarmMicrosoftSpeech().recognize("http://127.0.0.1:${server.address.port}/slow",
+          "test-key", byteArrayOf(1, 2), 500L)
+      }
+      check(headersSent.count == 0L)
+      check(result.exceptionOrNull() is java.io.InterruptedIOException)
+      check(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 2400L)
+    } finally {
+      releaseBody.countDown()
+      server.stop(0)
+    }
+  }
   scenario("iFlytek envelope-only final retains and completes the accumulated paragraph") {
     val stream = VoiceAlarmIflytekTranscript()
     check(stream.accept("""{"code":0,"data":{"status":1,"result":{"sn":1,"ws":[{"cw":[{"w":"第一句。"},{"w":"干扰候选"}]}]}}}""")?.text == "第一句。")
@@ -354,6 +414,10 @@ fun main() {
     turn.begin(); turn.ready(); turn.speechStarted()
     check(!turn.shouldWaitForFinal(true))
     check(turn.shouldWaitForFinal(false))
+    turn.partial("上海周末下雨吗")
+    check(turn.shouldWaitForFinal(true))
+    turn.finish()
+    check(!turn.shouldWaitForFinal(true))
   }
   scenario("lost final can recover an existing draft without cutting off live speech") {
     val turn = VoiceAlarmNativeTurn()

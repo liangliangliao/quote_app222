@@ -910,6 +910,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         pitch: _pitch,
         pauseSeconds: _pauseSeconds,
         style: _emotion == 'none' ? '' : _emotion,
+        requestBudget: const Duration(seconds: 5),
       );
     }
     if (_provider == 'resemble') {
@@ -1017,6 +1018,13 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
 
   Future<void> _prepareAlarmVoice(String failureMessage) async {
     if (_historyReplayDate != null) return;
+    final microsoft = _alarmTtsConfig['microsoft'] as Map<String, dynamic>?;
+    if (_provider == 'microsoft' &&
+        _selectedSavedVoicePath == null &&
+        (microsoft?['apiKey'] as String? ?? '').trim().isEmpty) {
+      _generatedVoice = null;
+      return;
+    }
     try {
       _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
       if (_selectedSavedVoicePath == null && _generatedVoice?.isNotEmpty == true) {
@@ -1024,7 +1032,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       }
     } catch (e) {
       _generatedVoice = null;
-      _toast('$failureMessage：$e');
+      _toast(_provider == 'microsoft' ? failureMessage : '$failureMessage：$e');
     }
   }
 
@@ -1393,7 +1401,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                         Slider(value: _batchAutoSubmitSilenceMs, min: 1000, max: 15000, divisions: 28, onChanged: (value) => setState(() => _batchAutoSubmitSilenceMs = value)),
                         Text('兜底最长录音 ${(_batchMaxRecordMs / 1000).round()} 秒'),
                         Slider(value: _batchMaxRecordMs, min: 10000, max: 180000, divisions: 34, onChanged: (value) => setState(() => _batchMaxRecordMs = value)),
-                        const Text('严格单轮：不再滚动转写、不再后台排队、不再多段合并。用户说话前只保留很短预录音，确认开口后才建立本轮音频；说完静音后自动提交。', style: TextStyle(color: Colors.black54)),
+                        const Text('录音先转成文字。短暂停顿后继续说，前后转写会合并后提交给 AI。', style: TextStyle(color: Colors.black54)),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('返回最佳结果并自动纠错'),
@@ -1453,7 +1461,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                       Text('单段最长等待 ${(_speechMaxUtteranceMs / 1000).round()} 秒'),
                       Slider(value: _speechMaxUtteranceMs, min: 8000, max: 60000, divisions: 52, onChanged: (value) => setState(() => _speechMaxUtteranceMs = value)),
                       const Text('极短噪声过滤：1～2 个无意义语气词会被忽略，正常短句不会被字数拦截。', style: TextStyle(color: Colors.black54)),
-                      const Text('调大“自动提交静音 / 文本稳定等待 / AI提交等待”可减少碎片提交；调小则响应更快。实时模式会自动提交，不要求用户点击确认。', style: TextStyle(color: Colors.black54)),
+                      const Text('转写后留至少 5 秒给你继续说，6 字以内至少等 6 秒。可以调长「AI 提交等待」。关闭闹钟等明确指令会立即处理。', style: TextStyle(color: Colors.black54)),
                     ]),
                   ),
                 ),

@@ -8,8 +8,32 @@ object VoiceAlarmSpeechPolicy {
   const val FRAME_MS = 20
   const val PCM_BYTES_PER_MS = 32 // PCM16, mono, 16 kHz
   const val FRAME_BYTES = FRAME_MS * PCM_BYTES_PER_MS
-  const val FINAL_COMMIT_MS = 300L
   const val CLOUD_TTS_DEADLINE_MS = 5000L
+
+  // A recognizer can finalize a sentence while the person is still thinking.
+  class TranscriptCommit {
+    private var deadline = 0L
+    var manuallySubmitted = false
+      private set
+
+    fun accept(fragment: String, configuredMs: Long, now: Long, manual: Boolean): Long {
+      manuallySubmitted = manual
+      val delay = if (manual) 250L else maxOf(configuredMs, if (normalized(fragment).length <= 6) 6000L else 5000L)
+      deadline = now + delay
+      return delay
+    }
+
+    fun remaining(now: Long) = deadline - now
+
+    fun waitThrough(at: Long) {
+      if (!manuallySubmitted) deadline = maxOf(deadline, at)
+    }
+
+    fun reset() {
+      deadline = 0L
+      manuallySubmitted = false
+    }
+  }
 
   fun isVoice(rms: Int, peak: Int, zcr: Int, crest: Int, voiced: Int, noise: Double): Boolean =
     rms >= maxOf(70.0, noise * 2.2) &&

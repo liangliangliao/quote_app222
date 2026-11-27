@@ -12,6 +12,22 @@ fun main() {
     passed++
     println("PASS $name")
   }
+  scenario("automatic AI submission waits for continuation across recognized segments") {
+    val commit = VoiceAlarmSpeechPolicy.TranscriptCommit()
+    check(commit.accept("我想问", 2800L, now = 1000L, manual = false) == 6000L)
+    check(commit.remaining(5000L) == 2000L)
+    check(commit.accept("上海周末会不会下雨", 2800L, now = 5000L, manual = false) == 5000L)
+    check(commit.remaining(9999L) == 1L)
+    check(commit.remaining(10000L) == 0L)
+    commit.waitThrough(17000L)
+    check(commit.remaining(10000L) == 7000L)
+    check(commit.accept("谢谢", 7500L, now = 17000L, manual = false) == 7500L)
+    check(commit.accept("提交录音", 7500L, now = 18000L, manual = true) == 250L)
+    commit.waitThrough(25000L)
+    check(commit.manuallySubmitted && commit.remaining(18250L) == 0L)
+    commit.reset()
+    check(!commit.manuallySubmitted && commit.remaining(18250L) < 0L)
+  }
   scenario("quiet speech can start without high-volume endpoint frames") {
     val voice = VoiceAlarmSpeechPolicy.isVoice(160, 520, 45, 325, 65, 24.0)
     check(voice)

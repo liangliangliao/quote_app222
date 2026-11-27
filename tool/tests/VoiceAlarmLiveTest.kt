@@ -76,6 +76,18 @@ fun main() {
     mix.setSpeaking(VoiceAlarmMusicState.Speaker.USER, owner, false)
     check(mix.gain(.35f) == .35f)
   }
+  scenario("music stays quiet between fragments and returns after speech is submitted") {
+    val mix = VoiceAlarmMusicState()
+    val owner = Any()
+    val continuation = VoiceAlarmMusicState.Speaker.USER_CONTINUATION
+    val user = VoiceAlarmMusicState.Speaker.USER
+    mix.setSpeaking(user, owner, true)
+    mix.setSpeaking(continuation, owner, true)
+    mix.setSpeaking(user, owner, false)
+    check(mix.gain(.4f) == 0f)
+    mix.setSpeaking(continuation, owner, false)
+    check(mix.gain(.4f) == .4f)
+  }
   scenario("reminder and assistant duck music while an idle listening window keeps full gain") {
     val mix = VoiceAlarmMusicState()
     val owner = Any()
