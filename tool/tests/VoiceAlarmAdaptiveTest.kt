@@ -251,20 +251,44 @@ fun main() {
     check(turn.finish() == "明天要做什么")
     check(turn.begin() && !turn.hasStableEndpointDraft)
   }
+  scenario("iFlytek distinguishes an idle connection from missing PCM or empty recognition of speech") {
+    val empty = VoiceAlarmIflytekTranscript()
+    check(empty.outcome(false, 0, 0, "open_failed", microphoneTimedOut = true) == "open_failed")
+    check(empty.outcome(false, 0, 0, null, microphoneTimedOut = true) == "microphone_no_frames")
+    empty.accept("""{"code":0,"data":{"status":2}}""")
+    check(empty.outcome(false, 0, 0, null) == "empty_final")
+    check(empty.outcome(false, 32000, 32000, null, quietSpeech = true) == "empty_final_with_speech")
+    check(empty.outcome(false, 32000, 32000, null) == "empty_final")
+  }
   scenario("a delayed native final uses only speech overlapping this capture") {
     val turn = VoiceAlarmNativeTurn()
     val prompt = listOf("愿你专注、充满力量。")
     check(turn.begin())
     turn.notePlayback(prompt)
-    check(turn.playbackSources.isEmpty()) // Microphone idle during playback.
-    turn.speechStarted()
-    turn.notePlayback(prompt)
+    check(turn.playbackSources == prompt) // Some engines never report speech-start.
     turn.endSpeech()
     turn.notePlayback(listOf("另一条提醒"))
     val final = turn.finish("专注充满力量")!!
     check(turn.playbackSources == prompt)
     check(VoiceAlarmSpeechPolicy.isEcho(final, turn.playbackSources, true))
     check(turn.begin() && turn.playbackSources.isEmpty()) // User may now quote the reminder.
+  }
+  scenario("consecutive empty music turns open a bounded quiet retry without treating early begin as speech") {
+    val policy = VoiceAlarmNativeRecovery()
+    check(!policy.retryInQuiet(true, 5000L))
+    check(policy.retryInQuiet(true, 10000L))
+    check(!policy.retryInQuiet(false, 16000L))
+    check(!policy.retryInQuiet(true, 21000L))
+    check(!policy.retryInQuiet(true, 26000L))
+    check(policy.retryInQuiet(true, 35000L))
+    policy.success()
+    check(!policy.retryInQuiet(true, 65000L))
+
+    val quiet = VoiceAlarmListenWindow(idleMs = 6000L, connectingMs = 5000L)
+    quiet.open(10000L)
+    check(quiet.expiresAt == 15000L)
+    quiet.ready(12000L)
+    check(quiet.expiresAt == 18000L)
   }
   scenario("first Wakeup body is exact and bypasses generation") {
     val s = VoiceAlarmWakeSession("固定朗读。"); val original = "  当日正式提醒。\n先坐起。  "

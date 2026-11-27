@@ -20,12 +20,28 @@ object VoiceAlarmCommands {
     .replace(Regex("^(请帮我|麻烦帮我|请|麻烦|帮我|现在|立即|给我)+"), "")
     .replace(Regex("(一下|吧|谢谢)$"), "")
 
-  fun isStop(text: String): Boolean = clean(text) in setOf(
-    "关闭闹钟", "关掉闹钟", "停止闹钟", "结束闹钟", "停掉闹钟", "取消闹钟",
-    "关闭这个闹钟", "关掉这个闹钟", "停止这个闹钟", "闹钟关闭", "闹钟停止",
+  private val alarmTarget = "(?:这个|这次|当前|我的)?(?:闹钟|闹中)"
+  private val stopVerb = "(?:关闭|关掉|关上|关了|关|停止|结束|停掉|停了|取消)"
+  private val stopAlarm = Regex("^(?:${stopVerb}(?:一下)?${alarmTarget}|(?:把|将)?${alarmTarget}${stopVerb})$")
+  private val stopPrefix = Regex("^(?:助手|小名|麻烦|请|帮我|给我|现在|立即|先)+")
+  private val stopSuffix = Regex("(?:一下|吧|谢谢|就行|可以了)+$")
+  private val stopSeparator = Regex("[，。！!、,.；;]+")
+  private val shortStop = setOf(
     "不响了", "不要响", "别响了", "别再响", "别再响了", "不要再响了",
     "关闭", "停止", "关掉", "停掉", "别响", "不响",
   )
+
+  fun isStop(text: String): Boolean {
+    val addressed = VoiceAlarmConversationGate.withoutAddress(text.trim())
+    if (addressed.firstOrNull() in listOf('“', '「', '『', '"')) return false
+    fun command(phrase: String): Boolean {
+      val value = VoiceAlarmSpeechPolicy.normalized(phrase).replace(stopPrefix, "").replace(stopSuffix, "")
+      return value in shortStop || stopAlarm.matches(value)
+    }
+    if (command(addressed)) return true
+    val phrases = addressed.split(stopSeparator).filter { it.isNotBlank() }
+    return phrases.size > 1 && phrases.all(::command)
+  }
 
   fun discussesOrNegatesSnooze(text: String): Boolean =
     Regex("不要|不想|不能|不需要|不用|无需|别|为什么|怎么|如何|什么是|解释|介绍")

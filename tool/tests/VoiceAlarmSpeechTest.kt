@@ -78,9 +78,38 @@ fun main() {
   fun route(text: String, sources: List<String> = emptyList(), mixed: Boolean = false,
             final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed,
             local: Boolean = false, overlapConfirmed: Boolean = false, stableDraft: Boolean = false,
-            nearEndSpeech: Boolean = false) =
+            nearEndSpeech: Boolean = false, spokenPlayback: Boolean = false) =
     VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = local,
-      passive = passive, overlapConfirmed = overlapConfirmed, stableDraft = stableDraft, nearEndSpeech = nearEndSpeech)
+      passive = passive, overlapConfirmed = overlapConfirmed, stableDraft = stableDraft,
+      nearEndSpeech = nearEndSpeech, spokenPlayback = spokenPlayback)
+
+  scenario("native final remembers an entire spoken playback with no speech-start, RMS, or partial callbacks") {
+    val capture = VoiceAlarmCapture(10, false, initialSpokenEpoch = 4L)
+    val evidence = capture.finish(12, false, spokenEpoch = 6L)
+    check(evidence.spokenPlayback)
+    check(route("今天需要做什么", armed = true, spokenPlayback = evidence.spokenPlayback).route == ignore)
+    check(route("今天需要做什么", armed = true, overlapConfirmed = true, spokenPlayback = true).route == relisten)
+    check(route("关闭闹钟", local = true, spokenPlayback = true).route == relisten)
+
+    val clean = VoiceAlarmCapture(12, false, initialSpokenEpoch = 6L)
+    val endpoint = clean.finish(12, false, spokenEpoch = 6L)
+    check(!endpoint.spokenPlayback)
+    check(clean.finish(13, true, spokenEpoch = 7L).let { it == endpoint })
+    check(route("今天需要做什么", armed = true, spokenPlayback = endpoint.spokenPlayback).route == send)
+  }
+  scenario("voiced cloud PCM stamped during a spoken tail is never dispatched or reused as clean audio") {
+    val capture = VoiceAlarmCapture(10, true, "music")
+    val tail = VoiceAlarmFrameStamp(0, 10, "music", spokenOutput = true)
+    capture.noteFrame(tail, tail)
+    capture.notePcmVoice(true, 640)
+    val quiet = VoiceAlarmFrameStamp(0, 11, "quiet")
+    capture.noteFrame(quiet, quiet)
+    repeat(4) { capture.notePcmVoice(true, 640) }
+    val evidence = capture.finish(11, false)
+    check(evidence.quietSpeech && evidence.spokenPlayback && !evidence.canRetryAudio)
+    check(route("星期五还有什么计划", mixed = evidence.mixed, armed = true, overlapConfirmed = evidence.quietSpeech,
+      spokenPlayback = evidence.spokenPlayback).route == relisten)
+  }
 
   scenario("v44 incident replay cannot interrupt TTS or enter correction or conversation") {
     val source = listOf("测试。平静、专注、充满力量。每周专注一项、每天检查行为。")
@@ -309,8 +338,19 @@ fun main() {
     check(!VoiceAlarmCommands.isStop("请不要关闭闹钟！"))
     check(!VoiceAlarmCommands.isStop("为什么关闭闹钟？"))
     check(!VoiceAlarmCommands.isStop("我刚才说关闭闹钟了吗"))
+    check(!VoiceAlarmCommands.isStop("“关闭闹钟”"))
+    check(!VoiceAlarmCommands.isStop("关闭背景音乐"))
+    check(!VoiceAlarmCommands.isStop("关闭闹钟，今天是什么天气"))
     check(VoiceAlarmCommands.discussesOrNegatesSnooze("不要延迟五分钟"))
     check(VoiceAlarmCommands.discussesOrNegatesSnooze("如何设置稍后提醒"))
+  }
+  scenario("colloquial and addressed stop commands stay local for a clean final") {
+    for (text in listOf("关闭闹钟", "把闹钟关了", "闹钟助手，关闭闹钟。",
+      "麻烦把这个闹钟关掉吧，谢谢", "助手关闭闹钟", "请关一下我的闹钟", "关掉闹中", "关闭闹钟，关闭闹钟")) {
+      val local = VoiceAlarmCommands.isStop(text)
+      check(local) { text }
+      check(route(text, local = local, armed = true).route == VoiceAlarmConversationGate.Route.LOCAL)
+    }
   }
   scenario("snooze parses whole Chinese numbers, not suffix matches") {
     check(VoiceAlarmCommands.snoozeMinutes("延迟四十五分钟") == 45)

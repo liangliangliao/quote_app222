@@ -130,7 +130,7 @@ object VoiceAlarmConversationGate {
 
   fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
              armed: Boolean, localCommand: Boolean, passive: Boolean, overlapConfirmed: Boolean = false,
-             stableDraft: Boolean = false, nearEndSpeech: Boolean = false): Decision {
+             stableDraft: Boolean = false, nearEndSpeech: Boolean = false, spokenPlayback: Boolean = false): Decision {
     val text = raw.trim()
     val prefix = address.find(text)
     val question = prefix?.let { text.substring(it.range.last + 1).trim() }
@@ -145,6 +145,11 @@ object VoiceAlarmConversationGate {
       text.isEmpty() -> Route.DRAFT
       VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
       !final -> Route.DRAFT
+      // A delayed final from a turn that heard our speaker cannot become a chat
+      // message or execute a command, even if the microphone was quiet later.
+      spokenPlayback && !opensMic -> return if (localCommand || question != null || (matchesRequest && overlapConfirmed)) {
+        Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP)
+      } else Decision(Route.IGNORE, "")
       !reliable && !usableDraft -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.INCOMPLETE) else Decision(Route.IGNORE, "")
       opensMic && sources.any {
         VoiceAlarmSpeechPolicy.normalized(it).contains(VoiceAlarmSpeechPolicy.normalized(text))
@@ -160,13 +165,18 @@ object VoiceAlarmConversationGate {
   }
 }
 
-data class VoiceAlarmFrameStamp(val windowId: Long, val outputEpoch: Long, val output: String)
+data class VoiceAlarmFrameStamp(val windowId: Long, val outputEpoch: Long, val output: String,
+                                val spokenOutput: Boolean = output == "voice")
 
 /** Immutable at the microphone endpoint. Network delays cannot erase a playback overlap. */
-class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean, initialOutput: String = if (initiallyMixed) "active" else "quiet", val windowId: Long = 0L) {
+class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
+                        initialOutput: String = if (initiallyMixed) "active" else "quiet", val windowId: Long = 0L,
+                        private val initialSpokenEpoch: Long? = null, startedDuringSpokenOutput: Boolean = false) {
   private val sources = linkedSetOf<String>()
   private var mixed = initiallyMixed
   private var cause = if (initiallyMixed) "start_" + initialOutput else "none"
+  private var spokenPlayback = startedDuringSpokenOutput
+  private var frameSpokenOutput = false
   private var sealed = false
   data class Evidence(
     val sources: List<String>,
@@ -176,16 +186,17 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
     val quietSpeech: Boolean = false,
     val confirmedCue: String = "",
     val nearEndSpeech: Boolean = false,
+    val spokenPlayback: Boolean = false,
   ) {
-    val hasPlaybackOverlap get() = mixed || sources.isNotEmpty()
+    val hasPlaybackOverlap get() = spokenPlayback || mixed || sources.isNotEmpty()
     fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
     fun matchesConfirmedCue(text: String) =
       confirmedCue.isNotEmpty() && VoiceAlarmSpeechPolicy.normalized(text).startsWith(confirmedCue)
-    val canRetryAudio get() = quietSpeech || nearEndSpeech || !hasPlaybackOverlap
+    val canRetryAudio get() = !spokenPlayback && (quietSpeech || nearEndSpeech || !hasPlaybackOverlap)
     // Audio merged across conversation windows is neither from the active window nor from standby.
     fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed,
       if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else -1L,
-      quietSpeech = quietSpeech && other.quietSpeech)
+      quietSpeech = quietSpeech && other.quietSpeech, spokenPlayback = spokenPlayback || other.spokenPlayback)
   }
   private var pendingCue = ""
   private var cueAt = 0L
@@ -222,6 +233,7 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
   }
   @Synchronized fun noteFrame(before: VoiceAlarmFrameStamp, after: VoiceAlarmFrameStamp) {
     if (sealed) return
+    frameSpokenOutput = before.spokenOutput || after.spokenOutput
     val changed = before.outputEpoch != after.outputEpoch
     frameOutput = when {
       before.output != "quiet" -> before.output
@@ -235,6 +247,7 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
   }
   @Synchronized fun notePcmVoice(voice: Boolean, bytes: Int, rms: Int = 0, peak: Int = 0) {
     if (sealed) return
+    if (voice && frameSpokenOutput) spokenPlayback = true
     recordQuietVoice(voice && frameOutput == "quiet", bytes.toLong() / VoiceAlarmSpeechPolicy.PCM_BYTES_PER_MS)
     if (nearEndSpeech) return
     if (frameOutput != lastPlaybackKind) {
@@ -264,14 +277,16 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
     quietSpeech = quietVoiceMs >= 60L
   }
   @Synchronized fun note(texts: List<String>) { if (!sealed) sources.addAll(texts.filter { it.isNotBlank() }) }
-  @Synchronized fun hasUnmaskedAudio() = quietSpeech || (!mixed && sources.isEmpty())
-  @Synchronized fun finish(epoch: Long, audible: Boolean, output: String = if (audible) "active" else "quiet"): Evidence {
+  @Synchronized fun hasUnmaskedAudio() = quietSpeech || (!spokenPlayback && !mixed && sources.isEmpty())
+  @Synchronized fun finish(epoch: Long, audible: Boolean, output: String = if (audible) "active" else "quiet",
+                           spokenEpoch: Long? = null, recentSpokenOutput: Boolean = false): Evidence {
     if (!sealed) {
       if (!mixed) cause = when { audible -> "end_" + output; epoch != initialEpoch -> "output_changed"; else -> "none" }
       mixed = mixed || epoch != initialEpoch || audible
+      spokenPlayback = spokenPlayback || recentSpokenOutput || (initialSpokenEpoch != null && spokenEpoch != initialSpokenEpoch)
       sealed = true
     }
-    return Evidence(sources.toList(), mixed, cause, windowId, quietSpeech, confirmedCue, nearEndSpeech)
+    return Evidence(sources.toList(), mixed, cause, windowId, quietSpeech, confirmedCue, nearEndSpeech, spokenPlayback)
   }
 }
 

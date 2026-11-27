@@ -31,11 +31,14 @@ class VoiceAlarmIflytekTranscript {
   @Volatile var complete = false
     private set
 
-  fun outcome(audioInterrupted: Boolean, voiceEndByte: Int, sentBytes: Int, transportFailure: String?): String = when {
+  fun outcome(audioInterrupted: Boolean, voiceEndByte: Int, sentBytes: Int, transportFailure: String?,
+              microphoneTimedOut: Boolean = false, quietSpeech: Boolean = false): String = when {
     audioInterrupted -> "microphone_interrupted"
     complete && voiceEndByte > sentBytes -> "unsent_speech_tail"
     transportFailure != null -> transportFailure
+    microphoneTimedOut -> "microphone_no_frames"
     !complete -> "missing_final"
+    text.isBlank() && voiceEndByte > 0 && quietSpeech -> "empty_final_with_speech"
     text.isBlank() -> "empty_final"
     else -> "final"
   }

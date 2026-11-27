@@ -30,7 +30,7 @@ class VoiceAlarmNativeTurn {
   val playbackSources: List<String> get() = overlappingSources.toList()
 
   fun notePlayback(sources: List<String>) {
-    if (active && hasSpeech && !awaitingFinal) overlappingSources.addAll(sources.filter { it.isNotBlank() })
+    if (active && !awaitingFinal) overlappingSources.addAll(sources.filter { it.isNotBlank() })
   }
   // A new capture must never postpone delivery of the preceding confirmed result.
   fun shouldWaitForFinal(bufferIsFinal: Boolean): Boolean = active && hasSpeech && !bufferIsFinal
@@ -97,11 +97,22 @@ class VoiceAlarmNativeRecovery {
   private var missedSpeech = 0
   private var trialEmptyResults = 0
   private var offlineVerified = false
+  private var musicMisses = 0
+  private var lastQuietRetryAt: Long? = null
+
+  fun retryInQuiet(emptyMusicTurn: Boolean, now: Long): Boolean {
+    musicMisses = if (emptyMusicTurn) (musicMisses + 1).coerceAtMost(2) else 0
+    if (musicMisses < 2 || lastQuietRetryAt?.let { now - it < 25000L } == true) return false
+    musicMisses = 0
+    lastQuietRetryAt = now
+    return true
+  }
 
   fun success() {
     networkFailures = 0
     missedSpeech = 0
     trialEmptyResults = 0
+    musicMisses = 0
     offlineVerified = onDevice || preferOffline
   }
   fun localUnavailable() { onDevice = false }
@@ -180,7 +191,7 @@ class VoiceAlarmNativeSignal {
 }
 
 /** A person gets a full response interval once the mic is ready, bounded even if callbacks repeat. */
-class VoiceAlarmListenWindow(private val idleMs: Long) {
+class VoiceAlarmListenWindow(private val idleMs: Long, private val connectingMs: Long = 12000L) {
   private var readyAt: Long? = null
   private var openedAt = 0L
   private var finalGraceUsed = false
@@ -189,7 +200,7 @@ class VoiceAlarmListenWindow(private val idleMs: Long) {
   fun open(now: Long) {
     openedAt = now
     readyAt = null
-    expiresAt = now + 12000L
+    expiresAt = now + connectingMs
     finalGraceUsed = false
     recoveryGraceUsed = false
   }

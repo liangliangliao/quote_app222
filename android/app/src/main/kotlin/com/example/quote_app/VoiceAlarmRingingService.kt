@@ -41,6 +41,8 @@ class VoiceAlarmRingingService : Service() {
     private val musicState = VoiceAlarmMusicState()
     @Volatile var outputEpoch = 0L
       private set
+    @Volatile var spokenOutputEpoch = 0L
+      private set
     @Volatile private var voiceOutput = false
     @Volatile private var lastVoiceChangeAt = -1000L
     @Volatile private var lastMusicChangeAt = -1000L
@@ -50,9 +52,11 @@ class VoiceAlarmRingingService : Service() {
       hasRecentVoiceOutput() || android.os.SystemClock.elapsedRealtime() - lastMusicChangeAt < 120L -> "tail"
       else -> "quiet"
     }
-    fun hasRecentVoiceOutput(): Boolean = voiceOutput ||
-      android.os.SystemClock.elapsedRealtime() - lastVoiceChangeAt < 350L
+    fun hasRecentVoiceOutput(): Boolean = voiceOutput || voiceOutputTailMs() > 0L
+    fun voiceOutputTailMs(): Long = if (voiceOutput) 0L else
+      (350L - (android.os.SystemClock.elapsedRealtime() - lastVoiceChangeAt)).coerceAtLeast(0L)
     private var service: VoiceAlarmRingingService? = null
+    fun isMusicIntroPending(): Boolean = service?.musicIntro != null
     val appReplySpeaking: Boolean get() = musicState.speaking(VoiceAlarmMusicState.Speaker.ASSISTANT)
     private val microphoneInUse: Boolean get() = musicState.speaking(VoiceAlarmMusicState.Speaker.LISTEN_REQUEST) ||
       musicState.speaking(VoiceAlarmMusicState.Speaker.USER)
@@ -62,6 +66,7 @@ class VoiceAlarmRingingService : Service() {
         if (speaker == VoiceAlarmMusicState.Speaker.REMINDER || speaker == VoiceAlarmMusicState.Speaker.ASSISTANT) {
           val audible = musicState.speaking(VoiceAlarmMusicState.Speaker.REMINDER) || appReplySpeaking
           if (audible != voiceOutput) {
+            spokenOutputEpoch++
             lastVoiceChangeAt = android.os.SystemClock.elapsedRealtime()
             voiceOutput = audible
             outputEpoch++
