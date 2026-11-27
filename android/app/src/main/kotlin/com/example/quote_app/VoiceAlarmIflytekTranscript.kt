@@ -2,6 +2,24 @@ package com.example.quote_app
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+
+/** Keeps one continuous recording while the socket opens or its send cadence falls behind. */
+internal class VoiceAlarmIflytekAudio : ByteArrayOutputStream() {
+  data class Packet(val status: Int, val pcm: ByteArray)
+
+  fun packet(offset: Int, finishing: Boolean): Packet? {
+    val remaining = size() - offset
+    if (remaining <= 0 || (!finishing && remaining < 2560)) return null
+    val count = minOf(1280, remaining)
+    val status = when {
+      offset == 0 -> 0
+      finishing && remaining == count -> 2
+      else -> 1
+    }
+    return Packet(status, buf.copyOfRange(offset, offset + count))
+  }
+}
 
 /** The IAT result envelope can terminate a stream without another word fragment. */
 class VoiceAlarmIflytekTranscript {

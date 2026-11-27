@@ -38,6 +38,30 @@ fun main() {
     check(stream.outcome(false, 11000, 10000, null) == "unsent_speech_tail")
     check(stream.outcome(true, 10000, 10000, null) == "microphone_interrupted")
   }
+  scenario("iFlytek retains PCM during opening and leaves the last packet for the terminal frame") {
+    val recording = VoiceAlarmIflytekAudio()
+    for (i in 1..5) recording.write(ByteArray(640) { i.toByte() })
+    val first = recording.packet(0, finishing = false)!!
+    check(first.status == 0 && first.pcm.size == 1280)
+    check(first.pcm.first() == 1.toByte() && first.pcm.last() == 2.toByte())
+    check(recording.packet(1280, finishing = false) == null)
+    val next = recording.packet(1280, finishing = true)!!
+    check(next.status == 1 && next.pcm.first() == 3.toByte() && next.pcm.last() == 4.toByte())
+    val last = recording.packet(2560, finishing = true)!!
+    check(last.status == 2 && last.pcm.all { it == 5.toByte() })
+    check(recording.packet(3200, finishing = true) == null)
+    check(recording.toByteArray().size == 3200)
+  }
+  scenario("a second cloud failure switches the microphone to system recognition for this alarm") {
+    val recovery = VoiceAlarmCloudRecovery()
+    check(!recovery.failed())
+    recovery.success()
+    check(!recovery.failed())
+    check(recovery.failed() && recovery.useSystem)
+    recovery.success()
+    check(recovery.useSystem)
+    check(VoiceAlarmCloudRecovery().failed(attempts = 2))
+  }
   scenario("active cloud dictation can finish after idle expiry with a bounded recovery deadline") {
     val listening = VoiceAlarmListenWindow(18000L)
     listening.open(1000L)

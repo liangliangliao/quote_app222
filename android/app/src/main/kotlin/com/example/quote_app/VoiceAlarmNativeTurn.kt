@@ -1,5 +1,20 @@
 package com.example.quote_app
 
+/** Switch once per alarm so cloud retries and the Android recognizer never share the microphone. */
+internal class VoiceAlarmCloudRecovery {
+  @Volatile var useSystem = false
+    private set
+  private var failures = 0
+
+  fun failed(attempts: Int = 1): Boolean {
+    failures += attempts
+    if (failures >= 2) useSystem = true
+    return useSystem
+  }
+
+  fun success() { failures = 0 }
+}
+
 /** A system recognizer owns its microphone until a terminal result/error, not onEndOfSpeech. */
 class VoiceAlarmNativeTurn {
   var active = false; private set

@@ -77,9 +77,10 @@ fun main() {
   val mic = VoiceAlarmConversationGate.Route.OPEN_MIC
   fun route(text: String, sources: List<String> = emptyList(), mixed: Boolean = false,
             final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed,
-            local: Boolean = false, overlapConfirmed: Boolean = false, stableDraft: Boolean = false) =
+            local: Boolean = false, overlapConfirmed: Boolean = false, stableDraft: Boolean = false,
+            nearEndSpeech: Boolean = false) =
     VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = local,
-      passive = passive, overlapConfirmed = overlapConfirmed, stableDraft = stableDraft)
+      passive = passive, overlapConfirmed = overlapConfirmed, stableDraft = stableDraft, nearEndSpeech = nearEndSpeech)
 
   scenario("v44 incident replay cannot interrupt TTS or enter correction or conversation") {
     val source = listOf("测试。平静、专注、充满力量。每周专注一项、每天检查行为。")
@@ -204,6 +205,28 @@ fun main() {
     capture.noteNativeLevel(true, "quiet", 150L)
     capture.noteNativeLevel(false, "quiet", 170L)
     check(!capture.finish(2, false).quietSpeech)
+  }
+  scenario("a short wake-up response with spoken overlap is accepted with near-end evidence") {
+    val reminder = listOf("准备与步行日。今天行为先于动力。")
+    val reply = "我已经起来了"
+    val review = VoiceAlarmConversationGate.Route.REVIEW
+    check(route(reply, reminder, mixed = true).route == relisten)
+    check(route(reply, reminder, mixed = true, nearEndSpeech = true).route == send)
+    check(route("你在不在", reminder, mixed = true, nearEndSpeech = true).route == send)
+    check(route("这段话有意思", reminder, mixed = true, nearEndSpeech = true).route == review)
+    check(route("行为先于动力", reminder, mixed = true, nearEndSpeech = true).route == echo)
+    check(route("关闭闹钟", reminder, mixed = true, nearEndSpeech = true, local = true).route == relisten)
+  }
+  scenario("a sustained signal above playback retains failed audio without accepting the room noise") {
+    fun capture(strongFrames: Int): VoiceAlarmCapture.Evidence {
+      val input = VoiceAlarmCapture(1, true, "voice", 1)
+      repeat(30) { input.notePcmVoice(true, 640, rms = 420, peak = 1100) }
+      repeat(strongFrames) { input.notePcmVoice(true, 640, rms = 1350, peak = 3700) }
+      return input.finish(1, true, "voice")
+    }
+    check(!capture(1).canRetryAudio)
+    val user = capture(6)
+    check(user.nearEndSpeech && !user.quietSpeech && user.canRetryAudio)
   }
   scenario("spoken playback requires stronger near-mic energy before reducing music to zero") {
     check(!VoiceAlarmSpeechPolicy.canMuteMusic("voice", 340, 1200))
@@ -364,6 +387,22 @@ fun main() {
       }
       check(failed)
     } finally { dead.close() }
+  }
+  scenario("queued PCM is delivered before a recorder failure") {
+    var captured = 0
+    val pump = VoiceAlarmPcmPump({ frame ->
+      if (captured == 3) -6 else {
+        frame.fill((++captured).toByte())
+        frame.size
+      }
+    })
+    try {
+      val frame = ByteArray(640)
+      for (expected in 1..3) {
+        check(pump.read(frame) == 640 && frame.first() == expected.toByte())
+      }
+      check(runCatching { pump.read(frame) }.exceptionOrNull() is IOException)
+    } finally { pump.close() }
   }
   println("$passed voice-alarm regression scenarios passed")
 }

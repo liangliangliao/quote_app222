@@ -98,17 +98,17 @@ object VoiceAlarmSpeechPolicy {
 
 /** Accept a clean final from an open conversation or a direct question during alarm standby. */
 object VoiceAlarmConversationGate {
-  enum class Route { ECHO, DRAFT, IGNORE, RELISTEN, OPEN_MIC, LOCAL, SEND }
+  enum class Route { ECHO, DRAFT, IGNORE, REVIEW, RELISTEN, OPEN_MIC, LOCAL, SEND }
   enum class RetryReason { INCOMPLETE, PLAYBACK_OVERLAP }
   data class Decision(val route: Route, val text: String, val retryReason: RetryReason? = null)
   private val interruptPhrases = setOf("打断一下", "请打断一下", "先听我说", "请先听我说", "先暂停播报", "请暂停播报")
   private val address = Regex("""^(小名小名|闹钟助手|你好AI|AI助手|(?:小名|助手)(?=$|[\s，。！？、：,:.!?]))[\s，。！？、：,:.!?]*""", RegexOption.IGNORE_CASE)
   // Android recognition often omits question marks. Use grammatical cues, keeping the original transcript.
-  private val questionStart = Regex("^(?:为什么|为何|怎么|怎样|如何|能不能|可不可以|是不是|要不要|有没有).+")
-  private val questionWords = Regex("(?:什么|谁|哪里|哪儿|哪[个位种些天年本条项部]|多少|几[个位种天点分秒次岁条件篇项名本部]|为什么|为何|怎么|怎样|如何)")
+  private val questionStart = Regex("^(?:为什么|为何|怎么|怎样|如何|能否|可否|能不能|可不可以|是不是|要不要|有没有).+")
+  private val questionWords = Regex("(?:什么|谁|哪里|哪儿|哪[个位种些天年本条项部]|多少|几[个位种天点分秒次岁条件篇项名本部]|为什么|为何|怎么|怎样|如何|在不在|听不听得[见到])")
   private val reportedSpeech = Regex("^(?:[我你他她您]们?|大家|有人|别人)?(?:已经|早就|也)?(?:不知道|知道|记得|听说|在讨论|问过|告诉过|说过|想知道)")
   private val indefinite = Regex("^(?:无论|不管|随便).+|.+(?:都可以|都行|都一样|都没关系)$")
-  private val directRequest = Regex("^(?:请问|能帮我|请?(?:帮我|告诉我|介绍一下|解释一下|说说|讲讲)).+|^(?:继续说|继续讲|接着说|接着讲|换一个)$")
+  private val directRequest = Regex("^(?:请问|能帮我|请?(?:帮我|提醒我|告诉我|介绍一下|解释一下|说说|讲讲)).+|^(?:继续说|继续讲|接着说|接着讲|换一个|陪我聊聊|跟我聊聊|我(?:已经|刚)?(?:起床|起来|醒)了)$")
 
   private fun isDirectQuestion(text: String): Boolean {
     val normalized = VoiceAlarmSpeechPolicy.normalized(text)
@@ -130,14 +130,16 @@ object VoiceAlarmConversationGate {
 
   fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
              armed: Boolean, localCommand: Boolean, passive: Boolean, overlapConfirmed: Boolean = false,
-             stableDraft: Boolean = false): Decision {
+             stableDraft: Boolean = false, nearEndSpeech: Boolean = false): Decision {
     val text = raw.trim()
     val prefix = address.find(text)
     val question = prefix?.let { text.substring(it.range.last + 1).trim() }
     val normalized = VoiceAlarmSpeechPolicy.normalized(text)
     val opensMic = question?.isEmpty() == true || normalized in interruptPhrases
     val directed = armed || question != null || looksDirected(text) || localCommand || opensMic
-    val unverifiedOverlap = (mixed || sources.isNotEmpty()) && !overlapConfirmed
+    val matchesRequest = question?.isNotEmpty() == true || looksDirected(text)
+    val corroboratedRequest = nearEndSpeech && reliable && !localCommand && matchesRequest
+    val unverifiedOverlap = (mixed || sources.isNotEmpty()) && !overlapConfirmed && !corroboratedRequest
     val usableDraft = stableDraft && !unverifiedOverlap && !localCommand && !opensMic && looksDirected(question ?: text)
     val route = when {
       text.isEmpty() -> Route.DRAFT
@@ -148,6 +150,7 @@ object VoiceAlarmConversationGate {
         VoiceAlarmSpeechPolicy.normalized(it).contains(VoiceAlarmSpeechPolicy.normalized(text))
       } -> Route.ECHO
       opensMic -> Route.OPEN_MIC
+      unverifiedOverlap && !directed && nearEndSpeech -> Route.REVIEW
       unverifiedOverlap -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP) else Decision(Route.IGNORE, "")
       localCommand -> Route.LOCAL
       armed || question != null || (passive && directed) -> Route.SEND
@@ -172,11 +175,13 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
     val windowId: Long = 0L,
     val quietSpeech: Boolean = false,
     val confirmedCue: String = "",
+    val nearEndSpeech: Boolean = false,
   ) {
     val hasPlaybackOverlap get() = mixed || sources.isNotEmpty()
     fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
     fun matchesConfirmedCue(text: String) =
       confirmedCue.isNotEmpty() && VoiceAlarmSpeechPolicy.normalized(text).startsWith(confirmedCue)
+    val canRetryAudio get() = quietSpeech || nearEndSpeech || !hasPlaybackOverlap
     // Audio merged across conversation windows is neither from the active window nor from standby.
     fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed,
       if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else -1L,
@@ -188,6 +193,11 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
   private var quietVoiceMs = 0L
   private var quietSpeech = false
   private var lastQuietLevelAt: Long? = null
+  private val nearEndWindow = VoiceAlarmSpeechPolicy.StartWindow()
+  private var playbackFloor = 160.0
+  private var playbackFrames = 0
+  private var lastPlaybackKind = ""
+  private var nearEndSpeech = false
   var frameOutput = initialOutput
     private set
 
@@ -223,8 +233,22 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
       cause = if (changed && before.output == "quiet" && after.output == "quiet") "frame_output_changed" else "frame_" + frameOutput
     }
   }
-  @Synchronized fun notePcmVoice(voice: Boolean, bytes: Int) {
-    if (!sealed) recordQuietVoice(voice && frameOutput == "quiet", bytes.toLong() / VoiceAlarmSpeechPolicy.PCM_BYTES_PER_MS)
+  @Synchronized fun notePcmVoice(voice: Boolean, bytes: Int, rms: Int = 0, peak: Int = 0) {
+    if (sealed) return
+    recordQuietVoice(voice && frameOutput == "quiet", bytes.toLong() / VoiceAlarmSpeechPolicy.PCM_BYTES_PER_MS)
+    if (nearEndSpeech) return
+    if (frameOutput != lastPlaybackKind) {
+      playbackFrames = 0
+      playbackFloor = 160.0
+      nearEndWindow.reset()
+      lastPlaybackKind = frameOutput
+    }
+    if (frameOutput != "voice" && frameOutput != "music") return
+    val strong = playbackFrames >= 8 && voice &&
+      rms >= maxOf(700.0, playbackFloor * 2.6) && peak >= maxOf(2200.0, playbackFloor * 6.0)
+    if (!strong) playbackFloor = playbackFloor * 0.94 + rms * 0.06
+    playbackFrames++
+    nearEndSpeech = nearEndWindow.accept(strong)
   }
   @Synchronized fun noteNativeLevel(voice: Boolean, output: String, now: Long) {
     if (sealed) return
@@ -247,7 +271,7 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
       mixed = mixed || epoch != initialEpoch || audible
       sealed = true
     }
-    return Evidence(sources.toList(), mixed, cause, windowId, quietSpeech, confirmedCue)
+    return Evidence(sources.toList(), mixed, cause, windowId, quietSpeech, confirmedCue, nearEndSpeech)
   }
 }
 

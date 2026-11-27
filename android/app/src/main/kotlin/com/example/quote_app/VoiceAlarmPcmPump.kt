@@ -36,9 +36,12 @@ class VoiceAlarmPcmPump(
   }.apply { name = "voice-alarm-pcm"; isDaemon = true; start() }
 
   @Synchronized fun read(target: ByteArray, capture: VoiceAlarmCapture? = null): Int {
-    failure?.let { throw it }
     if (!active) return -1
-    val frame = pending ?: frames.poll(250, TimeUnit.MILLISECONDS) ?: return 0
+    val frame = pending ?: if (failure == null) frames.poll(250, TimeUnit.MILLISECONDS) else frames.poll()
+    if (frame == null) {
+      failure?.let { throw it }
+      return 0
+    }
     pending = null
     val before = frame.before
     val after = frame.after
