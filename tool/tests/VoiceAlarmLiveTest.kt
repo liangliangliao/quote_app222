@@ -89,6 +89,30 @@ fun main() {
     mix.setSpeaking(user, current, false)
     check(mix.gain(.6f) == 0f)
   }
+  scenario("music intro starts counting when the track plays and pauses during a microphone mute") {
+    val intro = VoiceAlarmMusicIntro(5000)
+    val preparing = VoiceAlarmMusicIntro.Output.PREPARING
+    val audible = VoiceAlarmMusicIntro.Output.AUDIBLE
+    val muted = VoiceAlarmMusicIntro.Output.TEMPORARILY_MUTED
+    check(intro.nextCheckDelay(1000, preparing) == 4000L)
+    check(intro.nextCheckDelay(2400, audible) == 5000L)
+    check(intro.nextCheckDelay(4000, muted) == null)
+    check(intro.nextCheckDelay(6000, audible) == 3400L)
+    check(intro.nextCheckDelay(9400, audible) == 0L)
+  }
+  scenario("music intro preserves remaining time on route changes and skips unavailable music") {
+    val audible = VoiceAlarmMusicIntro.Output.AUDIBLE
+    val preparing = VoiceAlarmMusicIntro.Output.PREPARING
+    val unavailable = VoiceAlarmMusicIntro.Output.UNAVAILABLE
+    val intro = VoiceAlarmMusicIntro(10000)
+    check(intro.nextCheckDelay(1000, audible) == 10000L)
+    check(intro.nextCheckDelay(4000, preparing) == 4000L)
+    check(intro.nextCheckDelay(5000, audible) == 7000L)
+    check(intro.nextCheckDelay(5100, unavailable) == 0L)
+    val stalled = VoiceAlarmMusicIntro(20000)
+    check(stalled.nextCheckDelay(0, preparing) == 4000L)
+    check(stalled.nextCheckDelay(4000, preparing) == 0L)
+  }
   scenario("pre-roll and first syllables survive byte for byte") {
     val turn = VoiceAlarmTurnBuffer(800, 10000)
     val frames = (1..20).map { ByteArray(640) { _ -> it.toByte() } }

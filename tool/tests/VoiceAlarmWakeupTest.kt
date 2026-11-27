@@ -65,6 +65,30 @@ fun main() {
     check(tasks.map { it.text } == listOf(text, "新正文", "旧任务正文"))
     check(tasks.all { it.date == date })
   }
+  scenario("cached tasks preserve the same Beijing day, task contents, and site playback flag") {
+    val task = WakeupContent(date, text, "cached-task", "测试任务", "06:00", "2026-11-16T06:00:00+08:00")
+    val day = WakeupDay(date, listOf(task), null, shouldRing = false)
+    val archive = JSONObject().put("taskSnapshot", VoiceAlarmWakeupHistory.taskSnapshot(day, "connection-a"))
+    val cached = VoiceAlarmWakeupHistory.cachedTaskDay(archive, date, "connection-a")
+    check(cached == day)
+    check(VoiceAlarmWakeupHistory.cachedTaskDay(archive, "2026-11-17", "connection-a") == null)
+    check(VoiceAlarmWakeupHistory.cachedTaskDay(archive, date, "connection-b") == null)
+    val session = VoiceAlarmWakeSession("本地开场")
+    session.rememberRemote(date, 0, cached)
+    check(session.remoteForRound(date) == null)
+  }
+  scenario("empty resync invalidates the task snapshot while keeping the history archive") {
+    val task = WakeupContent(date, text, "cached-task")
+    val day = WakeupDay(date, listOf(task), null)
+    val items = JSONArray().put(JSONObject().put("id", task.id).put("text", task.text))
+    val archive = JSONObject().put("items", items)
+    check(VoiceAlarmWakeupHistory.cachedTaskDay(archive, date, "connection") == null)
+    archive.put("taskSnapshot", VoiceAlarmWakeupHistory.taskSnapshot(day, "connection"))
+    check(VoiceAlarmWakeupHistory.cachedTaskDay(archive, date, "connection") == day)
+    archive.put("taskSnapshot", VoiceAlarmWakeupHistory.taskSnapshot(day.copy(tasks = emptyList()), "connection"))
+    check(VoiceAlarmWakeupHistory.cachedTaskDay(archive, date, "connection") == null)
+    check(archive.getJSONArray("items").getJSONObject(0).getString("text") == text)
+  }
   scenario("history replay retains an interrupted task until all chunks are acknowledged") {
     val first = WakeupContent(date, "虚构的长任务。".repeat(80), "a")
     val second = WakeupContent(date, "第二项任务", "b")

@@ -49,3 +49,30 @@ class VoiceAlarmMusicState {
     return if (speaking(Speaker.REMINDER) || speaking(Speaker.ASSISTANT)) configured * 0.22f else configured
   }
 }
+
+/** Counts audible playing time before the initial reminder. */
+internal class VoiceAlarmMusicIntro(durationMs: Long) {
+  enum class Output { PREPARING, AUDIBLE, TEMPORARILY_MUTED, UNAVAILABLE }
+
+  private var remainingMs = durationMs
+  private var audibleSince: Long? = null
+  private var prepareDeadline: Long? = null
+
+  // Zero means start the voice. Null means a temporary microphone mute will
+  // notify us through the mixer when music becomes audible again.
+  fun nextCheckDelay(now: Long, output: Output): Long? {
+    audibleSince?.let { remainingMs -= (now - it).coerceAtLeast(0) }
+    audibleSince = now.takeIf { output == Output.AUDIBLE }
+    if (remainingMs <= 0) return 0
+    if (output != Output.PREPARING) prepareDeadline = null
+    return when (output) {
+      Output.AUDIBLE -> remainingMs
+      Output.TEMPORARILY_MUTED -> null
+      Output.PREPARING -> {
+        val deadline = prepareDeadline ?: (now + 4000L).also { prepareDeadline = it }
+        (deadline - now).coerceAtLeast(0)
+      }
+      Output.UNAVAILABLE -> 0
+    }
+  }
+}

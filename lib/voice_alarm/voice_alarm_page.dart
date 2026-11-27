@@ -90,6 +90,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Set<int> _weekdays = {1, 2, 3, 4, 5, 6, 7};
   double _voiceVolume = 1.0;
   double _musicVolume = 0.4;
+  int _musicIntroSeconds = 5;
   double _stability = 0.55;
   double _styleStrength = 0.25;
   double _pitch = 0;
@@ -302,6 +303,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _weekdays = (data['weekdays'] is List ? (data['weekdays'] as List).map((e) => (e as num).toInt()).toSet() : {1, 2, 3, 4, 5, 6, 7});
       _voiceVolume = ((data['voiceVolume'] as num?)?.toDouble() ?? 1).clamp(0.0, 1.0);
       _musicVolume = ((data['musicVolume'] as num?)?.toDouble() ?? 0.4).clamp(0.0, 1.0);
+      _musicIntroSeconds = ((data['musicIntroSeconds'] as num?)?.toInt() ?? 5)
+          .clamp(0, 60).toInt();
       _stability = (data['stability'] as num?)?.toDouble() ?? 0.55;
       _styleStrength = (data['styleStrength'] as num?)?.toDouble() ?? 0.25;
       _pitch = (data['pitch'] as num?)?.toDouble() ?? 0;
@@ -1064,6 +1067,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'azureSearchDeployment': _azureSearchDeployment.text.trim(),
       'voiceVolume': _voiceVolume,
       'musicVolume': _musicVolume,
+      'musicIntroSeconds': _musicIntroSeconds,
       'stability': _stability,
       'styleStrength': _styleStrength,
       'pitch': _pitch,
@@ -1141,7 +1145,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
         title: const Text('使用 AI Wakeup 云端提醒'),
-        subtitle: const Text('每轮播报一条当天已同步的任务。全部播完后，AI 结合这些任务生成新的起床激励。暂无任务时使用原提醒流程。'),
+        subtitle: const Text('当天已同步的定时任务优先从本机读取，每轮播报一条。可在「同步历史」里点「同步今天」刷新。任务播完后由 AI 结合任务生成新的提醒。'),
         value: _aiWakeupEnabled,
         onChanged: _saving ? null : (value) => setState(() => _aiWakeupEnabled = value),
       ),
@@ -1571,6 +1575,26 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                         },
                       ),
                     )),
+              ListTile(
+                title: Text(_musicIntroSeconds == 0
+                    ? '背景音乐前奏已关闭'
+                    : '背景音乐前奏 $_musicIntroSeconds 秒'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Slider(
+                      value: _musicIntroSeconds.toDouble(),
+                      min: 0,
+                      max: 60,
+                      divisions: 60,
+                      label: '$_musicIntroSeconds 秒',
+                      semanticFormatterCallback: (value) => '${value.round()} 秒',
+                      onChanged: (value) => setState(() => _musicIntroSeconds = value.round()),
+                    ),
+                    const Text('到点先播放背景音乐，前奏结束后开始朗读。设为 0 秒可立即朗读。'),
+                  ],
+                ),
+              ),
               ListTile(
                 leading: const Icon(Icons.image_outlined),
                 title: const Text('全屏闹钟背景'),
