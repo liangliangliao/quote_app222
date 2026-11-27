@@ -129,6 +129,7 @@ class VoiceAlarmNativeRecovery {
     if (!onDevice && !triedDefaultOffline) {
       triedDefaultOffline = true
       preferOffline = true
+      offlineVerified = true
     }
   }
 

@@ -83,6 +83,8 @@ fun main() {
     check(!policy.preferOffline && !policy.onDevice)
     policy.preferInstalledChinese()
     check(policy.preferOffline && !policy.onDevice)
+    repeat(4) { check(!policy.failed(VoiceAlarmNativeRecovery.Failure.NO_MATCH, true)!!.replaceEngine) }
+    check(policy.preferOffline && !policy.onDevice)
     check(policy.failed(network, true)!!.replaceEngine)
     check(policy.onDevice && !policy.preferOffline)
     check(policy.failed(network, true)!!.replaceEngine)
