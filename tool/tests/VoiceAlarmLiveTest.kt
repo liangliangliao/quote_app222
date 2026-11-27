@@ -58,16 +58,23 @@ fun main() {
     mix.setSpeaking(VoiceAlarmMusicState.Speaker.USER, owner, false)
     check(mix.gain(.35f) == .35f)
   }
-  scenario("changing gain or enabling music during speech cannot bypass mute") {
+  scenario("reminder and assistant duck music while an idle listening window keeps full gain") {
     val mix = VoiceAlarmMusicState()
     val owner = Any()
-    for (speaker in VoiceAlarmMusicState.Speaker.values()) {
+    mix.setSpeaking(VoiceAlarmMusicState.Speaker.LISTEN_REQUEST, owner, true)
+    check(mix.gain(.8f) == .8f)
+    for (speaker in listOf(VoiceAlarmMusicState.Speaker.REMINDER, VoiceAlarmMusicState.Speaker.ASSISTANT)) {
       mix.setSpeaking(speaker, owner, true)
       mix.choose(false)
-      mix.choose(true)
       check(mix.gain(.8f) == 0f)
+      mix.choose(true)
+      check(mix.gain(.8f) in 0.17f..0.18f && mix.gain(0f) == 0f)
+      mix.setSpeaking(VoiceAlarmMusicState.Speaker.USER, owner, true)
+      check(mix.gain(.6f) == 0f)
+      mix.setSpeaking(VoiceAlarmMusicState.Speaker.USER, owner, false)
+      check(mix.gain(.6f) in 0.13f..0.14f)
       mix.setSpeaking(speaker, owner, false)
-      check(mix.gain(.8f) == .8f)
+      check(mix.gain(.6f) == .6f)
     }
   }
   scenario("manual music OFF survives the last speech end and stale owners") {

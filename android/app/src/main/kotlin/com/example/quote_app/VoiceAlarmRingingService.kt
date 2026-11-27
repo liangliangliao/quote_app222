@@ -42,18 +42,16 @@ class VoiceAlarmRingingService : Service() {
     @Volatile var outputEpoch = 0L
       private set
     @Volatile private var voiceOutput = false
-    @Volatile private var lastOutputChangeAt = -1000L
+    @Volatile private var lastVoiceChangeAt = -1000L
+    @Volatile private var lastMusicChangeAt = -1000L
     fun outputKind(): String = when {
       voiceOutput -> "voice"
       activeSignalPlayback -> "music"
-      android.os.SystemClock.elapsedRealtime() - lastOutputChangeAt < 350L -> "tail"
+      hasRecentVoiceOutput() || android.os.SystemClock.elapsedRealtime() - lastMusicChangeAt < 120L -> "tail"
       else -> "quiet"
     }
-    fun outputOrTailActive(): Boolean = outputKind() != "quiet"
-    private fun outputChanged() {
-      lastOutputChangeAt = android.os.SystemClock.elapsedRealtime()
-      outputEpoch++
-    }
+    fun hasRecentVoiceOutput(): Boolean = voiceOutput ||
+      android.os.SystemClock.elapsedRealtime() - lastVoiceChangeAt < 350L
     private var service: VoiceAlarmRingingService? = null
     val appReplySpeaking: Boolean get() = musicState.speaking(VoiceAlarmMusicState.Speaker.ASSISTANT)
     private val microphoneInUse: Boolean get() = musicState.speaking(VoiceAlarmMusicState.Speaker.LISTEN_REQUEST) ||
@@ -62,8 +60,12 @@ class VoiceAlarmRingingService : Service() {
     fun setSpeaking(speaker: VoiceAlarmMusicState.Speaker, owner: Any, active: Boolean) {
       if (musicState.setSpeaking(speaker, owner, active)) {
         if (speaker == VoiceAlarmMusicState.Speaker.REMINDER || speaker == VoiceAlarmMusicState.Speaker.ASSISTANT) {
-          voiceOutput = musicState.speaking(VoiceAlarmMusicState.Speaker.REMINDER) || appReplySpeaking
-          outputChanged()
+          val audible = musicState.speaking(VoiceAlarmMusicState.Speaker.REMINDER) || appReplySpeaking
+          if (audible != voiceOutput) {
+            lastVoiceChangeAt = android.os.SystemClock.elapsedRealtime()
+            voiceOutput = audible
+            outputEpoch++
+          }
         }
         service?.applyMusicGain()
       }
@@ -966,7 +968,8 @@ class VoiceAlarmRingingService : Service() {
     val audible = alarmSignalPlaybackActive && gain > 0f && runCatching { musicPlayer?.isPlaying == true }.getOrDefault(false)
     if (activeSignalPlayback == audible) return
     activeSignalPlayback = audible
-    outputChanged()
+    lastMusicChangeAt = android.os.SystemClock.elapsedRealtime()
+    outputEpoch++
     sendBroadcast(Intent(if (audible) ACTION_SIGNAL_PLAYBACK_START else ACTION_SIGNAL_PLAYBACK_END)
       .setPackage(packageName).putExtra("hasMusic", audible))
   }
@@ -1035,6 +1038,10 @@ class VoiceAlarmRingingService : Service() {
     ttsInitGate.next()
     val shouldNotifySignalEnd = alarmSignalPlaybackActive
     alarmSignalPlaybackActive = false
+    if (activeSignalPlayback) {
+      lastMusicChangeAt = android.os.SystemClock.elapsedRealtime()
+      outputEpoch++
+    }
     activeSignalPlayback = false
     if (shouldNotifySignalEnd) sendBroadcast(Intent(ACTION_SIGNAL_PLAYBACK_END).setPackage(packageName))
     voiceQueue.cancel()

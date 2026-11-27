@@ -43,5 +43,9 @@ class VoiceAlarmMusicState {
     return true
   }
 
-  fun gain(volume: Float): Float = if (enabled && speakers.isEmpty()) volume.coerceIn(0f, 1f) else 0f
+  fun gain(volume: Float): Float {
+    if (!enabled || speaking(Speaker.USER)) return 0f
+    val configured = volume.coerceIn(0f, 1f)
+    return if (speaking(Speaker.REMINDER) || speaking(Speaker.ASSISTANT)) configured * 0.22f else configured
+  }
 }

@@ -76,8 +76,10 @@ fun main() {
   val send = VoiceAlarmConversationGate.Route.SEND
   val mic = VoiceAlarmConversationGate.Route.OPEN_MIC
   fun route(text: String, sources: List<String> = emptyList(), mixed: Boolean = false,
-            final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed, local: Boolean = false) =
-    VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = local, passive = passive)
+            final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed,
+            local: Boolean = false, overlapConfirmed: Boolean = false, stableDraft: Boolean = false) =
+    VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = local,
+      passive = passive, overlapConfirmed = overlapConfirmed, stableDraft = stableDraft)
 
   scenario("v44 incident replay cannot interrupt TTS or enter correction or conversation") {
     val source = listOf("测试。平静、专注、充满力量。每周专注一项、每天检查行为。")
@@ -154,10 +156,10 @@ fun main() {
     check(VoiceAlarmCapture(2, false).finish(3, false).mixCause == "output_changed")
     check(VoiceAlarmCapture(2, false).finish(2, true, "tail").mixCause == "end_tail")
   }
-  scenario("a stable novel partial requests a quiet microphone without using mixed words") {
+  scenario("a music-only draft cannot pause spoken playback or authorize mixed words") {
     val music = VoiceAlarmCapture(1, true, "music", 3)
     check(!music.confirmedPause("这是谁的", 100, emptyList()))
-    check(music.confirmedPause("这是谁的书", 300, emptyList()))
+    check(!music.confirmedPause("这是谁的书", 300, emptyList()))
     val before = music.finish(2, false)
     val quiet = VoiceAlarmCapture(2, false, windowId = 4).finish(2, false)
     val actual = "这是谁的书"
@@ -175,6 +177,55 @@ fun main() {
     check(route("关闭闹钟", mixed = true, local = true).route == relisten)
     check(route("关闭闹钟", listOf("请勿跟着说：关闭闹钟。"), mixed = true, local = true).route == echo)
     check(route("关闭闹钟", local = true).route == VoiceAlarmConversationGate.Route.LOCAL)
+    val addressed = "闹钟助手，关闭闹钟"
+    val addressedLocal = VoiceAlarmCommands.isStop(VoiceAlarmConversationGate.withoutAddress(addressed))
+    check(addressedLocal && route(addressed, mixed = true, local = addressedLocal).route == relisten)
+    check(route(addressed, local = addressedLocal).text == "关闭闹钟")
+  }
+  scenario("speech continuing after the music mutes keeps the first recording") {
+    val capture = VoiceAlarmCapture(1, true, "music", 12)
+    fun frame(output: String, epoch: Long, voice: Boolean) {
+      val stamp = VoiceAlarmFrameStamp(12, epoch, output)
+      capture.noteFrame(stamp, stamp)
+      capture.notePcmVoice(voice, VoiceAlarmSpeechPolicy.FRAME_BYTES)
+    }
+    repeat(6) { frame("music", 1, true) }
+    repeat(6) { frame("tail", 2, true) }
+    repeat(4) { frame("quiet", 2, false) }
+    repeat(3) { frame("quiet", 2, true) }
+    val evidence = capture.finish(2, false)
+    check(evidence.belongsTo(12) && evidence.mixed && evidence.quietSpeech)
+    val action = route("关闭背景音乐", evidence.sources, evidence.mixed, local = true, overlapConfirmed = evidence.quietSpeech)
+    check(action.route == VoiceAlarmConversationGate.Route.LOCAL)
+  }
+  scenario("a false onset from music provides no quiet speech evidence") {
+    val capture = VoiceAlarmCapture(1, true, "music")
+    for (time in 0L..120L step 30L) capture.noteNativeLevel(true, "tail", time)
+    capture.noteNativeLevel(true, "quiet", 150L)
+    capture.noteNativeLevel(false, "quiet", 170L)
+    check(!capture.finish(2, false).quietSpeech)
+  }
+  scenario("spoken playback requires stronger near-mic energy before reducing music to zero") {
+    check(!VoiceAlarmSpeechPolicy.canMuteMusic("voice", 340, 1200))
+    check(!VoiceAlarmSpeechPolicy.canMuteMusic("voice", 400, 2300))
+    check(VoiceAlarmSpeechPolicy.canMuteMusic("voice", 730, 2300))
+    check(VoiceAlarmSpeechPolicy.canMuteMusic("music", 340, 1200))
+  }
+  scenario("a stable interruption can deliver its same final while echo still fails") {
+    val source = listOf("虚构提醒。今天记得整理桌面。")
+    val capture = VoiceAlarmCapture(1, true, "voice", 5)
+    check(!capture.confirmedPause("今天要做什么", 100, source))
+    check(capture.confirmedPause("今天要做什么准备", 300, source))
+    val evidence = capture.finish(2, false)
+    val user = "今天要做什么准备？"
+    check(evidence.matchesConfirmedCue(user) && !evidence.matchesConfirmedCue("今天记得整理桌面"))
+    check(route(user, evidence.sources, evidence.mixed, overlapConfirmed = evidence.matchesConfirmedCue(user)).route == send)
+    check(route("今天记得整理桌面", source, mixed = true, armed = true, overlapConfirmed = true).route == echo)
+  }
+  scenario("stable endpoint drafts can answer questions but cannot execute alarm commands") {
+    check(route("今天要做什么", reliable = false, stableDraft = true).route == send)
+    check(route("关闭闹钟", reliable = false, stableDraft = true, local = true).route == relisten)
+    check(route("今天要做什么", mixed = true, reliable = false, stableDraft = true).route == relisten)
   }
   scenario("only a final standalone wake cue can open a fresh microphone turn") {
     check(route("闹钟助手", mixed = true).route == mic)

@@ -178,6 +178,20 @@ fun main() {
     check(turn.finish("迟到的最终结果") == null)
     check(VoiceAlarmNativeTurn.bestCandidate(listOf("", " 首个可用结果 ", "另一个")) == "首个可用结果")
   }
+  scenario("native endpoint retains a stable draft and resets stability on a correction") {
+    val turn = VoiceAlarmNativeTurn()
+    check(turn.begin())
+    turn.ready()
+    turn.partial("今天要做什么", 100)
+    turn.partial("今天要做什么准备", 230)
+    check(!turn.hasStableEndpointDraft)
+    turn.endSpeech()
+    check(turn.hasStableEndpointDraft)
+    turn.partial("明天要做什么", 280)
+    check(!turn.hasStableEndpointDraft)
+    check(turn.finish() == "明天要做什么")
+    check(turn.begin() && !turn.hasStableEndpointDraft)
+  }
   scenario("a delayed native final uses only speech overlapping this capture") {
     val turn = VoiceAlarmNativeTurn()
     val prompt = listOf("愿你专注、充满力量。")

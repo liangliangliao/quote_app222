@@ -6,7 +6,8 @@ import java.util.Locale
 /** Acoustic cues are VAD, not speaker identity. Never infer "not a person" from ASR no-match. */
 object VoiceAlarmSpeechPolicy {
   const val FRAME_MS = 20
-  const val FRAME_BYTES = 640 // PCM16, mono, 16 kHz
+  const val PCM_BYTES_PER_MS = 32 // PCM16, mono, 16 kHz
+  const val FRAME_BYTES = FRAME_MS * PCM_BYTES_PER_MS
   const val FINAL_COMMIT_MS = 300L
   const val CLOUD_TTS_DEADLINE_MS = 5000L
 
@@ -14,6 +15,9 @@ object VoiceAlarmSpeechPolicy {
     rms >= maxOf(70.0, noise * 2.2) &&
       peak >= maxOf(180.0, noise * 4.0) &&
       zcr in 5..300 && crest in 165..3000 && voiced >= 25
+
+  fun canMuteMusic(output: String, rms: Int, peak: Int): Boolean =
+    output != "voice" || (rms >= 700 && peak >= 2200)
 
   /** A rolling 240 ms window tolerates unvoiced consonants/brief gaps without losing a quiet onset. */
   class StartWindow {
@@ -117,33 +121,39 @@ object VoiceAlarmConversationGate {
 
   fun isInterruption(text: String) = VoiceAlarmSpeechPolicy.normalized(text) in interruptPhrases
 
+  fun withoutAddress(text: String): String =
+    address.find(text)?.let { text.substring(it.range.last + 1).trim() } ?: text
+
   fun canPauseForSpeech(text: String): Boolean = isInterruption(text) || address.containsMatchIn(text) || looksDirected(text)
 
   private fun looksDirected(text: String): Boolean = isDirectQuestion(text) || directRequest.matches(VoiceAlarmSpeechPolicy.normalized(text))
 
   fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
-             armed: Boolean, localCommand: Boolean, passive: Boolean): Decision {
+             armed: Boolean, localCommand: Boolean, passive: Boolean, overlapConfirmed: Boolean = false,
+             stableDraft: Boolean = false): Decision {
     val text = raw.trim()
     val prefix = address.find(text)
     val question = prefix?.let { text.substring(it.range.last + 1).trim() }
     val normalized = VoiceAlarmSpeechPolicy.normalized(text)
     val opensMic = question?.isEmpty() == true || normalized in interruptPhrases
     val directed = armed || question != null || looksDirected(text) || localCommand || opensMic
+    val unverifiedOverlap = (mixed || sources.isNotEmpty()) && !overlapConfirmed
+    val usableDraft = stableDraft && !unverifiedOverlap && !localCommand && !opensMic && looksDirected(question ?: text)
     val route = when {
       text.isEmpty() -> Route.DRAFT
       VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
       !final -> Route.DRAFT
-      !reliable -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.INCOMPLETE) else Decision(Route.IGNORE, "")
+      !reliable && !usableDraft -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.INCOMPLETE) else Decision(Route.IGNORE, "")
       opensMic && sources.any {
         VoiceAlarmSpeechPolicy.normalized(it).contains(VoiceAlarmSpeechPolicy.normalized(text))
       } -> Route.ECHO
       opensMic -> Route.OPEN_MIC
-      mixed || sources.isNotEmpty() -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP) else Decision(Route.IGNORE, "")
+      unverifiedOverlap -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP) else Decision(Route.IGNORE, "")
       localCommand -> Route.LOCAL
       armed || question != null || (passive && directed) -> Route.SEND
       else -> Route.IGNORE
     }
-    return Decision(route, if (route == Route.SEND && question != null) question else text)
+    return Decision(route, if (route == Route.SEND || route == Route.LOCAL) question ?: text else text)
   }
 }
 
@@ -155,20 +165,37 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
   private var mixed = initiallyMixed
   private var cause = if (initiallyMixed) "start_" + initialOutput else "none"
   private var sealed = false
-  data class Evidence(val sources: List<String>, val mixed: Boolean, val mixCause: String = if (mixed) "unknown" else "none", val windowId: Long = 0L) {
+  data class Evidence(
+    val sources: List<String>,
+    val mixed: Boolean,
+    val mixCause: String = if (mixed) "unknown" else "none",
+    val windowId: Long = 0L,
+    val quietSpeech: Boolean = false,
+    val confirmedCue: String = "",
+  ) {
     val hasPlaybackOverlap get() = mixed || sources.isNotEmpty()
     fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
+    fun matchesConfirmedCue(text: String) =
+      confirmedCue.isNotEmpty() && VoiceAlarmSpeechPolicy.normalized(text).startsWith(confirmedCue)
     // Audio merged across conversation windows is neither from the active window nor from standby.
-    fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed, if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else -1L)
+    fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed,
+      if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else -1L,
+      quietSpeech = quietSpeech && other.quietSpeech)
   }
   private var pendingCue = ""
   private var cueAt = 0L
+  private var confirmedCue = ""
+  private var quietVoiceMs = 0L
+  private var quietSpeech = false
+  private var lastQuietLevelAt: Long? = null
+  var frameOutput = initialOutput
+    private set
 
-  // A stable, directed partial may pause the speaker. Only a new, clean final can authorize dialogue.
+  // A stable, directed partial may pause spoken playback while the same turn keeps recording.
   @Synchronized fun confirmedPause(text: String, now: Long, currentSources: List<String>): Boolean {
     val cue = VoiceAlarmSpeechPolicy.normalized(text)
     val allSources = (sources + currentSources).toList()
-    if (sealed || cue.length < 4 || !VoiceAlarmConversationGate.canPauseForSpeech(text) ||
+    if (sealed || allSources.isEmpty() || cue.length < 4 || !VoiceAlarmConversationGate.canPauseForSpeech(text) ||
         VoiceAlarmSpeechPolicy.isEcho(text, allSources, true, partial = true)) {
       pendingCue = ""
       return false
@@ -178,25 +205,49 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
       cueAt = now
       return false
     }
-    return now - cueAt >= 180L
+    if (now - cueAt < 180L) return false
+    sources.addAll(currentSources.filter { it.isNotBlank() })
+    confirmedCue = pendingCue
+    return true
   }
   @Synchronized fun noteFrame(before: VoiceAlarmFrameStamp, after: VoiceAlarmFrameStamp) {
-    if (sealed || mixed) return
-    val audible = if (before.output != "quiet") before.output else after.output
-    if (audible != "quiet" || before.outputEpoch != after.outputEpoch) {
+    if (sealed) return
+    val changed = before.outputEpoch != after.outputEpoch
+    frameOutput = when {
+      before.output != "quiet" -> before.output
+      changed -> "tail"
+      else -> after.output
+    }
+    if (!mixed && frameOutput != "quiet") {
       mixed = true
-      cause = if (audible == "quiet") "frame_output_changed" else "frame_" + audible
+      cause = if (changed && before.output == "quiet" && after.output == "quiet") "frame_output_changed" else "frame_" + frameOutput
     }
   }
+  @Synchronized fun notePcmVoice(voice: Boolean, bytes: Int) {
+    if (!sealed) recordQuietVoice(voice && frameOutput == "quiet", bytes.toLong() / VoiceAlarmSpeechPolicy.PCM_BYTES_PER_MS)
+  }
+  @Synchronized fun noteNativeLevel(voice: Boolean, output: String, now: Long) {
+    if (sealed) return
+    val previous = lastQuietLevelAt
+    val quiet = voice && output == "quiet"
+    lastQuietLevelAt = now.takeIf { quiet }
+    if (!quiet || previous == null || now - previous !in 1L..160L) recordQuietVoice(false, 0)
+    else recordQuietVoice(true, now - previous)
+  }
+  private fun recordQuietVoice(voice: Boolean, durationMs: Long) {
+    if (quietSpeech) return
+    quietVoiceMs = if (voice) quietVoiceMs + durationMs else 0
+    quietSpeech = quietVoiceMs >= 60L
+  }
   @Synchronized fun note(texts: List<String>) { if (!sealed) sources.addAll(texts.filter { it.isNotBlank() }) }
-  @Synchronized fun hasPlaybackOverlap() = mixed || sources.isNotEmpty()
+  @Synchronized fun hasUnmaskedAudio() = quietSpeech || (!mixed && sources.isEmpty())
   @Synchronized fun finish(epoch: Long, audible: Boolean, output: String = if (audible) "active" else "quiet"): Evidence {
     if (!sealed) {
       if (!mixed) cause = when { audible -> "end_" + output; epoch != initialEpoch -> "output_changed"; else -> "none" }
       mixed = mixed || epoch != initialEpoch || audible
       sealed = true
     }
-    return Evidence(sources.toList(), mixed, cause, windowId)
+    return Evidence(sources.toList(), mixed, cause, windowId, quietSpeech, confirmedCue)
   }
 }
 

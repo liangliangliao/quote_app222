@@ -7,7 +7,10 @@ class VoiceAlarmNativeTurn {
   var hasSpeech = false; private set
   var awaitingFinal = false; private set
   private var draft = ""
+  private var draftSince = 0L
+  private var draftStable = false
   val hasDraft: Boolean get() = draft.isNotBlank()
+  val hasStableEndpointDraft: Boolean get() = awaitingFinal && draftStable
   private val overlappingSources = linkedSetOf<String>()
   val playbackSources: List<String> get() = overlappingSources.toList()
 
@@ -33,18 +36,36 @@ class VoiceAlarmNativeTurn {
   fun begin(): Boolean {
     if (active) return false
     overlappingSources.clear()
-    active = true; ready = false; hasSpeech = false; awaitingFinal = false; draft = ""; return true
+    active = true; ready = false; hasSpeech = false; awaitingFinal = false
+    draft = ""; draftSince = 0L; draftStable = false
+    return true
   }
   fun ready() { if (active) ready = true }
   fun endSpeech() { if (active) awaitingFinal = true }
   fun speechStarted() { if (active) hasSpeech = true }
-  fun partial(text: String) { if (active && text.isNotBlank()) { draft = text; hasSpeech = true } }
+  fun partial(text: String, now: Long = 0L) {
+    if (!active || text.isBlank()) return
+    val previous = VoiceAlarmSpeechPolicy.normalized(draft)
+    val next = VoiceAlarmSpeechPolicy.normalized(text)
+    if (previous.length < 4 || !next.startsWith(previous)) {
+      draftSince = now
+      draftStable = false
+    } else if (now - draftSince >= 120L) {
+      draftStable = true
+    }
+    draft = text
+    hasSpeech = true
+  }
   fun finish(text: String = ""): String? {
     if (!active) return null
     active = false; ready = false; hasSpeech = false; awaitingFinal = false
     return text.takeIf { it.isNotBlank() } ?: draft
   }
-  fun cancel() { overlappingSources.clear(); active = false; ready = false; hasSpeech = false; awaitingFinal = false; draft = "" }
+  fun cancel() {
+    overlappingSources.clear()
+    active = false; ready = false; hasSpeech = false; awaitingFinal = false
+    draft = ""; draftStable = false
+  }
 }
 
 /** Recovery decisions are scoped to one alarm. Network loss and an empty recognition are distinct. */
