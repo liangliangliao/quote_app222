@@ -18,6 +18,7 @@ download json org/json/json/20240303/json-20240303.jar 3cf6cd6892e32e2b4c1c39e0f
 voice_classpath="$voice_deps/okhttp.jar:$voice_deps/okio.jar:$voice_deps/json.jar"
 "${KOTLINC:-kotlinc}" \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmWakeupClient.kt \
+  android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmWakeupHistory.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmSpeechPolicy.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmTextChunks.kt \
   android/app/src/main/kotlin/com/example/quote_app/VoiceAlarmCommands.kt \

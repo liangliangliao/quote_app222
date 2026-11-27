@@ -15,6 +15,7 @@ import '../voice_lab/voice_lab_dao.dart';
 import '../voice_lab/voice_lab_models.dart';
 import '../services/unified_ai_service.dart';
 import '../services/global_ai_settings.dart';
+import 'wakeup_history_page.dart';
 
 class VoiceAlarmPage extends StatefulWidget {
   const VoiceAlarmPage({super.key});
@@ -93,6 +94,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   double _styleStrength = 0.25;
   double _pitch = 0;
   int _replayIntervalSeconds = 60;
+  String? _historyReplayDate;
   bool _resembleHd = true;
   List<Map<String, String>> _savedVoices = [];
   List<VoiceProfile> _voiceProfiles = [];
@@ -304,6 +306,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _styleStrength = (data['styleStrength'] as num?)?.toDouble() ?? 0.25;
       _pitch = (data['pitch'] as num?)?.toDouble() ?? 0;
       _replayIntervalSeconds = (data['replayIntervalSeconds'] as num?)?.toInt() ?? 60;
+      final replayDate = data['historyReplayDate'];
+      _historyReplayDate = replayDate is String && replayDate.isNotEmpty ? replayDate : null;
       final endpointing = data['voiceEndpointing'] is Map ? Map<String, dynamic>.from(data['voiceEndpointing'] as Map) : <String, dynamic>{};
       _speechPreset = ['fast', 'balanced', 'complete', 'long'].contains((endpointing['preset'] ?? 'balanced').toString()) ? (endpointing['preset'] ?? 'balanced').toString() : 'balanced';
       _speechCompleteSilenceMs = (endpointing['completeSilenceMs'] as num?)?.toDouble() ?? 1400;
@@ -667,7 +671,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
 
   Future<void> _schedule() async {
     if (_saving || _loading) return;
-    if (_text.text.trim().isEmpty) {
+    if (_historyReplayDate == null && _text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
       return;
     }
@@ -706,17 +710,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       }
       if (!await _ensureVoiceInteractionReady()) return;
       await _refreshAlarmAiConfig();
-      try {
-        _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-        if (_selectedSavedVoicePath == null && _generatedVoice?.isNotEmpty == true) await _rememberGeneratedVoice(_generatedVoice!);
-      } catch (e) {
-        // Voice file generation depends on third-party TTS credentials/network.
-        // Do not let that prevent the native alarm from being registered; the
-        // ringing service can read the alarm text with platform TTS as fallback.
-        _generatedVoice = null;
-        _toast('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟：$e');
-      }
-      final text = _text.text.trim();
+      await _prepareAlarmVoice('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟');
+      final text = _alarmText;
       final when = _nextTime();
       // 用“模式+时间”作为闹钟 id（不再追加时间戳），这样对同一时间点重复保存会“更新”而不是
       // 不断新增重复闹钟；不同时间自然是不同闹钟。
@@ -727,7 +722,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         'payload': payload,
       });
       await _kv.setString('voice_alarm.time', when.toIso8601String());
-      await _kv.setString('voice_alarm.text', _text.text.trim());
+      await _kv.setString('voice_alarm.text', text);
       await _kv.setString('voice_alarm.provider', _provider);
       await _kv.setString('voice_alarm.voice_file', _generatedVoice ?? '');
       await _kv.setString('voice_alarm.music_file', _customMusic ?? '');
@@ -836,7 +831,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   // （沿用每个闹钟各自的时间与重复规则，只更新语音、音乐、音量等设置）。
   Future<void> _saveSettings() async {
     if (_saving || _loading) return;
-    if (_text.text.trim().isEmpty) {
+    if (_historyReplayDate == null && _text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
       return;
     }
@@ -851,13 +846,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         if (!exactGranted || !mounted) return;
       }
       await _refreshAlarmAiConfig();
-      try {
-        _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-        if (_selectedSavedVoicePath == null && _generatedVoice?.isNotEmpty == true) await _rememberGeneratedVoice(_generatedVoice!);
-      } catch (e) {
-        _generatedVoice = null;
-        _toast('语音文件生成失败，将用系统兜底播报：$e');
-      }
+      await _prepareAlarmVoice('语音文件生成失败，将用系统兜底播报');
       await _persistDraftConfig();
       final targets = _scheduledAlarms.where((a) => (a['mode'] ?? 'morning').toString() == _mode).toList();
       final savedTime = _time;
@@ -1009,16 +998,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     try {
       if (!await _ensureVoiceInteractionReady()) return;
       await _refreshAlarmAiConfig();
-      try {
-        _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-        if (_selectedSavedVoicePath == null && _generatedVoice?.isNotEmpty == true) await _rememberGeneratedVoice(_generatedVoice!);
-      } catch (e) {
-        // Voice file generation depends on third-party TTS credentials/network.
-        // Do not let that prevent the native alarm from being registered; the
-        // ringing service can read the alarm text with platform TTS as fallback.
-        _generatedVoice = null;
-        _toast('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟：$e');
-      }
+      await _prepareAlarmVoice('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟');
       await _native.invokeMethod<void>('testRing', {'payload': _payload()});
     } catch (e) {
       _toast('测试失败：$e');
@@ -1031,14 +1011,34 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     return jsonEncode(_payloadMap(alarmId: alarmId));
   }
 
+  Future<void> _prepareAlarmVoice(String failureMessage) async {
+    if (_historyReplayDate != null) return;
+    try {
+      _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
+      if (_selectedSavedVoicePath == null && _generatedVoice?.isNotEmpty == true) {
+        await _rememberGeneratedVoice(_generatedVoice!);
+      }
+    } catch (e) {
+      _generatedVoice = null;
+      _toast('$failureMessage：$e');
+    }
+  }
+
+  String get _alarmText {
+    final text = _text.text.trim();
+    if (text.isNotEmpty || _historyReplayDate == null) return text;
+    return _mode == 'morning' ? _morningDefault : _nightDefault;
+  }
+
   Map<String, dynamic> _payloadMap({String? alarmId}) {
+    final voicePath = _historyReplayDate == null ? _generatedVoice : _selectedSavedVoicePath;
     return {
-      'text': _text.text.trim(),
+      'text': _alarmText,
       'provider': _provider,
       'sttProvider': _sttProvider,
       'sttMode': _sttMode,
       'batchStt': _batchSttMap(),
-      'voicePath': _provider == 'native' ? '' : (_generatedVoice ?? ''),
+      'voicePath': _provider == 'native' ? '' : (voicePath ?? ''),
       'alarmId': alarmId ?? '',
       'musicPath': (_customMusics.isEmpty ? null : _customMusics.first) ?? _customMusic ?? '',
       'musicPaths': _customMusics,
@@ -1069,6 +1069,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'pitch': _pitch,
       'resembleHd': _resembleHd,
       'replayIntervalSeconds': _replayIntervalSeconds,
+      'historyReplayDate': _historyReplayDate ?? '',
       'aiConfig': _alarmAiConfig,
       'aiSystemPrompt': _alarmAiSystemPrompt,
       'sttConfig': _alarmSttConfig,
@@ -1120,8 +1121,19 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
 
   Future<void> _openWakeupHistory() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => _WakeupHistoryPage(channel: _native)),
+      MaterialPageRoute<void>(builder: (_) => const WakeupHistoryPage(channel: _native)),
     );
+  }
+
+  Future<void> _chooseHistoryReplayDate() async {
+    final date = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(builder: (_) => WakeupHistoryPage(
+        channel: _native,
+        chooseReplayDate: true,
+        initialDate: _historyReplayDate,
+      )),
+    );
+    if (mounted && date != null) setState(() => _historyReplayDate = date);
   }
 
   Widget _wakeupConnectionCard() => Card(
@@ -1612,6 +1624,21 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 subtitle: Slider(value: _replayIntervalSeconds.toDouble(), min: 15, max: 300, divisions: 19, onChanged: (value) => setState(() => _replayIntervalSeconds = value.round())),
               ),
               ListTile(
+                leading: const Icon(Icons.event_note_outlined),
+                title: const Text('闹钟语音重播内容'),
+                subtitle: Text(_historyReplayDate == null
+                    ? '使用原闹钟朗读设置 · 点击可选本机历史任务'
+                    : '$_historyReplayDate（北京时间）\n每轮读一项本机任务，全部播完后停止语音重播'),
+                onTap: _chooseHistoryReplayDate,
+                trailing: _historyReplayDate == null
+                    ? const Icon(Icons.chevron_right)
+                    : IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: '清除日期，恢复原闹钟朗读',
+                        onPressed: () => setState(() => _historyReplayDate = null),
+                      ),
+              ),
+              ListTile(
                 title: Text('语音音量 ${(_voiceVolume * 100).round()}%'),
                 subtitle: Slider(value: _voiceVolume, min: 0, max: 1, divisions: 20, onChanged: (value) => setState(() => _voiceVolume = value)),
               ),
@@ -1660,148 +1687,4 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       ),
     );
   }
-}
-
-
-class _WakeupHistoryPage extends StatefulWidget {
-  const _WakeupHistoryPage({required this.channel});
-
-  final MethodChannel channel;
-
-  @override
-  State<_WakeupHistoryPage> createState() => _WakeupHistoryPageState();
-}
-
-class _WakeupHistoryPageState extends State<_WakeupHistoryPage> {
-  List<String> _dates = [];
-  String? _date;
-  Future<List<Map<Object?, Object?>>>? _items;
-  bool _loading = true;
-  bool _syncing = false;
-  bool _loadFailed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDates();
-  }
-
-  Future<void> _loadDates({String? preferred}) async {
-    try {
-      final dates = await widget.channel.invokeListMethod<String>('getAiWakeupHistoryDates') ?? [];
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _loadFailed = false;
-        _dates = dates;
-        final target = preferred ?? _date;
-        if (dates.isEmpty) {
-          _date = null;
-          _items = null;
-        } else {
-          _select(target != null && dates.contains(target) ? target : dates.first);
-        }
-      });
-    } catch (_) {
-      if (mounted) setState(() { _loading = false; _loadFailed = true; });
-    }
-  }
-
-  Future<void> _syncToday() async {
-    setState(() => _syncing = true);
-    try {
-      final result = await widget.channel.invokeMapMethod<String, dynamic>('refreshAiWakeupHistory');
-      await _loadDates(preferred: result?['date'] as String?);
-      final tasks = result?['tasks'] as int? ?? 0;
-      final saved = result?['saved'] as int? ?? 0;
-      final message = tasks > 0 ? '今天已同步 $tasks 条任务' : saved > 0 ? '今天的备用提醒已保存' : '今天暂无已同步的任务';
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error is PlatformException ? error.message ?? '同步未完成' : '同步未完成'),
-      ));
-    } finally {
-      if (mounted) setState(() => _syncing = false);
-    }
-  }
-
-  void _select(String date) {
-    _date = date;
-    _items = widget.channel.invokeListMethod<Map<Object?, Object?>>(
-      'getAiWakeupHistory', {'date': date},
-    ).then((items) => items ?? []);
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('本机任务同步记录'),
-      actions: [
-        TextButton(onPressed: _syncing ? null : _syncToday, child: Text(_syncing ? '同步中…' : '同步今天')),
-      ],
-    ),
-    body: _loading
-        ? const Center(child: CircularProgressIndicator())
-        : _loadFailed
-        ? const Center(child: Text('无法读取本机同步记录'))
-        : _date == null
-        ? const Center(child: Text('本机暂无记录，可点右上角「同步今天」'))
-
-        : Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey(_date),
-                  initialValue: _date,
-                  decoration: const InputDecoration(labelText: '日期（北京时间）'),
-                  items: _dates.map((date) => DropdownMenuItem(value: date, child: Text(date))).toList(),
-                  onChanged: (date) {
-                    if (date != null) setState(() => _select(date));
-                  },
-                ),
-              ),
-              Expanded(
-                child: FutureBuilder<List<Map<Object?, Object?>>>(
-                  future: _items,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState != ConnectionState.done) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) return const Center(child: Text('无法读取这一天的本机记录'));
-                    final items = snapshot.data ?? [];
-                    return ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        final title = [item['scheduledTime'], item['title']]
-                            .whereType<String>().where((part) => part.isNotEmpty).join(' ');
-                        final fetched = item['fetchedAt'];
-                        final timestamp = fetched is num
-                            ? DateTime.fromMillisecondsSinceEpoch(fetched.toInt(), isUtc: true)
-                                .add(const Duration(hours: 8)).toIso8601String().replaceFirst('T', ' ').substring(0, 16)
-                            : null;
-                        return Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(title, style: Theme.of(context).textTheme.titleMedium),
-                                if (timestamp != null) Text('获取于 $timestamp（北京时间）'),
-                                const SizedBox(height: 12),
-                                SelectableText((item['text'] ?? '').toString()),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-  );
 }

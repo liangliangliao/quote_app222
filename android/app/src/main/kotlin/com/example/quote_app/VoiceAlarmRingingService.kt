@@ -294,6 +294,8 @@ class VoiceAlarmRingingService : Service() {
   private var voiceChunkWatchdog: Runnable? = null
   private val wakeupGate = VoiceAlarmReplyGate()
   private var wakeSession: VoiceAlarmWakeSession? = null
+  private var historyLoading = false
+  private var historyReplay: VoiceAlarmHistoryReplay? = null
   private var roundBusy = false
   @Volatile private var roundClient: VoiceAlarmAiClient? = null
   private var readyRoundRunnable: Runnable? = null
@@ -325,8 +327,7 @@ class VoiceAlarmRingingService : Service() {
   private var audioDeviceCallback: AudioDeviceCallback? = null
 
   private fun hasActiveSignalsFor(payload: String): Boolean {
-    if (currentPayload != payload) return false
-    return musicPlayer != null || voicePlayer != null || alarmTts != null || vibrator != null
+    return alarmSignalPlaybackActive && currentPayload == payload
   }
 
   override fun onCreate() {
@@ -499,11 +500,11 @@ class VoiceAlarmRingingService : Service() {
     // player/TTS engine/audio-focus request is (re)created, so rebuild playback from scratch
     // with the attributes that match the new state instead of trying to hot-swap them.
     logVoice("audioRoute.modeChanged", "headset presence changed mid-ring; rebuilding playback with matching audio attributes", mapOf("headsetNow" to headsetNow))
-    if (wakeSession == null) { startSignals(currentPayload); return }
+    if (wakeSession == null && historyReplay == null && !historyLoading) { startSignals(currentPayload); return }
     headsetPlaybackModeActive = headsetNow
     requestAlarmAudioFocus()
     try { alarmTts?.setAudioAttributes(AudioAttributes.Builder().setUsage(playbackUsage()).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()) } catch (_: Throwable) {}
-    if (voiceQueue.pending) { try { alarmTts?.stop() } catch (_: Throwable) {}; resumeAlarmChunk() }
+    if (voiceQueue.pending && (historyReplay == null || voiceChunkWatchdog != null)) resumeAlarmChunk()
     val data = latestVoiceReplayPayload(JSONObject())
     val musicPath = randomExistingPath(data, "musicPaths", "musicPath")
     val uri = if (musicPath.isNotBlank()) Uri.fromFile(File(musicPath)) else if (data.optBoolean("systemMusic", true)) RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM) else null
@@ -633,7 +634,8 @@ class VoiceAlarmRingingService : Service() {
     persistVoicePlaybackState(this, false, currentVoiceText)
     logVoice("voicePlayback.end", "voice prompt playback ended", mapOf("textLen" to currentVoiceText.length))
     sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_END).setPackage(packageName)
-      .putExtra("text", currentVoiceText).putExtra("completed", completed))
+      .putExtra("text", currentVoiceText).putExtra("completed", completed)
+      .putExtra("offerFollowUp", historyReplay?.current == null))
   }
 
   private fun randomExistingPath(data: JSONObject, listKey: String, legacyKey: String): String {
@@ -693,6 +695,16 @@ class VoiceAlarmRingingService : Service() {
       if (alarmUri != null) musicPlayer = createPlayer(alarmUri, true, currentMusicVolume)
     }
     currentVoiceVolume = data.optDouble("voiceVolume", 1.0).toFloat().coerceIn(0f, 1f)
+    val date = data.optString("historyReplayDate")
+    if (date.isNotBlank()) {
+      voiceReplayBlockedUntil = 0L
+      loadHistoryReplay(date, data)
+    } else {
+      startOriginalVoice(data)
+    }
+  }
+
+  private fun startOriginalVoice(data: JSONObject) {
     val adaptive = data.optBoolean("adaptiveWakeupEnabled", data.optString("mode") != "night")
     if (adaptive || data.optBoolean("aiWakeupEnabled", false)) {
       wakeSession = VoiceAlarmWakeSession(data.optString("text"), adaptive)
@@ -701,6 +713,37 @@ class VoiceAlarmRingingService : Service() {
       playVoiceOnce(data)
       scheduleVoiceReplay(data)
     }
+  }
+
+  private fun loadHistoryReplay(date: String, data: JSONObject) {
+    historyLoading = true
+    val token = wakeupGate.next()
+    Thread {
+      val tasks = runCatching { VoiceAlarmWakeupStore.historyTasks(this, date) }.getOrDefault(emptyList())
+      replayHandler.post {
+        if (!wakeupGate.isCurrent(token) || stopping || activePayload == null) return@post
+        historyLoading = false
+        if (tasks.isEmpty()) {
+          reportRoundStatus("所选日期的本机任务不可用，已使用原闹钟内容。")
+          startOriginalVoice(data)
+          return@post
+        }
+        historyReplay = VoiceAlarmHistoryReplay(tasks)
+        if (appReplySpeaking || microphoneInUse || voiceReplayBlockedUntil > System.currentTimeMillis()) {
+          scheduleVoiceReplay(data, startDelayMs = 0)
+        } else {
+          playHistoryTask()
+        }
+      }
+    }.apply { name = "voice-alarm-history"; isDaemon = true }.start()
+  }
+
+  private fun playHistoryTask() {
+    val replay = historyReplay ?: return
+    val task = replay.current ?: return
+    val label = listOf(task.scheduledTime, task.title).filter(String::isNotBlank).joinToString(" ")
+    reportRoundStatus("${task.date} · 任务 ${replay.completed + 1}/${replay.total} $label".trimEnd())
+    if (voiceQueue.pending) resumeAlarmChunk() else speakAlarmTextOnce(task.text, currentVoiceVolume)
   }
 
   private fun reportRoundStatus(value: String) {
@@ -829,50 +872,63 @@ class VoiceAlarmRingingService : Service() {
     if (alarmTts != null) return
     val initToken = ttsInitGate.next()
     alarmTts = TextToSpeech(this) { status ->
-      if (!ttsInitGate.isCurrent(initToken) || stopping || !alarmSignalPlaybackActive) return@TextToSpeech
-      if (status == TextToSpeech.SUCCESS) {
-        alarmTtsReady = true
-        try { alarmTts?.language = Locale.CHINA } catch (_: Throwable) {}
-        if (Build.VERSION.SDK_INT >= 21) {
-          try {
-            alarmTts?.setAudioAttributes(
-              AudioAttributes.Builder()
-                .setUsage(playbackUsage())
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build(),
-            )
-          } catch (_: Throwable) {}
-        }
-        alarmTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-          override fun onStart(utteranceId: String?) { replayHandler.post {
-            if (utteranceId == voiceQueue.current?.id) notifyVoicePlaybackStart()
-          } }
-          override fun onDone(utteranceId: String?) { replayHandler.post {
-            if (voiceQueue.done(utteranceId)) {
-              if (voiceQueue.pending) playAlarmChunk() else {
-                voiceChunkWatchdog?.let { replayHandler.removeCallbacks(it) }
-                voiceChunkWatchdog = null
-                wakeSession?.markPlayback("完整播报完成", completed = true)
-                notifyVoicePlaybackEnd(completed = true)
-              }
-            }
-          } }
-          @Deprecated("Deprecated in Java")
-          override fun onError(utteranceId: String?) { replayHandler.post { failAlarmChunk(utteranceId) } }
-          override fun onError(utteranceId: String?, errorCode: Int) { replayHandler.post { failAlarmChunk(utteranceId) } }
-        })
-        val pending = pendingAlarmTts
-        pendingAlarmTts = null
-        if (pending != null) {
-          replayHandler.post { speakAlarmTextOnce(pending.first, currentVoiceVolume) }
-        }
-      } else {
-        alarmTtsReady = false
-        pendingAlarmTts = null
-        try { alarmTts?.shutdown() } catch (_: Throwable) {}
-        alarmTts = null
-        notifyVoicePlaybackEnd()
-      }
+      replayHandler.post { onAlarmTtsInitialized(initToken, status) }
+    }
+    if (historyReplay != null) replayHandler.postDelayed({
+      if (ttsInitGate.isCurrent(initToken) && !alarmTtsReady) failAlarmTtsInitialization()
+    }, 12_000L)
+  }
+
+  private fun onAlarmTtsInitialized(token: Long, status: Int) {
+    if (!ttsInitGate.isCurrent(token) || stopping || !alarmSignalPlaybackActive) return
+    if (status != TextToSpeech.SUCCESS) {
+      failAlarmTtsInitialization()
+      return
+    }
+    alarmTtsReady = true
+    try { alarmTts?.language = Locale.CHINA } catch (_: Throwable) {}
+    alarmTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+      override fun onStart(utteranceId: String?) { replayHandler.post {
+        if (utteranceId == voiceQueue.current?.id) notifyVoicePlaybackStart()
+      } }
+      override fun onDone(utteranceId: String?) { replayHandler.post { onAlarmChunkDone(utteranceId) } }
+      @Deprecated("Deprecated in Java")
+      override fun onError(utteranceId: String?) { replayHandler.post { failAlarmChunk(utteranceId) } }
+      override fun onError(utteranceId: String?, errorCode: Int) { replayHandler.post { failAlarmChunk(utteranceId) } }
+    })
+    val pending = pendingAlarmTts
+    pendingAlarmTts = null
+    if (pending != null) speakAlarmTextOnce(pending.first, currentVoiceVolume)
+  }
+
+  private fun onAlarmChunkDone(utteranceId: String?) {
+    if (!voiceQueue.done(utteranceId)) return
+    if (voiceQueue.pending) {
+      playAlarmChunk()
+      return
+    }
+    voiceChunkWatchdog?.let { replayHandler.removeCallbacks(it) }
+    voiceChunkWatchdog = null
+    wakeSession?.markPlayback("完整播报完成", completed = true)
+    val replay = historyReplay
+    replay?.completeTask()
+    notifyVoicePlaybackEnd(completed = true)
+    if (replay != null) {
+      if (replay.current != null) scheduleVoiceReplay(latestVoiceReplayPayload(JSONObject()))
+      else reportRoundStatus("已完整播报所选日期的 ${replay.total} 项任务。")
+    }
+  }
+
+  private fun failAlarmTtsInitialization() {
+    ttsInitGate.next()
+    alarmTtsReady = false
+    pendingAlarmTts = null
+    try { alarmTts?.shutdown() } catch (_: Throwable) {}
+    alarmTts = null
+    notifyVoicePlaybackEnd()
+    if (historyReplay?.current != null) {
+      reportRoundStatus("语音引擎未就绪，稍后重试当前任务。")
+      scheduleVoiceReplay(latestVoiceReplayPayload(JSONObject()))
     }
   }
 
@@ -905,10 +961,14 @@ class VoiceAlarmRingingService : Service() {
       wakeSession?.markPlayback("语音引擎失败，未播完")
       notifyVoicePlaybackEnd()
       sendBroadcast(Intent(ACTION_VOICE_PLAYBACK_ERROR).setPackage(packageName))
+      if (historyReplay?.current != null) {
+        try { alarmTts?.stop() } catch (_: Throwable) {}
+        scheduleVoiceReplay(latestVoiceReplayPayload(JSONObject()))
+      }
     }
   }
 
-  private fun scheduleVoiceReplay(initialData: JSONObject) {
+  private fun scheduleVoiceReplay(initialData: JSONObject, startDelayMs: Long? = null) {
     replayRunnable?.let { replayHandler.removeCallbacks(it) }
     val fallbackData = initialData
     val seconds = initialData.optInt("replayIntervalSeconds", 60).coerceIn(15, 3600)
@@ -925,7 +985,10 @@ class VoiceAlarmRingingService : Service() {
         replayHandler.postDelayed(replayRunnable!!, 1500L)
         return@Runnable
       }
-      if (wakeSession != null && voiceQueue.pending) {
+      if (historyReplay != null) {
+        replayRunnable = null
+        playHistoryTask()
+      } else if (wakeSession != null && voiceQueue.pending) {
         resumeAlarmChunk(); scheduleVoiceReplay(latest)
       } else if (wakeSession != null) {
         requestWakeRound(latest)
@@ -934,7 +997,7 @@ class VoiceAlarmRingingService : Service() {
         scheduleVoiceReplay(latest)
       }
     }
-    replayHandler.postDelayed(replayRunnable!!, seconds * 1000L)
+    replayHandler.postDelayed(replayRunnable!!, startDelayMs ?: seconds * 1000L)
   }
 
   private fun latestVoiceReplayPayload(fallbackData: JSONObject): JSONObject {
@@ -945,6 +1008,7 @@ class VoiceAlarmRingingService : Service() {
     val safePostponeMs = postponeMs.coerceIn(1000L, 180_000L)
     voiceReplayBlockedUntil = maxOf(voiceReplayBlockedUntil, System.currentTimeMillis() + safePostponeMs)
     if (!interrupt) return // postpone next repeat without cutting off this prompt
+    val interruptedHistoryTask = historyReplay?.current != null && (voiceQueue.pending || pendingAlarmTts != null)
     logVoice("voice.interrupt", "stopping playback for barge-in", mapOf("voiceActive" to alarmVoicePlaybackActive))
     if (alarmVoicePlaybackActive || voiceQueue.pending) wakeSession?.markPlayback("用户插话中断，未保证听完")
     if (wakeSession != null) voiceQueue.cancel()
@@ -956,6 +1020,7 @@ class VoiceAlarmRingingService : Service() {
     pendingAlarmTts = null
     notifyVoicePlaybackEnd()
     voicePlayer = null
+    if (interruptedHistoryTask) scheduleVoiceReplay(latestVoiceReplayPayload(JSONObject()))
   }
 
   private fun applyMusicGain() {
@@ -1029,6 +1094,8 @@ class VoiceAlarmRingingService : Service() {
   }
 
   private fun stopSignals() {
+    historyLoading = false
+    historyReplay = null
     wakeSession?.close(); wakeSession = null
     roundClient?.cancel(); roundClient = null; roundBusy = false
     readyRoundRunnable?.let { replayHandler.removeCallbacks(it) }; readyRoundRunnable = null

@@ -87,7 +87,7 @@ object VoiceAlarmWakeupStore {
     for (entry in day.historyItems) {
       val index = items.indexOfFirst { it.optString("id") == entry.id && it.optString("text") == entry.text }
       val item = JSONObject().put("id", entry.id).put("title", entry.title).put("scheduledTime", entry.scheduledTime)
-        .put("text", entry.text).put("fetchedAt", fetchedAt)
+        .put("text", entry.text).put("fetchedAt", fetchedAt).put("scheduledTask", day.tasks.isNotEmpty())
       if (index < 0) items.add(item) else items[index] = item
     }
     val bytes = encrypt(JSONObject().put("items", JSONArray(items))).toByteArray(Charsets.UTF_8)
@@ -100,12 +100,21 @@ object VoiceAlarmWakeupStore {
     .map { it.nameWithoutExtension }.filter { datePattern.matches(it) }.distinct().sortedDescending()
 
   @Synchronized fun history(context: Context, date: String): List<Map<String, Any>> {
+    val records = readHistory(context, date)
+    val replay = VoiceAlarmWakeupHistory.replayRecords(records).toSet()
+    return records.map {
+      mapOf("title" to it.content.title, "scheduledTime" to it.content.scheduledTime,
+        "text" to it.content.text, "fetchedAt" to it.fetchedAt, "replayTask" to (it in replay))
+    }
+  }
+
+  @Synchronized fun historyTasks(context: Context, date: String): List<WakeupContent> =
+    VoiceAlarmWakeupHistory.replayRecords(readHistory(context, date)).map { it.content }
+
+  private fun readHistory(context: Context, date: String): List<VoiceAlarmWakeupHistory.Record> {
     val file = historyFile(context, date)
     if (!file.baseFile.exists()) return emptyList()
     val items = decrypt(file.readFully().toString(Charsets.UTF_8)).optJSONArray("items") ?: return emptyList()
-    return (0 until items.length()).mapNotNull { items.optJSONObject(it) }
-      .sortedWith(compareBy({ it.optString("scheduledTime").ifBlank { "99:99" } }, { -it.optLong("fetchedAt") }))
-      .map { mapOf("title" to it.optString("title"), "scheduledTime" to it.optString("scheduledTime"),
-        "text" to it.optString("text"), "fetchedAt" to it.optLong("fetchedAt")) }
+    return VoiceAlarmWakeupHistory.read(date, items)
   }
 }

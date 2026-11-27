@@ -47,6 +47,43 @@ fun main() {
     val empty = VoiceAlarmWakeupClient.parseDay(fixture().put("content", JSONObject.NULL).toString(), date)
     check(empty.tasks.isEmpty() && empty.historyItems.isEmpty())
   }
+  scenario("history replay uses the latest version of each saved task in schedule order") {
+    fun record(id: String, time: String, title: String, body: String, fetched: Long) =
+      JSONObject().put("id", id).put("scheduledTime", time).put("title", title)
+        .put("text", body).put("fetchedAt", fetched)
+    val entries = JSONArray()
+      .put(record("b", "07:00", "旧的标题", "旧正文", 1))
+      .put(record("a", "06:00", "早间任务", text, 2))
+      .put(record("b", "07:00", "已更新", "新正文", 3).put("scheduledTask", true))
+      .put(record("backup", "", "自定义备用提醒", "备用", 3).put("scheduledTask", false))
+      .put(record("old-backup", "", "今日播报", "旧备用", 2))
+      .put(record("untimed", "", "未填写时间的旧任务", "旧任务正文", 1))
+    val archive = VoiceAlarmWakeupHistory.read(date, entries)
+    check(archive.size == 6)
+    val tasks = VoiceAlarmWakeupHistory.replayRecords(archive).map { it.content }
+    check(tasks.map { it.id } == listOf("a", "b", "untimed"))
+    check(tasks.map { it.text } == listOf(text, "新正文", "旧任务正文"))
+    check(tasks.all { it.date == date })
+  }
+  scenario("history replay retains an interrupted task until all chunks are acknowledged") {
+    val first = WakeupContent(date, "虚构的长任务。".repeat(80), "a")
+    val second = WakeupContent(date, "第二项任务", "b")
+    val replay = VoiceAlarmHistoryReplay(listOf(first, second))
+    val queue = VoiceAlarmPlaybackQueue()
+    check(replay.total == 2 && replay.current == first)
+    val firstChunk = queue.start(replay.current!!.text)!!
+    check(queue.done(firstChunk.id) && queue.pending && replay.completed == 0)
+    val interrupted = queue.current!!
+    val resumed = queue.resume()!!
+    check(interrupted.text == resumed.text && !queue.done(interrupted.id))
+    while (queue.pending) check(queue.done(queue.current!!.id))
+    replay.completeTask()
+    check(replay.current == second && replay.completed == 1)
+    check(queue.done(queue.start(replay.current!!.text)!!.id))
+    replay.completeTask()
+    replay.completeTask()
+    check(replay.current == null && replay.completed == 2)
+  }
   scenario("finish each task once, then generate from completed originals and play late arrivals") {
     val first = WakeupContent(date, "任务一\n正文", "a", "一", "06:00")
     val second = WakeupContent(date, "任务二\n正文", "b", "二", "07:00")

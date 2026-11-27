@@ -294,7 +294,8 @@ class VoiceAlarmActivity : Activity() {
           alarmPlaybackWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
           alarmPlaybackWatchdogRunnable = null
           markPostPlaybackHandoff()
-          if (intent?.getBooleanExtra("completed", false) == true && !requestedTurn && !speaking && !aiBusy && speechBuffer.isBlank()) {
+          if (intent?.getBooleanExtra("completed", false) == true && intent.getBooleanExtra("offerFollowUp", true) &&
+              !requestedTurn && !speaking && !aiBusy && speechBuffer.isBlank()) {
             startRequestedTurn(ListenReason.AFTER_REMINDER)
           }
           resetBatchCurrentCaptureForSpeakerPlayback("闹钟播报已结束，继续聆听。", cooldownMs = 160L, preserveOpenRecorder = true)
