@@ -102,6 +102,11 @@ class VoiceAlarmNativeRecovery {
   private var interferenceMisses = 0
   private var lastQuietRetryAt: Long? = null
 
+  fun canRetryQuietAfter(kind: Failure, overlap: VoiceAlarmConversationGate.PlaybackOverlap?, requested: Boolean): Boolean =
+    kind == Failure.NO_MATCH || (kind == Failure.NETWORK &&
+      (overlap == VoiceAlarmConversationGate.PlaybackOverlap.SPOKEN ||
+        (requested && overlap == VoiceAlarmConversationGate.PlaybackOverlap.MUSIC)))
+
   fun retryInQuiet(output: Interference?, now: Long): Boolean {
     interferenceMisses = when {
       output == null -> 0

@@ -43,6 +43,9 @@ object VoiceAlarmCommands {
     return phrases.size > 1 && phrases.all(::command)
   }
 
+  fun isExplicitAlarmStop(text: String): Boolean =
+    isStop(text) && VoiceAlarmSpeechPolicy.normalized(VoiceAlarmConversationGate.withoutAddress(text.trim())).contains("闹钟")
+
   fun discussesOrNegatesSnooze(text: String): Boolean =
     Regex("不要|不想|不能|不需要|不用|无需|别|为什么|怎么|如何|什么是|解释|介绍")
       .containsMatchIn(clean(text))

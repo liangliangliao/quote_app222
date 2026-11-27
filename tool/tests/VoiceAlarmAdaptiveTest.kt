@@ -101,6 +101,25 @@ fun main() {
     check(stream.outcome(false, 3200, 3200, null) == "missing_final")
     check(stream.outcome(false, 0, 0, "open_failed", speechExpected = false) == "open_failed")
   }
+  scenario("successive music-only empty iFlytek turns get one quiet raw microphone retry") {
+    val recovery = VoiceAlarmIflytekInputRecovery()
+    check(recovery.observe(emptyWithPlayback = true, digitalSilence = false, alreadyQuiet = false) == null)
+    recovery.recognizedSpeech()
+    check(recovery.observe(emptyWithPlayback = true, digitalSilence = false, alreadyQuiet = false) == null)
+    check(recovery.observe(emptyWithPlayback = true, digitalSilence = false, alreadyQuiet = false) ==
+      VoiceAlarmIflytekInputRecovery.Action.QUIET_RETRY)
+    check(recovery.useRawMic)
+    repeat(5) { check(recovery.observe(emptyWithPlayback = true, digitalSilence = true, alreadyQuiet = false) == null) }
+  }
+  scenario("PCM frames effectively at zero can reopen an already-quiet microphone without rearming the alarm") {
+    val recovery = VoiceAlarmIflytekInputRecovery()
+    check(!VoiceAlarmIflytekInputRecovery.hasDigitalSilence(38399L, 0))
+    check(!VoiceAlarmIflytekInputRecovery.hasDigitalSilence(38400L, 3))
+    check(VoiceAlarmIflytekInputRecovery.hasDigitalSilence(38400L, 2))
+    check(recovery.observe(emptyWithPlayback = false, digitalSilence = true, alreadyQuiet = true) ==
+      VoiceAlarmIflytekInputRecovery.Action.REOPEN_QUIET_INPUT)
+    check(recovery.useRawMic)
+  }
   scenario("iFlytek keeps regular packet timing and catches up a queued microphone without a burst") {
     val audio = VoiceAlarmIflytekAudio()
     audio.write(ByteArray(167040))
@@ -184,6 +203,18 @@ fun main() {
     policy.success()
     check(policy.failed(network, false)!!.delayMs == 400L)
     check(policy.failed(VoiceAlarmNativeRecovery.Failure.PERMISSION, true) == null)
+  }
+  scenario("alternating native timeout and no-match during music can open a quiet follow-up") {
+    val policy = VoiceAlarmNativeRecovery()
+    val network = VoiceAlarmNativeRecovery.Failure.NETWORK
+    val miss = VoiceAlarmNativeRecovery.Failure.NO_MATCH
+    val music = VoiceAlarmConversationGate.PlaybackOverlap.MUSIC
+    check(!policy.canRetryQuietAfter(network, music, requested = false))
+    check(!policy.canRetryQuietAfter(network, null, requested = true))
+    check(policy.canRetryQuietAfter(network, music, requested = true))
+    check(policy.canRetryQuietAfter(miss, music, requested = true))
+    check(!policy.retryInQuiet(VoiceAlarmNativeRecovery.Interference.MUSIC, 5000L))
+    check(policy.retryInQuiet(VoiceAlarmNativeRecovery.Interference.MUSIC, 10000L))
   }
   scenario("early vendor speechBegin cannot invent a human onset or hold the microphone for a minute") {
     val signal = VoiceAlarmNativeSignal()

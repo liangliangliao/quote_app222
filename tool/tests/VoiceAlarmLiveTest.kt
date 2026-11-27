@@ -107,6 +107,19 @@ fun main() {
     mix.setSpeaking(user, current, false)
     check(mix.gain(.6f) == 0f)
   }
+  scenario("startup listening lowers audible music, speech mutes it, and releasing the startup hold restores it") {
+    val mix = VoiceAlarmMusicState()
+    val owner = Any()
+    val startup = VoiceAlarmMusicState.Speaker.STARTUP_LISTEN
+    val user = VoiceAlarmMusicState.Speaker.USER
+    mix.setSpeaking(startup, owner, true)
+    check(mix.gain(.4f) in .087f.. .089f)
+    mix.setSpeaking(user, owner, true)
+    mix.setSpeaking(startup, owner, false)
+    check(mix.gain(.4f) == 0f)
+    mix.setSpeaking(user, owner, false)
+    check(mix.gain(.4f) == .4f)
+  }
   scenario("music intro starts counting when the track plays and pauses during a microphone mute") {
     val intro = VoiceAlarmMusicIntro(5000)
     val preparing = VoiceAlarmMusicIntro.Output.PREPARING

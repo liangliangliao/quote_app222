@@ -93,7 +93,19 @@ fun main() {
       check(route(text, mixed = true, reliable = false, playbackOverlap = music.playbackOverlap).route == relisten)
     }
     check(route("我不知道今天有没有大的新闻", mixed = true, playbackOverlap = music.playbackOverlap).route == ignore)
-    check(route("关闭闹钟", mixed = true, local = true, playbackOverlap = music.playbackOverlap).route == relisten)
+    check(route("关闭闹钟", mixed = true, local = true, playbackOverlap = music.playbackOverlap).route ==
+      VoiceAlarmConversationGate.Route.LOCAL)
+  }
+  scenario("short complete questions and explicit alarm commands work over music but keep the spoken echo guard") {
+    val music = VoiceAlarmConversationGate.PlaybackOverlap.MUSIC
+    for (text in listOf("现在几点", "今天天气", "今天几号")) {
+      check(route(text, mixed = true, playbackOverlap = music).route == send)
+      check(route(text, mixed = true, reliable = false, playbackOverlap = music).route == relisten)
+    }
+    check(route("关闭闹钟", mixed = true, reliable = false, local = true, playbackOverlap = music).route == relisten)
+    check(route("停止", mixed = true, local = true, playbackOverlap = music).route == relisten)
+    check(route("关闭闹钟", listOf("关闭闹钟。"), mixed = true, local = true, spokenPlayback = true,
+      playbackOverlap = VoiceAlarmConversationGate.PlaybackOverlap.SPOKEN).route == echo)
   }
   scenario("a new system question can interrupt spoken playback even without a partial or wake phrase") {
     val reminder = listOf("早上好，新的一天开始了。愿你平静、专注、充满力量。")

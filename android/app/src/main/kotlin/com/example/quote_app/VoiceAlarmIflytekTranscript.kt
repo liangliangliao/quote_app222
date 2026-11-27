@@ -4,6 +4,29 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
+/** One quiet retry per alarm separates input/playback trouble from normal idle speech recognition. */
+internal class VoiceAlarmIflytekInputRecovery {
+  enum class Action { QUIET_RETRY, REOPEN_QUIET_INPUT }
+  private var emptyPlaybackTurns = 0
+  var useRawMic = false
+    private set
+
+  fun recognizedSpeech() { emptyPlaybackTurns = 0 }
+
+  fun observe(emptyWithPlayback: Boolean, digitalSilence: Boolean, alreadyQuiet: Boolean): Action? {
+    if (useRawMic) return null
+    emptyPlaybackTurns = if (emptyWithPlayback) emptyPlaybackTurns + 1 else 0
+    if (!digitalSilence && emptyPlaybackTurns < 2) return null
+    useRawMic = true
+    return if (alreadyQuiet) Action.REOPEN_QUIET_INPUT else Action.QUIET_RETRY
+  }
+
+  companion object {
+    fun hasDigitalSilence(pcmReadBytes: Long, peak: Int): Boolean =
+      pcmReadBytes >= 38400L && peak <= 2
+  }
+}
+
 /** Keeps one continuous recording while the socket opens or its send cadence falls behind. */
 internal class VoiceAlarmIflytekAudio : ByteArrayOutputStream() {
   data class Packet(val status: Int, val pcm: ByteArray)

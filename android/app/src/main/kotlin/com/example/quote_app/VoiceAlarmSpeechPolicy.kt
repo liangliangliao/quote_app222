@@ -111,6 +111,7 @@ object VoiceAlarmConversationGate {
   private val reportedSpeech = Regex("^(?:[我你他她您]们?|大家|有人|别人)?(?:已经|早就|也)?(?:不知道|知道|记得|听说|在讨论|问过|告诉过|说过|想知道)")
   private val indefinite = Regex("^(?:无论|不管|随便).+|.+(?:都可以|都行|都一样|都没关系)$")
   private val directRequest = Regex("^(?:请问|能帮我|请?(?:帮我|提醒我|告诉我|介绍一下|解释一下|说说|讲讲|查一下|搜一下)).+|^(?:继续说|继续讲|接着说|接着讲|换一个|陪我聊聊|跟我聊聊|我(?:已经|刚)?(?:起床|起来|醒)了)$")
+  private val shortQuestion = Regex("^(?:(?:现在)?几点(?:钟|了)?|(?:今天|明天)?(?:星期几|周几|几号|下雨吗)|今天天气)[啊呀呢]?$")
 
   private fun isDirectQuestion(text: String): Boolean {
     val normalized = VoiceAlarmSpeechPolicy.normalized(text)
@@ -128,12 +129,17 @@ object VoiceAlarmConversationGate {
 
   fun canPauseForSpeech(text: String): Boolean = isInterruption(text) || address.containsMatchIn(text) || looksDirected(text)
 
-  private fun looksDirected(text: String): Boolean = isDirectQuestion(text) || directRequest.matches(VoiceAlarmSpeechPolicy.normalized(text))
+  private fun looksDirected(text: String): Boolean {
+    val normalized = VoiceAlarmSpeechPolicy.normalized(text)
+    return shortQuestion.matches(normalized) || isDirectQuestion(text) || directRequest.matches(normalized)
+  }
 
   private fun specificRequest(text: String, minimumLength: Int = 6): Boolean {
     val body = withoutAddress(text)
+    val normalized = VoiceAlarmSpeechPolicy.normalized(body)
+    if (shortQuestion.matches(normalized)) return true
     val addressed = body != text
-    return VoiceAlarmSpeechPolicy.normalized(body).length >= (if (addressed) 4 else minimumLength) &&
+    return normalized.length >= (if (addressed) 4 else minimumLength) &&
       (looksDirected(body) || addressed)
   }
 
@@ -167,8 +173,10 @@ object VoiceAlarmConversationGate {
     val unverifiedOverlap = (mixed || sources.isNotEmpty()) && !overlapConfirmed && !corroboratedRequest
     val usableDraft = stableDraft && !unverifiedOverlap && !localCommand && !opensMic && looksDirected(question ?: text)
     val distinctDirectedSpeech = playbackOverlap == PlaybackOverlap.SPOKEN && distinctFromSpoken(text, sources)
+    val musicOnly = playbackOverlap == PlaybackOverlap.MUSIC && !spokenPlayback && sources.isEmpty()
+    val explicitAlarmStop = musicOnly && reliable && localCommand && VoiceAlarmCommands.isExplicitAlarmStop(text)
     val completeRequestDuringPlayback = reliable && !opensMic && !localCommand && specificRequest(text) && when (playbackOverlap) {
-      PlaybackOverlap.MUSIC -> !spokenPlayback && sources.isEmpty()
+      PlaybackOverlap.MUSIC -> musicOnly
       PlaybackOverlap.SPOKEN -> distinctDirectedSpeech
       null -> false
     }
@@ -176,6 +184,7 @@ object VoiceAlarmConversationGate {
       text.isEmpty() -> Route.DRAFT
       VoiceAlarmSpeechPolicy.isEcho(text, sources, sources.isNotEmpty(), partial = !final) -> Route.ECHO
       !final -> Route.DRAFT
+      explicitAlarmStop -> Route.LOCAL
       // Only a complete, directed realtime final may cross the playback guard.
       completeRequestDuringPlayback -> Route.SEND
       spokenPlayback && !opensMic -> return if (localCommand || question != null ||
