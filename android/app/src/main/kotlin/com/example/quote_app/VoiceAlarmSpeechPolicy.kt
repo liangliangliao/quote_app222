@@ -13,6 +13,7 @@ object VoiceAlarmSpeechPolicy {
   // A recognizer can finalize a sentence while the person is still thinking.
   class TranscriptCommit {
     private var deadline = 0L
+    private var hardDeadline = 0L
     var manuallySubmitted = false
       private set
 
@@ -20,18 +21,50 @@ object VoiceAlarmSpeechPolicy {
       manuallySubmitted = manual
       val delay = if (manual) 250L else maxOf(configuredMs, if (normalized(fragment).length <= 6) 6000L else 5000L)
       deadline = now + delay
+      hardDeadline = deadline + if (manual) 0L else 5000L
       return delay
     }
 
     fun remaining(now: Long) = deadline - now
 
+    fun nextCheckDelay(now: Long, stillTranscribing: Boolean): Long {
+      if (now < deadline) return deadline - now
+      return if (stillTranscribing && now < hardDeadline) minOf(350L, hardDeadline - now) else 0L
+    }
+
     fun waitThrough(at: Long) {
-      if (!manuallySubmitted) deadline = maxOf(deadline, at)
+      if (!manuallySubmitted) deadline = maxOf(deadline, minOf(at, hardDeadline))
     }
 
     fun reset() {
       deadline = 0L
+      hardDeadline = 0L
       manuallySubmitted = false
+    }
+  }
+
+  /** Release the music on silence, even while the service is still transcribing. */
+  class CaptureMute {
+    private var deadline: Long? = null
+    private var quietSince: Long? = null
+    private var mayStart = true
+
+    fun frame(now: Long, voice: Boolean, recognizedVoice: Boolean): Boolean {
+      if (voice) {
+        quietSince = null
+        if (mayStart && (deadline == null || recognizedVoice)) deadline = now + 8000L
+        if (deadline?.let { now >= it } == true) {
+          deadline = null
+          mayStart = false
+        }
+      } else {
+        val silence = quietSince ?: now.also { quietSince = it }
+        if (now - silence >= 650L) {
+          deadline = null
+          mayStart = true
+        }
+      }
+      return deadline != null
     }
   }
 
@@ -366,6 +399,7 @@ class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
   }
   @Synchronized fun note(texts: List<String>) { if (!sealed) sources.addAll(texts.filter { it.isNotBlank() }) }
   @Synchronized fun hasUnmaskedAudio() = quietSpeech || (!spokenPlayback && !mixed && sources.isEmpty())
+  @Synchronized fun hasNearEndSpeech() = nearEndSpeech
   @Synchronized fun finish(epoch: Long, audible: Boolean, output: String = if (audible) "active" else "quiet",
                            spokenEpoch: Long? = null, recentSpokenOutput: Boolean = false): Evidence {
     if (!sealed) {

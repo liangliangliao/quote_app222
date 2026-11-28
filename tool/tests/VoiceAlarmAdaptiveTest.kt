@@ -11,6 +11,31 @@ fun main() {
   var passed = 0
   fun scenario(name: String, body: () -> Unit) { body(); passed++; println("PASS $name") }
   fun rejects(body: () -> Unit) { check(runCatching(body).isFailure) }
+  scenario("iFlytek recovery keeps the finalized prefix and resumes even if a retry also ends early") {
+    val pcm = ByteArray(705280) { ((it / 320) % 127).toByte() }
+    var requests = 0
+    val text = VoiceAlarmIflytekRecovery.finish(pcm, VoiceAlarmIflytekRecovery.Result("明天", 212480),
+      transcribe = { chunk ->
+        when (++requests) {
+          1 -> {
+            check(chunk.contentEquals(pcm.copyOfRange(199680, 583680)))
+            VoiceAlarmIflytekRecovery.Result("早上", 320000)
+          }
+          2 -> {
+            check(chunk.contentEquals(pcm.copyOfRange(506880, pcm.size)))
+            VoiceAlarmIflytekRecovery.Result("几点起床", chunk.size)
+          }
+          else -> error("unexpected recognition request")
+        }
+      }, merge = String::plus)
+    check(requests == 2 && text == "明天早上几点起床")
+  }
+  scenario("iFlytek cannot label an untranscribed suffix as a complete result") {
+    rejects {
+      VoiceAlarmIflytekRecovery.finish(ByteArray(705920), VoiceAlarmIflytekRecovery.Result("早上", 536320),
+        transcribe = { VoiceAlarmIflytekRecovery.Result("早上", 12800) }, merge = String::plus)
+    }
+  }
   scenario("Microsoft speech distinguishes a normal no-match from a failed service") {
     val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
     server.createContext("/") { exchange ->

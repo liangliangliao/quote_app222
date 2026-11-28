@@ -76,17 +76,31 @@ fun main() {
     mix.setSpeaking(VoiceAlarmMusicState.Speaker.USER, owner, false)
     check(mix.gain(.35f) == .35f)
   }
-  scenario("music stays quiet between fragments and returns after speech is submitted") {
+  scenario("music returns after speech ends while the AI submission timer is still waiting") {
     val mix = VoiceAlarmMusicState()
     val owner = Any()
-    val continuation = VoiceAlarmMusicState.Speaker.USER_CONTINUATION
     val user = VoiceAlarmMusicState.Speaker.USER
-    mix.setSpeaking(user, owner, true)
-    mix.setSpeaking(continuation, owner, true)
-    mix.setSpeaking(user, owner, false)
+    val capture = VoiceAlarmSpeechPolicy.CaptureMute()
+    val commit = VoiceAlarmSpeechPolicy.TranscriptCommit()
+    mix.setSpeaking(user, owner, capture.frame(1000L, voice = true, recognizedVoice = false))
     check(mix.gain(.4f) == 0f)
-    mix.setSpeaking(continuation, owner, false)
+    commit.accept("等一下", 2800L, now = 1600L, manual = false)
+    check(capture.frame(1600L, voice = false, recognizedVoice = false))
+    mix.setSpeaking(user, owner, capture.frame(2250L, voice = false, recognizedVoice = false))
     check(mix.gain(.4f) == .4f)
+    check(commit.nextCheckDelay(2250L, stillTranscribing = true) > 0)
+    mix.setSpeaking(VoiceAlarmMusicState.Speaker.REMINDER, owner, true)
+    check(mix.gain(.4f) in .087f.. .089f)
+  }
+  scenario("continuous unconfirmed capture cannot mute music or defer reminders indefinitely") {
+    val capture = VoiceAlarmSpeechPolicy.CaptureMute()
+    check(capture.frame(1000L, voice = true, recognizedVoice = false))
+    check(capture.frame(8999L, voice = true, recognizedVoice = false))
+    check(!capture.frame(9000L, voice = true, recognizedVoice = false))
+    check(!capture.frame(17000L, voice = true, recognizedVoice = false))
+    check(!capture.frame(17300L, voice = false, recognizedVoice = false))
+    check(!capture.frame(17950L, voice = false, recognizedVoice = false))
+    check(capture.frame(18000L, voice = true, recognizedVoice = false))
   }
   scenario("reminder and assistant duck music while an idle listening window keeps full gain") {
     val mix = VoiceAlarmMusicState()
@@ -139,9 +153,19 @@ fun main() {
     val muted = VoiceAlarmMusicIntro.Output.TEMPORARILY_MUTED
     check(intro.nextCheckDelay(1000, preparing) == 4000L)
     check(intro.nextCheckDelay(2400, audible) == 5000L)
-    check(intro.nextCheckDelay(4000, muted) == null)
+    check(intro.nextCheckDelay(4000, muted) == 7000L)
     check(intro.nextCheckDelay(6000, audible) == 3400L)
     check(intro.nextCheckDelay(9400, audible) == 0L)
+  }
+  scenario("repeated microphone mutes cannot prevent the initial reminder") {
+    val intro = VoiceAlarmMusicIntro(5000)
+    val audible = VoiceAlarmMusicIntro.Output.AUDIBLE
+    val muted = VoiceAlarmMusicIntro.Output.TEMPORARILY_MUTED
+    check(intro.nextCheckDelay(1000L, audible) == 5000L)
+    check(intro.nextCheckDelay(1200L, muted) == 9800L)
+    check(intro.nextCheckDelay(10500L, audible) == 500L)
+    check(intro.nextCheckDelay(10600L, muted) == 400L)
+    check(intro.nextCheckDelay(11000L, muted) == 0L)
   }
   scenario("music intro preserves remaining time on route changes and skips unavailable music") {
     val audible = VoiceAlarmMusicIntro.Output.AUDIBLE

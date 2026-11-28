@@ -3,6 +3,7 @@ package com.example.quote_app
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 
 /** One quiet retry per alarm separates input/playback trouble from normal idle speech recognition. */
 internal class VoiceAlarmIflytekInputRecovery {
@@ -65,6 +66,36 @@ internal class VoiceAlarmIflytekAudio : ByteArrayOutputStream() {
       else -> 1
     }
     return Packet(status, buf.copyOfRange(offset, offset + count))
+  }
+}
+
+/** An early server final covers a prefix. Open a new stream for the unsent audio. */
+internal object VoiceAlarmIflytekRecovery {
+  data class Result(val text: String, val sentBytes: Int)
+
+  private const val CHUNK_BYTES = 12 * 1000 * VoiceAlarmSpeechPolicy.PCM_BYTES_PER_MS
+  private const val OVERLAP_BYTES = 400 * VoiceAlarmSpeechPolicy.PCM_BYTES_PER_MS
+  private const val MIN_PROGRESS_BYTES = 800 * VoiceAlarmSpeechPolicy.PCM_BYTES_PER_MS
+
+  fun finish(pcm: ByteArray, prefix: Result, transcribe: (ByteArray) -> Result,
+             merge: (String, String) -> String): String {
+    var text = prefix.text
+    var covered = prefix.sentBytes.coerceIn(0, pcm.size)
+    var attempts = 0
+    while (covered < pcm.size && attempts++ < 8) {
+      val overlap = if (text.isBlank()) 0 else OVERLAP_BYTES
+      val start = (covered - overlap).coerceAtLeast(0)
+      val end = minOf(start + CHUNK_BYTES, pcm.size)
+      val result = transcribe(pcm.copyOfRange(start, end))
+      val sentThrough = start + result.sentBytes.coerceIn(0, end - start)
+      if (sentThrough < pcm.size && sentThrough - covered < MIN_PROGRESS_BYTES) {
+        throw IOException("iFlytek ended before making progress on the unsent recording")
+      }
+      text = merge(text, result.text)
+      covered = sentThrough
+    }
+    if (covered < pcm.size) throw IOException("iFlytek retry did not cover all recorded speech")
+    return text
   }
 }
 

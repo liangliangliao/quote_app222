@@ -1154,7 +1154,7 @@ class VoiceAlarmRingingService : Service() {
       playing -> VoiceAlarmMusicIntro.Output.TEMPORARILY_MUTED
       else -> VoiceAlarmMusicIntro.Output.PREPARING
     }
-    val delay = intro.nextCheckDelay(android.os.SystemClock.uptimeMillis(), output) ?: return
+    val delay = intro.nextCheckDelay(android.os.SystemClock.uptimeMillis(), output)
     if (delay > 0L) {
       val nextCheck = if (output == VoiceAlarmMusicIntro.Output.PREPARING && musicPrepared) minOf(100L, delay) else delay
       replayHandler.postDelayed(checkMusicIntro, nextCheck)

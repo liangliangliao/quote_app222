@@ -27,7 +27,7 @@ class VoiceAlarmPlaybackQueue {
 
 /** The foreground service and its activity update this mixer on the main thread. */
 class VoiceAlarmMusicState {
-  enum class Speaker { REMINDER, ASSISTANT, USER, LISTEN_REQUEST, QUIET_CAPTURE, USER_CONTINUATION, STARTUP_LISTEN }
+  enum class Speaker { REMINDER, ASSISTANT, USER, LISTEN_REQUEST, QUIET_CAPTURE, STARTUP_LISTEN }
   private val speakers = mutableMapOf<Speaker, Any>()
   var enabled = true
     private set
@@ -44,7 +44,7 @@ class VoiceAlarmMusicState {
   }
 
   fun gain(volume: Float): Float {
-    if (!enabled || speaking(Speaker.USER) || speaking(Speaker.QUIET_CAPTURE) || speaking(Speaker.USER_CONTINUATION)) return 0f
+    if (!enabled || speaking(Speaker.USER) || speaking(Speaker.QUIET_CAPTURE)) return 0f
     val configured = volume.coerceIn(0f, 1f)
     return if (speaking(Speaker.REMINDER) || speaking(Speaker.ASSISTANT) || speaking(Speaker.STARTUP_LISTEN)) {
       configured * 0.22f
@@ -59,22 +59,24 @@ internal class VoiceAlarmMusicIntro(durationMs: Long) {
   private var remainingMs = durationMs
   private var audibleSince: Long? = null
   private var prepareDeadline: Long? = null
+  private var introDeadline: Long? = null
 
-  // Zero means start the voice. Null means a temporary microphone mute will
-  // notify us through the mixer when music becomes audible again.
-  fun nextCheckDelay(now: Long, output: Output): Long? {
+  // Preserve short pauses in the intro, with a limit on how long capture can delay it.
+  fun nextCheckDelay(now: Long, output: Output): Long {
+    val deadline = introDeadline ?: (now + remainingMs + 5000L).also { introDeadline = it }
     audibleSince?.let { remainingMs -= (now - it).coerceAtLeast(0) }
     audibleSince = now.takeIf { output == Output.AUDIBLE }
-    if (remainingMs <= 0) return 0
+    if (remainingMs <= 0 || now >= deadline) return 0
     if (output != Output.PREPARING) prepareDeadline = null
-    return when (output) {
+    val delay = when (output) {
       Output.AUDIBLE -> remainingMs
-      Output.TEMPORARILY_MUTED -> null
+      Output.TEMPORARILY_MUTED -> deadline - now
       Output.PREPARING -> {
         val deadline = prepareDeadline ?: (now + 4000L).also { prepareDeadline = it }
         (deadline - now).coerceAtLeast(0)
       }
       Output.UNAVAILABLE -> 0
     }
+    return minOf(delay, deadline - now)
   }
 }
