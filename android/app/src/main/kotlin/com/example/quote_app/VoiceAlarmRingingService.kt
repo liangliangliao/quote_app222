@@ -39,6 +39,7 @@ class VoiceAlarmRingingService : Service() {
 
   companion object {
     private val musicState = VoiceAlarmMusicState()
+    private val playbackReference = VoiceAlarmPlaybackReference()
     @Volatile var outputEpoch = 0L
       private set
     @Volatile var spokenOutputEpoch = 0L
@@ -59,11 +60,18 @@ class VoiceAlarmRingingService : Service() {
     fun isMusicIntroPending(): Boolean = service?.musicIntro != null
     fun canPauseReminderForListening(): Boolean = service?.canPauseReminder() == true
     fun pauseReminderForListening(): Boolean = service?.pauseReminder() == true
+    val reminderSpeaking: Boolean get() = musicState.speaking(VoiceAlarmMusicState.Speaker.REMINDER)
     val appReplySpeaking: Boolean get() = musicState.speaking(VoiceAlarmMusicState.Speaker.ASSISTANT)
     private val microphoneInUse: Boolean get() = musicState.speaking(VoiceAlarmMusicState.Speaker.LISTEN_REQUEST) ||
       musicState.speaking(VoiceAlarmMusicState.Speaker.USER)
 
-    fun setSpeaking(speaker: VoiceAlarmMusicState.Speaker, owner: Any, active: Boolean) {
+    fun playbackTextSnapshot(): VoiceAlarmPlaybackReference.Snapshot =
+      playbackReference.snapshot(android.os.SystemClock.elapsedRealtime())
+
+    fun setSpeaking(speaker: VoiceAlarmMusicState.Speaker, owner: Any, active: Boolean, spokenText: String = "") {
+      if (speaker == VoiceAlarmMusicState.Speaker.REMINDER || speaker == VoiceAlarmMusicState.Speaker.ASSISTANT) {
+        playbackReference.update(speaker, owner, spokenText.takeIf { active }, android.os.SystemClock.elapsedRealtime())
+      }
       if (musicState.setSpeaking(speaker, owner, active)) {
         if (speaker == VoiceAlarmMusicState.Speaker.REMINDER || speaker == VoiceAlarmMusicState.Speaker.ASSISTANT) {
           val audible = musicState.speaking(VoiceAlarmMusicState.Speaker.REMINDER) || appReplySpeaking
@@ -638,7 +646,7 @@ class VoiceAlarmRingingService : Service() {
     if (stopping || !alarmSignalPlaybackActive || activePayload == null) return
     if (alarmVoicePlaybackActive) return
     alarmVoicePlaybackActive = true
-    setSpeaking(VoiceAlarmMusicState.Speaker.REMINDER, this, true)
+    setSpeaking(VoiceAlarmMusicState.Speaker.REMINDER, this, true, currentVoiceText)
     wakeSession?.markPlayback("已开始播报")
     liveVoiceText = currentVoiceText
     persistVoicePlaybackState(this, true, currentVoiceText)
@@ -992,7 +1000,7 @@ class VoiceAlarmRingingService : Service() {
     voiceChunkWatchdog?.let { replayHandler.removeCallbacks(it) }
     voiceChunkWatchdog = Runnable { failAlarmChunk(item.id) }
     replayHandler.postDelayed(voiceChunkWatchdog!!, 15_000L + item.text.length * 800L)
-    setSpeaking(VoiceAlarmMusicState.Speaker.REMINDER, this, true)
+    setSpeaking(VoiceAlarmMusicState.Speaker.REMINDER, this, true, currentVoiceText)
     val result = try { alarmTts?.speak(item.text, TextToSpeech.QUEUE_FLUSH, params, item.id) } catch (_: Throwable) { TextToSpeech.ERROR }
     if (result == null || result == TextToSpeech.ERROR) failAlarmChunk(item.id)
   }

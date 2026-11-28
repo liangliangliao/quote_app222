@@ -73,7 +73,7 @@ import java.io.File
 import java.io.DataOutputStream
 
 class VoiceAlarmActivity : Activity() {
-  private val batchChatPipelineVersion = "voice_turn_reliability_v60"
+  private val batchChatPipelineVersion = "voice_turn_reliability_v61"
   private val batchChatPipelineSummary = "持续收音、完整转写、云识别重试与系统识别兜底"
 
   private fun logVoice(event: String, detail: String = "", data: Map<String, Any?> = emptyMap()) {
@@ -96,8 +96,6 @@ class VoiceAlarmActivity : Activity() {
   private var cloudTtsDeadline: Runnable? = null
   private var pendingSpeakRetry: Runnable? = null
   private var lastSpeechWasFinal = false
-  @Volatile private var lastEndedVoiceText = ""
-  @Volatile private var lastPlaybackEndedAt = 0L
   @Volatile private var ttsReady = false
   @Volatile private var currentAppTtsStartedByEngine = false
   private var ttsStartWatchdogRunnable: Runnable? = null
@@ -259,6 +257,7 @@ class VoiceAlarmActivity : Activity() {
   private var lastHandledSpeechNormalized = ""
   private var lastHandledSpeechAt = 0L
   @Volatile private var lastAssistantSpokenText = ""
+  private var assistantReplyText = ""
   @Volatile private var lastAlarmSpokenText = ""
   @Volatile private var appPlaybackStartedAt = 0L
   @Volatile private var strongPlaybackGateUntil = 0L
@@ -301,9 +300,7 @@ class VoiceAlarmActivity : Activity() {
           if (playbackText.isNotBlank()) lastAlarmSpokenText = playbackText
           logVoice("alarm.playback.end", "alarm voice playback end broadcast received", mapOf("text" to logPreview(playbackText)))
           nativeTurn.notePlayback(listOf(playbackText))
-          lastEndedVoiceText = playbackText
           alarmVoicePlaying = false
-          lastPlaybackEndedAt = System.currentTimeMillis()
           alarmPlaybackWatchdogRunnable?.let { speechHandler.removeCallbacks(it) }
           alarmPlaybackWatchdogRunnable = null
           markPostPlaybackHandoff()
@@ -529,9 +526,8 @@ class VoiceAlarmActivity : Activity() {
     batchLastKnownStatus = ""
     lastDraftTextNormalized = ""
     lastAlarmSpokenText = ""
-    lastEndedVoiceText = ""
-    lastPlaybackEndedAt = 0L
     lastAssistantSpokenText = ""
+    assistantReplyText = ""
     lastHandledSpeechNormalized = ""
     lastHandledSpeechAt = 0L
     semanticHoldExtended = false
@@ -799,16 +795,24 @@ class VoiceAlarmActivity : Activity() {
     val status = if (cloudRecovery.useSystem) "系统识别 · $text" else text
     micStatusView?.text = if (micIssue.isEmpty()) status else "$status\n$micIssue"
   }
-  private fun pauseOnStableCue(text: String, capture: VoiceAlarmCapture?, iflytekRealtime: Boolean = false) {
-    if (capture == null || capture.windowId != captureWindowId || waitingForQuiet || aiBusy ||
-        speechBuffer.isNotBlank()) return
-    val sources = currentVoiceSources()
+  private fun pauseOnStableCue(text: String, capture: VoiceAlarmCapture?, iflytekRealtime: Boolean = false): Boolean {
+    if (capture == null || capture.windowId != captureWindowId || waitingForQuiet) return false
+    val playback = VoiceAlarmRingingService.playbackTextSnapshot()
+    if (capture.confirmedWake(text, nowUptime(), playback)) {
+      logVoice("stt.bargeIn.wake", "wake phrase opened a quiet turn during spoken playback",
+        mapOf("pipeline" to batchChatPipelineVersion))
+      startRequestedTurn()
+      return true
+    }
+    if (aiBusy || speechBuffer.isNotBlank()) return false
+    val sources = playback.active
     val system = capture === nativeCapture
     if (sources.isEmpty() || (!speaking && !alarmVoicePlaying && VoiceAlarmRingingService.liveVoiceText == null) ||
-        !capture.confirmedPause(text, nowUptime(), sources, requireDistinctSpeech = system || iflytekRealtime)) return
+        !capture.confirmedPause(text, nowUptime(), sources, requireDistinctSpeech = system || iflytekRealtime)) return false
     if (system && !nativeTurn.awaitingFinal) userSpeaking(true)
     logVoice("stt.bargeIn", "stable candidate pauses spoken playback and keeps the current capture", mapOf("pipeline" to batchChatPipelineVersion))
     interruptPlaybackForUserSpeech(text)
+    return false
   }
 
   private fun micReady() {
@@ -944,7 +948,7 @@ class VoiceAlarmActivity : Activity() {
     val epoch = VoiceAlarmRingingService.outputEpoch
     val output = VoiceAlarmRingingService.outputKind()
     return VoiceAlarmCapture(epoch, output != "quiet", output, captureWindowId, spokenEpoch, recentVoice)
-      .also { it.note(currentVoiceSources()) }
+      .also { it.notePlayback(VoiceAlarmRingingService.playbackTextSnapshot()) }
   }
 
   private fun VoiceAlarmCapture.endpoint(): VoiceAlarmCapture.Evidence {
@@ -962,6 +966,7 @@ class VoiceAlarmActivity : Activity() {
   private var nativeCapture: VoiceAlarmCapture? = null
   private fun nativeEvidence(): VoiceAlarmCapture.Evidence {
     val capture = checkNotNull(nativeCapture)
+    capture.notePlayback(VoiceAlarmRingingService.playbackTextSnapshot())
     capture.note(nativeTurn.playbackSources + currentVoiceSources())
     val spokenEpoch = VoiceAlarmRingingService.spokenOutputEpoch
     val recentVoice = VoiceAlarmRingingService.hasRecentVoiceOutput()
@@ -1319,7 +1324,8 @@ class VoiceAlarmActivity : Activity() {
       sharedCaptureRecord = record
       sharedCapturePump = VoiceAlarmPcmPump({ bytes -> record.read(bytes, 0, bytes.size) }, stamp = {
         VoiceAlarmFrameStamp(captureWindowId, VoiceAlarmRingingService.outputEpoch,
-          VoiceAlarmRingingService.outputKind(), VoiceAlarmRingingService.hasRecentVoiceOutput())
+          VoiceAlarmRingingService.outputKind(), VoiceAlarmRingingService.hasRecentVoiceOutput(),
+          VoiceAlarmRingingService.playbackTextSnapshot())
       })
       sharedCaptureEffects = effects
       sharedCaptureIsPlaybackGuard = playbackGuard
@@ -1462,7 +1468,7 @@ class VoiceAlarmActivity : Activity() {
           listening = false; listeningStartedAt = 0L
           if (text.isNotBlank()) onSpeechChunk(text, finalChunk = true, evidence = evidence,
             reliable = finalText.isNotBlank(), stableDraft = stableDraft, system = true)
-          val echo = evidence.spokenPlayback && VoiceAlarmSpeechPolicy.isEcho(text, evidence.sources, evidence.sources.isNotEmpty())
+          val echo = evidence.isPlaybackEcho(text)
           if (maybeRetryNativeWithoutPlayback(evidence, emptyTurn = false, echo = echo)) return
           listenAgain(80)
         }
@@ -1471,9 +1477,10 @@ class VoiceAlarmActivity : Activity() {
           val text = VoiceAlarmNativeTurn.bestCandidate(partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION))
           if (text.isBlank()) return
           val capture = nativeCapture
+          if (capture?.isPlaybackDraft(text, VoiceAlarmRingingService.playbackTextSnapshot()) == true) return
           if (!nativeTurn.awaitingFinal && VoiceAlarmRingingService.outputKind() != "voice") userSpeaking(true)
           nativeTurn.partial(text, nowUptime())
-          if (!nativeTurn.awaitingFinal) pauseOnStableCue(text, capture)
+          if (!nativeTurn.awaitingFinal && pauseOnStableCue(text, capture)) return
           if (requestedTurn) listenWindow.activity(nowUptime())
           nativeTurn.notePlayback(currentVoiceSources())
           listeningStartedAt = System.currentTimeMillis()
@@ -1770,7 +1777,7 @@ class VoiceAlarmActivity : Activity() {
               }
               turn.failureReason != null || retryFailure -> {
                 if (turn.draft.isNotBlank() && turn.evidence.canRetryAudio && !turn.evidence.spokenPlayback &&
-                    !VoiceAlarmSpeechPolicy.isEcho(turn.draft, turn.evidence.sources, turn.evidence.hasPlaybackOverlap)) {
+                    !turn.evidence.isPlaybackEcho(turn.draft)) {
                   speechForReview = turn.draft
                   transcriptView?.text = "已保留这次听写草稿。可在文字对话中确认：\n${turn.draft}"
                 } else {
@@ -3046,7 +3053,8 @@ class VoiceAlarmActivity : Activity() {
           }
           runOnUiThread {
             if (!streamActive.get() || cloudSttSession != session || destroyed) return@runOnUiThread
-            pauseOnStableCue(text, sources)
+            if (sources.isPlaybackDraft(text, VoiceAlarmRingingService.playbackTextSnapshot()) ||
+                pauseOnStableCue(text, sources)) return@runOnUiThread
             transcriptView?.text = if (isPlaybackActiveForSpeechGate()) {
               "xAI 识别候选：$text\n（播报中，稍后先做回声过滤，再决定是否作为用户语音…）"
             } else {
@@ -3245,7 +3253,8 @@ class VoiceAlarmActivity : Activity() {
           runOnUiThread {
             if (!streamActive.get() || !isCurrentIflytekSession(turns) ||
                 sources.windowId != captureWindowId || waitingForQuiet || aiBusy) return@runOnUiThread
-            pauseOnStableCue(update.text, sources, iflytekRealtime = true)
+            if (sources.isPlaybackDraft(update.text, VoiceAlarmRingingService.playbackTextSnapshot()) ||
+                pauseOnStableCue(update.text, sources, iflytekRealtime = true)) return@runOnUiThread
             if (sources.hasUnmaskedAudio()) transcriptView?.text = "正在听写：${update.text}"
           }
         }
@@ -3338,7 +3347,7 @@ class VoiceAlarmActivity : Activity() {
         allowSpoken = spoken && (allowSpoken || spokenVoiceFrames >= 2)
         val appended = audio.appendCapture(buffer.copyOf(count), spokenOutput = spoken, allowSpoken = allowSpoken)
         if (appended) {
-          sources.noteAcceptedFrame(if (spoken) currentVoiceSources() else emptyList())
+          sources.noteAcceptedFrame()
           if (sources.frameOutput == "music" && !spoken) musicPcmBytes += count
         } else {
           deferredSpokenBytes += count
@@ -4011,7 +4020,8 @@ class VoiceAlarmActivity : Activity() {
   private fun markAppTtsPlaybackStart() {
     logVoice("ai.tts.playback.start", "AI TTS playback state entered")
     // 标记 AI 回复正在（或即将）播报，服务据此暂停提醒语音复读，避免两路语音叠加。
-    VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.ASSISTANT, mixerOwner, true)
+    VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.ASSISTANT, mixerOwner, true,
+      assistantReplyText.ifBlank { lastAssistantSpokenText })
     resetBatchCurrentCaptureForSpeakerPlayback("AI 播报中，说“闹钟助手”可打断。", cooldownMs = 1200L)
     speaking = true
     nativeTurn.notePlayback(listOf(lastAssistantSpokenText))
@@ -4103,8 +4113,6 @@ class VoiceAlarmActivity : Activity() {
   private fun finishAppTtsPlaybackState(utteranceId: String?, restart: Boolean) {
     if (utteranceId != null && utteranceId != currentAppTtsUtteranceId) return
     nativeTurn.notePlayback(listOf(lastAssistantSpokenText))
-    lastEndedVoiceText = lastAssistantSpokenText
-    lastPlaybackEndedAt = System.currentTimeMillis()
     logVoice("ai.tts.playback.finish", "AI TTS playback finished", mapOf("utteranceId" to (utteranceId ?: ""), "restart" to restart))
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.ASSISTANT, mixerOwner, false)
     if (utteranceId == null || utteranceId == currentAppTtsUtteranceId) {
@@ -4141,7 +4149,7 @@ class VoiceAlarmActivity : Activity() {
     invalidateReply()
     localSpeechParts.clear()
     val wasSpeaking = speaking
-    val wasAlarmVoice = alarmVoicePlaying || VoiceAlarmRingingService.liveVoiceText != null
+    val wasAlarmVoice = alarmVoicePlaying || VoiceAlarmRingingService.reminderSpeaking
     val wasAlarmSignal = alarmSignalPlaying
     if (!wasSpeaking && !wasAlarmVoice && !wasAlarmSignal) return
 
@@ -4276,9 +4284,10 @@ class VoiceAlarmActivity : Activity() {
     val decision = VoiceAlarmConversationGate.decide(text, evidence.sources, evidence.mixed, finalChunk,
       reliable, armed = armed, localCommand = local, passive = !armed, overlapConfirmed = overlapConfirmed,
       stableDraft = stableDraft, nearEndSpeech = evidence.nearEndSpeech, spokenPlayback = evidence.spokenPlayback,
-      playbackOverlap = playbackOverlap)
+      playbackOverlap = playbackOverlap, recentPlayback = evidence.recentPlayback)
     logVoice("stt.route", "capture admission", mapOf("route" to decision.route.name, "mixed" to evidence.mixed,
-      "sources" to evidence.sources.size, "mixCause" to evidence.mixCause, "armed" to armed, "quietSpeech" to evidence.quietSpeech,
+      "sources" to evidence.sources.size, "recentPlayback" to evidence.recentPlayback.size,
+      "mixCause" to evidence.mixCause, "armed" to armed, "quietSpeech" to evidence.quietSpeech,
       "nearEndSpeech" to evidence.nearEndSpeech, "spokenPlayback" to evidence.spokenPlayback, "playbackOverlap" to playbackOverlap?.name,
       "retryReason" to decision.retryReason?.name, "chars" to text.length, "final" to finalChunk, "pipeline" to batchChatPipelineVersion))
     batchAwaitingAiCommit = false
@@ -4654,11 +4663,12 @@ class VoiceAlarmActivity : Activity() {
   }
 
   private fun currentVoiceSources(): List<String> = buildList {
-    val reminder = VoiceAlarmRingingService.liveVoiceText ?: lastAlarmSpokenText.takeIf { alarmVoicePlaying }
-    if (!reminder.isNullOrBlank()) add(reminder)
-    if (speaking && lastAssistantSpokenText.isNotBlank()) add(lastAssistantSpokenText)
-    if (System.currentTimeMillis() - lastPlaybackEndedAt in 0..300L && lastEndedVoiceText.isNotBlank()) {
-      add(lastEndedVoiceText)
+    val active = VoiceAlarmRingingService.playbackTextSnapshot().active
+    addAll(active)
+    if (active.isEmpty()) {
+      val reminder = VoiceAlarmRingingService.liveVoiceText ?: lastAlarmSpokenText.takeIf { alarmVoicePlaying }
+      if (!reminder.isNullOrBlank()) add(reminder)
+      if (speaking && lastAssistantSpokenText.isNotBlank()) add(lastAssistantSpokenText)
     }
   }
 
@@ -4851,6 +4861,7 @@ class VoiceAlarmActivity : Activity() {
     VoiceAlarmRingingService.setSpeaking(VoiceAlarmMusicState.Speaker.ASSISTANT, mixerOwner, false)
     val safeText = text.trim()
     if (safeText.isBlank()) { if (restart) listenAgain(120L); return }
+    assistantReplyText = safeText
     lastAssistantSpokenText = safeText
     // 按用户选择的 TTS 服务商用云端合成 AI 回复语音；无可用服务商/凭据或合成失败时回退本地。
     // 关闭/延迟等即时指令确认走本地 TTS（无网络合成延迟，界面很快就会关闭）。

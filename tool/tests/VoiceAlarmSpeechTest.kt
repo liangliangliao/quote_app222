@@ -98,10 +98,68 @@ fun main() {
             final: Boolean = true, reliable: Boolean = true, armed: Boolean = false, passive: Boolean = !armed,
             local: Boolean = false, overlapConfirmed: Boolean = false, stableDraft: Boolean = false,
             nearEndSpeech: Boolean = false, spokenPlayback: Boolean = false,
-            playbackOverlap: VoiceAlarmConversationGate.PlaybackOverlap? = null) =
+            playbackOverlap: VoiceAlarmConversationGate.PlaybackOverlap? = null, recentPlayback: List<String> = emptyList()) =
     VoiceAlarmConversationGate.decide(text, sources, mixed, final, reliable, armed, localCommand = local,
       passive = passive, overlapConfirmed = overlapConfirmed, stableDraft = stableDraft,
-      nearEndSpeech = nearEndSpeech, spokenPlayback = spokenPlayback, playbackOverlap = playbackOverlap)
+      nearEndSpeech = nearEndSpeech, spokenPlayback = spokenPlayback, playbackOverlap = playbackOverlap,
+      recentPlayback = recentPlayback)
+
+  scenario("assistant date replies with multiple transcription errors are echo even in an armed follow-up") {
+    val answer = "美国主要时区现在都是星期六。当地日期是2026年11月28日。"
+    val draft = "美国主要时区现在都是星期六城当地，日期是2026年11月2.18日。"
+    val recent = listOf(answer)
+    check(route(draft, final = false, recentPlayback = recent, armed = true).route == echo)
+    check(route(draft, recentPlayback = recent, armed = true).route == echo)
+    check(route("今天是星期六，二零二六年十一月二十八日", armed = true,
+      recentPlayback = listOf("今天是星期六，2026年11月28日。")).route == echo)
+    check(route("你刚才说的美国主要时区包括夏威夷吗", recentPlayback = recent, armed = true).route == send)
+    check(route("美国主要时区现在都是星期六，当地日期是2026年11月28日吗", recentPlayback = recent,
+      armed = true).route == send)
+  }
+  scenario("a buffered PCM frame keeps its playback reference after the player and tail have ended") {
+    val reference = VoiceAlarmPlaybackReference()
+    val owner = Any()
+    val speaker = VoiceAlarmMusicState.Speaker.ASSISTANT
+    val answer = "今天是星期六，2026年11月28日。"
+    reference.update(speaker, owner, answer, 100)
+    val stamp = VoiceAlarmFrameStamp(1, 3, "voice", playback = reference.snapshot(110))
+    reference.update(speaker, Any(), null, 115)
+    check(reference.snapshot(116).active == listOf(answer))
+    reference.update(speaker, owner, null, 130)
+    val tail = VoiceAlarmFrameStamp(1, 4, "music", playback = reference.snapshot(750))
+    check(tail.playback.active.isEmpty() && tail.playback.recent == listOf(answer))
+    check(reference.snapshot(2000).recent.isEmpty())
+    val delayed = VoiceAlarmCapture(0, false, windowId = 1, acceptedFramesOnly = true)
+    delayed.noteFrame(stamp, stamp)
+    delayed.noteAcceptedFrame()
+    val evidence = delayed.finish(4, false)
+    check(evidence.sources == listOf(answer) && evidence.spokenPlayback && evidence.isPlaybackEcho(answer))
+    val afterPlayback = VoiceAlarmCapture(4, false, windowId = 1, acceptedFramesOnly = true)
+    afterPlayback.noteFrame(tail, tail)
+    afterPlayback.noteAcceptedFrame()
+    val after = afterPlayback.finish(4, false)
+    check(!after.spokenPlayback && after.sources.isEmpty() && after.isPlaybackEcho(answer))
+    check(route(answer, armed = true, recentPlayback = reference.snapshot(2000).recent).route == send)
+  }
+  scenario("wake phrase embedded in a long mixed transcript opens a quiet turn and does not submit text") {
+    val reminder = "早上好，新的一天开始了，愿你平静专注充满力量，先喝一杯水再看看今天的安排。"
+    val sources = listOf(reminder)
+    val candidate = reminder.replace("充满力量", "充满力量闹钟助手")
+    val current = VoiceAlarmPlaybackReference.Snapshot(active = sources)
+    val capture = VoiceAlarmCapture(3, true, "voice", 9)
+    check(!capture.confirmedWake("愿你平静专注", 100, current))
+    check(!capture.confirmedWake(candidate, 200, current))
+    check(capture.confirmedWake(candidate + "然后起床", 400, current))
+    check(route(candidate, sources, mixed = true, spokenPlayback = true, nearEndSpeech = true)
+      .let { it.route == mic && it.text.isEmpty() })
+    check(route(candidate, sources, mixed = true, spokenPlayback = true).route != mic)
+    check(route(candidate, sources, mixed = true, spokenPlayback = true, reliable = false, nearEndSpeech = true).route != mic)
+    val spokenWake = VoiceAlarmPlaybackReference.Snapshot(active = listOf("你可以说闹钟助手，接下来看看安排。"))
+    check(!capture.confirmedWake("闹钟助手", 500, spokenWake))
+    check(!capture.confirmedWake("闹钟助手，接下来看看安排。", 800, spokenWake))
+    check(route("闹钟助手", spokenWake.active, mixed = true, spokenPlayback = true, nearEndSpeech = true).route == echo)
+    check(route("闹钟助手", recentPlayback = spokenWake.active, armed = true).route == echo)
+  }
 
   scenario("both reported system questions go straight to chat over music without RMS or manual confirmation") {
     val music = VoiceAlarmCapture(1, true, "music", 9).finish(2, false)
