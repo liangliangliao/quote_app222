@@ -6,14 +6,75 @@ import java.util.Locale
 /** Acoustic cues are VAD, not speaker identity. Never infer "not a person" from ASR no-match. */
 object VoiceAlarmSpeechPolicy {
   const val FRAME_MS = 20
-  const val FRAME_BYTES = 640 // PCM16, mono, 16 kHz
-  const val FINAL_COMMIT_MS = 300L
+  const val PCM_BYTES_PER_MS = 32 // PCM16, mono, 16 kHz
+  const val FRAME_BYTES = FRAME_MS * PCM_BYTES_PER_MS
   const val CLOUD_TTS_DEADLINE_MS = 5000L
+
+  // A recognizer can finalize a sentence while the person is still thinking.
+  class TranscriptCommit {
+    private var deadline = 0L
+    private var hardDeadline = 0L
+    var manuallySubmitted = false
+      private set
+
+    fun accept(fragment: String, configuredMs: Long, now: Long, manual: Boolean): Long {
+      manuallySubmitted = manual
+      val delay = if (manual) 250L else maxOf(configuredMs, if (normalized(fragment).length <= 6) 6000L else 5000L)
+      deadline = now + delay
+      hardDeadline = deadline + if (manual) 0L else 5000L
+      return delay
+    }
+
+    fun remaining(now: Long) = deadline - now
+
+    fun nextCheckDelay(now: Long, stillTranscribing: Boolean): Long {
+      if (now < deadline) return deadline - now
+      return if (stillTranscribing && now < hardDeadline) minOf(350L, hardDeadline - now) else 0L
+    }
+
+    fun waitThrough(at: Long) {
+      if (!manuallySubmitted) deadline = maxOf(deadline, minOf(at, hardDeadline))
+    }
+
+    fun reset() {
+      deadline = 0L
+      hardDeadline = 0L
+      manuallySubmitted = false
+    }
+  }
+
+  /** Release the music on silence, even while the service is still transcribing. */
+  class CaptureMute {
+    private var deadline: Long? = null
+    private var quietSince: Long? = null
+    private var mayStart = true
+
+    fun frame(now: Long, voice: Boolean, recognizedVoice: Boolean): Boolean {
+      if (voice) {
+        quietSince = null
+        if (mayStart && (deadline == null || recognizedVoice)) deadline = now + 8000L
+        if (deadline?.let { now >= it } == true) {
+          deadline = null
+          mayStart = false
+        }
+      } else {
+        val silence = quietSince ?: now.also { quietSince = it }
+        if (now - silence >= 650L) {
+          deadline = null
+          mayStart = true
+        }
+      }
+      return deadline != null
+    }
+  }
 
   fun isVoice(rms: Int, peak: Int, zcr: Int, crest: Int, voiced: Int, noise: Double): Boolean =
     rms >= maxOf(70.0, noise * 2.2) &&
       peak >= maxOf(180.0, noise * 4.0) &&
       zcr in 5..300 && crest in 165..3000 && voiced >= 25
+
+  fun canMuteMusic(output: String, rms: Int, peak: Int): Boolean =
+    output != "voice" || (rms >= 700 && peak >= 2200)
 
   /** A rolling 240 ms window tolerates unvoiced consonants/brief gaps without losing a quiet onset. */
   class StartWindow {
@@ -28,17 +89,455 @@ object VoiceAlarmSpeechPolicy {
 
   fun normalized(text: String): String = text.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
 
+  private val phraseBoundary = Regex("[，。！？、；：,.!?;:\\s]+")
+  private val changedIntent = Regex("闹钟助手|小名小名|你好ai|ai助手|不是|不对|不要|没有|别|为什么|怎么|如何|谁|哪|多少|几|吗|么|呢|我想问")
+  private val spokenCalendarNumber = Regex("[零〇一二两三四五六七八九十]{1,4}(?=[年月日号])")
+
+  private fun echoForm(text: String): String = spokenCalendarNumber.replace(normalized(text)) { match ->
+    val digits = match.value.replace('〇', '零').replace('两', '二')
+    val numeral = "零一二三四五六七八九"
+    val tens = digits.indexOf('十')
+    if (tens == -1) digits.map { numeral.indexOf(it) }.joinToString("")
+    else if (digits.length <= 3 && tens <= 1 && digits.lastIndex - tens <= 1 && tens == digits.lastIndexOf('十')) {
+      val before = digits.getOrNull(tens - 1)?.let(numeral::indexOf) ?: 1
+      val after = digits.getOrNull(tens + 1)?.let(numeral::indexOf) ?: 0
+      (before * 10 + after).toString()
+    } else match.value
+  }
+
+  // Longer ASR echoes can contain two or three errors, including date digits.
+  private fun hasTranscriptionErrors(spoken: String, candidate: String): Boolean {
+    if (candidate.length !in 14..180 ||
+        changedIntent.findAll(candidate).any { it.value !in spoken }) return false
+    val limit = (candidate.length / 10).coerceIn(2, 4)
+    val head = candidate.take(4)
+    val tail = candidate.takeLast(4)
+    if (head !in spoken && tail !in spoken) return false
+    // The zero-cost first row permits matching a passage within a longer reminder.
+    var previous = IntArray(spoken.length + 1)
+    var current = IntArray(spoken.length + 1)
+    for (index in candidate.indices) {
+      current[0] = index + 1
+      for (column in 1..spoken.length) {
+        current[column] = minOf(current[column - 1] + 1, previous[column] + 1,
+          previous[column - 1] + if (candidate[index] == spoken[column - 1]) 0 else 1)
+      }
+      val old = previous
+      previous = current
+      current = old
+    }
+    return previous.minOrNull()!! <= limit
+  }
+
+  // ASR can drop a short word in the middle of otherwise verbatim Chinese playback.
+  // Require anchors on both sides and never discard novel words from the transcript.
+  private fun hasInternalOmission(spoken: String, candidate: String, partial: Boolean): Boolean {
+    val minLength = if (partial) 4 else 6
+    if (candidate.length < minLength) return false
+    val anchor = candidate.take(2)
+    var start = spoken.indexOf(anchor)
+    while (start >= 0) {
+      var matched = 2
+      while (matched < candidate.length && start + matched < spoken.length &&
+        spoken[start + matched] == candidate[matched]) matched++
+      // Try earlier split points too, in case the omitted word starts with a repeated character.
+      for (split in 2..minOf(matched, candidate.length - 2)) {
+        for (gap in 1..2) {
+          val after = start + split + gap
+          if (after > spoken.length || !spoken.regionMatches(after, candidate, split, candidate.length - split)) continue
+          if (spoken.substring(start + split, after).none { it in "不没别勿甭未莫" }) return true
+        }
+      }
+      start = spoken.indexOf(anchor, start + 1)
+    }
+    return false
+  }
+
+  // One ASR substitution inside a longer audible passage, with exact anchors on both sides.
+  // Preserve question words, quantities and negations that change what the user meant.
+  private fun hasInternalSubstitution(spoken: String, candidate: String): Boolean {
+    if (candidate.length < 8) return false
+    val protected = "不是没别勿几谁怎啥哪吗么多少零一二三四五六七八九十两"
+    var start = spoken.indexOf(candidate.take(2))
+    while (start >= 0 && start + candidate.length <= spoken.length) {
+      var i = 2
+      while (i < candidate.length && spoken[start + i] == candidate[i]) i++
+      if (i in 2..candidate.length - 3 && candidate[i] !in protected && spoken[start + i] !in protected &&
+          spoken.regionMatches(start + i + 1, candidate, i + 1, candidate.length - i - 1)) return true
+      start = spoken.indexOf(candidate.take(2), start + 1)
+    }
+    return false
+  }
+
   // Only near-verbatim playback captured during playback can be echo. Do not delete
   // matching phrases from a user's sentence: "不要关闭闹钟" must retain its negation.
-  fun isEcho(text: String, sources: List<String>, overlapsPlayback: Boolean): Boolean {
+  fun isEcho(text: String, sources: List<String>, overlapsPlayback: Boolean, partial: Boolean = false): Boolean {
     if (!overlapsPlayback) return false
-    val candidate = normalized(text)
-    if (candidate.length < 4) return false
+    val candidate = echoForm(text)
+    if (candidate.length < 2) return false
+    val containsHan = candidate.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
     return sources.any { source ->
-      val spoken = normalized(source)
-      spoken.length >= 4 && (spoken == candidate ||
-        (candidate.length >= 8 && spoken.contains(candidate)))
+      val spoken = echoForm(source)
+      when {
+        spoken == candidate -> true
+        containsHan && hasInternalSubstitution(spoken, candidate) -> true
+        containsHan && hasInternalOmission(spoken, candidate, partial) -> true
+        partial -> spoken.contains(candidate)
+          || (containsHan && hasTranscriptionErrors(spoken, candidate))
+        candidate.length >= 8 || (containsHan && candidate.length >= 4) -> spoken.contains(candidate)
+          || (containsHan && hasTranscriptionErrors(spoken, candidate))
+        containsHan -> source.split(phraseBoundary).any { normalized(it) == candidate }
+        else -> false
+      }
     }
+  }
+}
+
+/** Keeps the text that was audible when the microphone sampled a frame. */
+class VoiceAlarmPlaybackReference {
+  data class Snapshot(val active: List<String> = emptyList(), val recent: List<String> = emptyList())
+  private data class Active(val owner: Any, val text: String)
+  private data class Ended(val text: String, val until: Long)
+  private val active = mutableMapOf<VoiceAlarmMusicState.Speaker, Active>()
+  private val ended = ArrayDeque<Ended>()
+
+  @Synchronized fun update(speaker: VoiceAlarmMusicState.Speaker, owner: Any, text: String?, now: Long) {
+    val previous = active[speaker]
+    if (text == null && previous?.owner !== owner) return
+    if (text != null && (text.isBlank() || previous?.text == text && previous.owner === owner)) return
+    if (previous != null) {
+      ended.addLast(Ended(previous.text, now + 1800L))
+      if (ended.size > 6) ended.removeFirst()
+    }
+    if (text == null) active.remove(speaker) else active[speaker] = Active(owner, text)
+  }
+
+  @Synchronized fun snapshot(now: Long): Snapshot {
+    while (ended.peekFirst()?.until?.let { it <= now } == true) ended.removeFirst()
+    return Snapshot(active.values.map { it.text }, ended.map { it.text }.distinct())
+  }
+}
+
+/** Accept a clean final from an open conversation or a direct question during alarm standby. */
+object VoiceAlarmConversationGate {
+  enum class Route { ECHO, DRAFT, IGNORE, REVIEW, RELISTEN, OPEN_MIC, LOCAL, SEND }
+  enum class PlaybackOverlap { MUSIC, SPOKEN }
+  enum class RetryReason { INCOMPLETE, PLAYBACK_OVERLAP }
+  data class Decision(val route: Route, val text: String, val retryReason: RetryReason? = null)
+  private val interruptPhrases = setOf("打断一下", "请打断一下", "先听我说", "请先听我说", "先暂停播报", "请暂停播报",
+    "暂停播报", "暂停一下", "先等一下", "我来说", "让我说")
+  private val address = Regex("""^(小名小名|闹钟助手|你好AI|AI助手|(?:小名|助手)(?=$|[\s，。！？、：,:.!?]))[\s，。！？、：,:.!?]*""", RegexOption.IGNORE_CASE)
+  // Android recognition often omits question marks. Use grammatical cues, keeping the original transcript.
+  private val questionStart = Regex("^(?:为什么|为何|怎么|怎样|如何|能否|可否|能不能|可不可以|是不是|要不要|有没有).+")
+  private val questionWords = Regex("(?:什么|谁|哪里|哪儿|哪[个位种些天年本条项部]|多少|几[个位种天点分秒次岁条件篇项名本部]|为什么|为何|怎么|怎样|如何|有没有|是不是|在不在|听不听得[见到])")
+  private val reportedSpeech = Regex("^(?:[我你他她您]们?|大家|有人|别人)?(?:已经|早就|也)?(?:不知道|知道|记得|听说|在讨论|问过|告诉过|说过|想知道)")
+  private val indefinite = Regex("^(?:无论|不管|随便).+|.+(?:都可以|都行|都一样|都没关系)$")
+  private val directRequest = Regex("^(?:请问|能帮我|请?(?:帮我|提醒我|告诉我|介绍一下|解释一下|说说|讲讲|查一下|搜一下)).+|^(?:继续说|继续讲|接着说|接着讲|换一个|陪我聊聊|跟我聊聊|我(?:已经|刚)?(?:起床|起来|醒)了)$")
+  private val shortQuestion = Regex("^(?:(?:现在)?几点(?:钟|了)?|(?:今天|明天)?(?:星期几|周几|几号|下雨吗)|今天天气)[啊呀呢]?$")
+  private val wakeWords = listOf("闹钟助手", "小名小名", "你好ai", "ai助手")
+
+  // In a mixed transcript, an explicit wake phrase can only open a quiet turn.
+  fun unspokenWake(text: String, sources: List<String>): String? {
+    if (sources.isEmpty()) return null
+    val normalized = VoiceAlarmSpeechPolicy.normalized(text)
+    val playback = sources.map(VoiceAlarmSpeechPolicy::normalized)
+    return wakeWords.firstOrNull { word -> word in normalized && playback.none { word in it } }
+  }
+
+  private fun isDirectQuestion(text: String): Boolean {
+    val normalized = VoiceAlarmSpeechPolicy.normalized(text)
+    if (normalized.length < 3) return false
+    if (text.endsWith('？') || text.endsWith('?')) return true
+    if (indefinite.matches(normalized)) return false
+    return questionStart.matches(normalized) || normalized.endsWith('吗') ||
+      (!reportedSpeech.containsMatchIn(normalized) && questionWords.containsMatchIn(normalized))
+  }
+
+  fun isInterruption(text: String) = VoiceAlarmSpeechPolicy.normalized(text) in interruptPhrases
+
+  fun withoutAddress(text: String): String =
+    address.find(text)?.let { text.substring(it.range.last + 1).trim() } ?: text
+
+  fun canPauseForSpeech(text: String): Boolean = isInterruption(text) || address.containsMatchIn(text) || looksDirected(text)
+
+  private fun looksDirected(text: String): Boolean {
+    val normalized = VoiceAlarmSpeechPolicy.normalized(text)
+    return shortQuestion.matches(normalized) || isDirectQuestion(text) || directRequest.matches(normalized)
+  }
+
+  private fun specificRequest(text: String, minimumLength: Int = 6): Boolean {
+    val body = withoutAddress(text)
+    val normalized = VoiceAlarmSpeechPolicy.normalized(body)
+    if (shortQuestion.matches(normalized)) return true
+    val addressed = body != text
+    return normalized.length >= (if (addressed) 4 else minimumLength) &&
+      (looksDirected(body) || addressed)
+  }
+
+  // A single misrecognized character changes at most two adjacent pairs. A
+  // question made up of playback words, even with such a typo, is not a barge-in.
+  private fun distinctFromSpoken(text: String, sources: List<String>): Boolean {
+    val playback = sources.map(VoiceAlarmSpeechPolicy::normalized).filter { it.isNotEmpty() }
+    if (playback.isEmpty()) return false
+    val pairs = VoiceAlarmSpeechPolicy.normalized(withoutAddress(text)).windowed(2).toSet()
+    return pairs.count { pair -> playback.none { it.contains(pair) } } >= maxOf(3, pairs.size / 2)
+  }
+
+  fun canPauseWithDistinctSpeech(text: String, sources: List<String>): Boolean {
+    val addressed = withoutAddress(text)
+    return isInterruption(text) || addressed.isEmpty() ||
+      ((specificRequest(text, minimumLength = 5) || VoiceAlarmCommands.isStop(text)) && distinctFromSpoken(text, sources))
+  }
+
+  fun decide(raw: String, sources: List<String>, mixed: Boolean, final: Boolean, reliable: Boolean,
+             armed: Boolean, localCommand: Boolean, passive: Boolean, overlapConfirmed: Boolean = false,
+             stableDraft: Boolean = false, nearEndSpeech: Boolean = false, spokenPlayback: Boolean = false,
+             playbackOverlap: PlaybackOverlap? = null, recentPlayback: List<String> = emptyList()): Decision {
+    val text = raw.trim()
+    val prefix = address.find(text)
+    val question = prefix?.let { text.substring(it.range.last + 1).trim() }
+    val normalized = VoiceAlarmSpeechPolicy.normalized(text)
+    val echoSources = if (recentPlayback.isEmpty()) sources else (sources + recentPlayback).distinct()
+    val embeddedWake = final && reliable && spokenPlayback && (nearEndSpeech || overlapConfirmed) &&
+      unspokenWake(text, echoSources) != null
+    val opensMic = question?.isEmpty() == true || normalized in interruptPhrases
+    val directed = armed || question != null || looksDirected(text) || localCommand || opensMic
+    val matchesRequest = question?.isNotEmpty() == true || looksDirected(text)
+    val corroboratedRequest = nearEndSpeech && reliable && !localCommand && matchesRequest
+    val unverifiedOverlap = (mixed || sources.isNotEmpty()) && !overlapConfirmed && !corroboratedRequest
+    val usableDraft = stableDraft && !unverifiedOverlap && !localCommand && !opensMic && looksDirected(question ?: text)
+    val distinctDirectedSpeech = playbackOverlap == PlaybackOverlap.SPOKEN && distinctFromSpoken(text, sources)
+    val musicOnly = playbackOverlap == PlaybackOverlap.MUSIC && !spokenPlayback && sources.isEmpty()
+    val explicitAlarmStop = musicOnly && reliable && localCommand && VoiceAlarmCommands.isExplicitAlarmStop(text)
+    val completeRequestDuringPlayback = reliable && !opensMic && !localCommand && specificRequest(text) && when (playbackOverlap) {
+      PlaybackOverlap.MUSIC -> musicOnly
+      PlaybackOverlap.SPOKEN -> distinctDirectedSpeech
+      null -> false
+    }
+    val route = when {
+      text.isEmpty() -> Route.DRAFT
+      VoiceAlarmSpeechPolicy.isEcho(text, echoSources, echoSources.isNotEmpty(), partial = !final) -> Route.ECHO
+      !final -> Route.DRAFT
+      embeddedWake -> return Decision(Route.OPEN_MIC, "")
+      explicitAlarmStop -> Route.LOCAL
+      // Only a complete, directed realtime final may cross the playback guard.
+      completeRequestDuringPlayback -> Route.SEND
+      spokenPlayback && !opensMic -> return if (localCommand || question != null ||
+        (matchesRequest && (overlapConfirmed || distinctDirectedSpeech))) {
+        Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP)
+      } else Decision(Route.IGNORE, "")
+      !reliable && !usableDraft -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.INCOMPLETE) else Decision(Route.IGNORE, "")
+      opensMic && sources.any {
+        VoiceAlarmSpeechPolicy.normalized(it).contains(VoiceAlarmSpeechPolicy.normalized(text))
+      } -> Route.ECHO
+      opensMic -> Route.OPEN_MIC
+      unverifiedOverlap && !directed && nearEndSpeech -> Route.REVIEW
+      unverifiedOverlap -> return if (directed) Decision(Route.RELISTEN, "", RetryReason.PLAYBACK_OVERLAP) else Decision(Route.IGNORE, "")
+      localCommand -> Route.LOCAL
+      armed || question != null || (passive && directed) -> Route.SEND
+      else -> Route.IGNORE
+    }
+    return Decision(route, if (route == Route.SEND || route == Route.LOCAL) question ?: text else text)
+  }
+}
+
+data class VoiceAlarmFrameStamp(val windowId: Long, val outputEpoch: Long, val output: String,
+                                val spokenOutput: Boolean = output == "voice",
+                                val playback: VoiceAlarmPlaybackReference.Snapshot = VoiceAlarmPlaybackReference.Snapshot())
+
+/** Immutable at the microphone endpoint. Network delays cannot erase a playback overlap. */
+class VoiceAlarmCapture(private val initialEpoch: Long, initiallyMixed: Boolean,
+                        initialOutput: String = if (initiallyMixed) "active" else "quiet", val windowId: Long = 0L,
+                        private val initialSpokenEpoch: Long? = null, startedDuringSpokenOutput: Boolean = false,
+                        private val acceptedFramesOnly: Boolean = false) {
+  private val sources = linkedSetOf<String>()
+  private val recentSources = linkedSetOf<String>()
+  private var beforePlayback = VoiceAlarmPlaybackReference.Snapshot()
+  private var afterPlayback = VoiceAlarmPlaybackReference.Snapshot()
+  private var mixed = initiallyMixed
+  private var cause = if (initiallyMixed) "start_" + initialOutput else "none"
+  private var spokenPlayback = startedDuringSpokenOutput
+  var frameSpokenOutput = false
+    private set
+  private var sealed = false
+  data class Evidence(
+    val sources: List<String>,
+    val mixed: Boolean,
+    val mixCause: String = if (mixed) "unknown" else "none",
+    val windowId: Long = 0L,
+    val quietSpeech: Boolean = false,
+    val confirmedCue: String = "",
+    val nearEndSpeech: Boolean = false,
+    val spokenPlayback: Boolean = false,
+    val recentPlayback: List<String> = emptyList(),
+  ) {
+    val hasPlaybackOverlap get() = spokenPlayback || mixed || sources.isNotEmpty()
+    val playbackOverlap get() = when {
+      spokenPlayback -> VoiceAlarmConversationGate.PlaybackOverlap.SPOKEN
+      sources.isEmpty() && mixCause in setOf("start_music", "frame_music", "end_music") ->
+        VoiceAlarmConversationGate.PlaybackOverlap.MUSIC
+      else -> null
+    }
+    fun belongsTo(activeWindow: Long) = activeWindow != 0L && windowId == activeWindow
+    fun matchesConfirmedCue(text: String) =
+      confirmedCue.isNotEmpty() && VoiceAlarmSpeechPolicy.normalized(text).startsWith(confirmedCue)
+    fun isPlaybackEcho(text: String) =
+      VoiceAlarmSpeechPolicy.isEcho(text, sources + recentPlayback, hasPlaybackOverlap || recentPlayback.isNotEmpty())
+    val canRetryAudio get() = !spokenPlayback && (quietSpeech || nearEndSpeech || !hasPlaybackOverlap)
+    // Audio merged across conversation windows is neither from the active window nor from standby.
+    fun merge(other: Evidence) = Evidence((sources + other.sources).distinct(), mixed || other.mixed,
+      if (mixed) mixCause else other.mixCause, if (windowId == other.windowId) windowId else -1L,
+      quietSpeech = quietSpeech && other.quietSpeech, spokenPlayback = spokenPlayback || other.spokenPlayback,
+      recentPlayback = (recentPlayback + other.recentPlayback).distinct())
+  }
+  private var pendingCue = ""
+  private var cueAt = 0L
+  private var confirmedCue = ""
+  private var pendingWake: String? = null
+  private var wakeSeenAt = 0L
+  private var quietVoiceMs = 0L
+  private var quietSpeech = false
+  private var lastQuietLevelAt: Long? = null
+  private val nearEndWindow = VoiceAlarmSpeechPolicy.StartWindow()
+  private var playbackFloor = 160.0
+  private var playbackFrames = 0
+  private var lastPlaybackKind = ""
+  private var nearEndSpeech = false
+  var frameOutput = initialOutput
+    private set
+
+  @Synchronized fun confirmedWake(text: String, now: Long, current: VoiceAlarmPlaybackReference.Snapshot): Boolean {
+    if (sealed || current.active.isEmpty()) return false
+    val reference = (sources + recentSources + current.active + current.recent).distinct()
+    val wake = VoiceAlarmConversationGate.unspokenWake(text, reference)
+    if (wake == null || VoiceAlarmSpeechPolicy.isEcho(text, reference, true, partial = true)) {
+      pendingWake = null
+      return false
+    }
+    if (pendingWake != wake) {
+      pendingWake = wake
+      wakeSeenAt = now
+    }
+    val standalone = VoiceAlarmSpeechPolicy.normalized(text) == wake
+    return (standalone && nearEndSpeech) || now - wakeSeenAt >= 180L
+  }
+
+  // A stable, directed partial may pause spoken playback while the same turn keeps recording.
+  @Synchronized fun confirmedPause(text: String, now: Long, currentSources: List<String>, requireDistinctSpeech: Boolean = false): Boolean {
+    val cue = VoiceAlarmSpeechPolicy.normalized(text)
+    val allSources = (sources + currentSources).toList()
+    val directed = if (requireDistinctSpeech) VoiceAlarmConversationGate.canPauseWithDistinctSpeech(text, allSources)
+      else VoiceAlarmConversationGate.canPauseForSpeech(text)
+    if (sealed || confirmedCue.isNotEmpty() || allSources.isEmpty() || cue.length < 3 || !directed ||
+        VoiceAlarmSpeechPolicy.isEcho(text, allSources, true, partial = true)) {
+      pendingCue = ""
+      return false
+    }
+    if (pendingCue.isEmpty() || !cue.startsWith(pendingCue)) {
+      pendingCue = cue
+      cueAt = now
+      return false
+    }
+    if (now - cueAt < 180L) return false
+    sources.addAll(currentSources.filter { it.isNotBlank() })
+    confirmedCue = pendingCue
+    return true
+  }
+  @Synchronized fun noteFrame(before: VoiceAlarmFrameStamp, after: VoiceAlarmFrameStamp) {
+    if (sealed) return
+    frameSpokenOutput = before.spokenOutput || after.spokenOutput
+    beforePlayback = before.playback
+    afterPlayback = after.playback
+    if (!acceptedFramesOnly) retainFramePlayback()
+    val changed = before.outputEpoch != after.outputEpoch
+    frameOutput = when {
+      before.output != "quiet" -> before.output
+      changed -> "tail"
+      else -> after.output
+    }
+    if (!acceptedFramesOnly && !mixed && frameOutput != "quiet") {
+      mixed = true
+      cause = if (changed && before.output == "quiet" && after.output == "quiet") "frame_output_changed" else "frame_" + frameOutput
+    }
+  }
+
+  // A discarded speaker frame must not contaminate a later cloud result.
+  @Synchronized fun noteAcceptedFrame(texts: List<String> = emptyList()) {
+    if (sealed) return
+    retainFramePlayback()
+    if (!mixed && frameOutput != "quiet") {
+      mixed = true
+      cause = "frame_" + frameOutput
+    }
+    if (frameSpokenOutput) {
+      spokenPlayback = true
+      sources.addAll(texts.filter { it.isNotBlank() })
+    }
+  }
+
+  private fun retainFramePlayback() {
+    recentSources.addAll(beforePlayback.recent)
+    recentSources.addAll(afterPlayback.recent)
+    if (frameSpokenOutput) {
+      sources.addAll(beforePlayback.active)
+      sources.addAll(afterPlayback.active)
+    }
+  }
+  @Synchronized fun notePcmVoice(voice: Boolean, bytes: Int, rms: Int = 0, peak: Int = 0) {
+    if (sealed) return
+    if (!acceptedFramesOnly && voice && frameSpokenOutput) spokenPlayback = true
+    recordQuietVoice(voice && frameOutput == "quiet", bytes.toLong() / VoiceAlarmSpeechPolicy.PCM_BYTES_PER_MS)
+    if (nearEndSpeech) return
+    if (frameOutput != lastPlaybackKind) {
+      playbackFrames = 0
+      playbackFloor = 160.0
+      nearEndWindow.reset()
+      lastPlaybackKind = frameOutput
+    }
+    if (frameOutput != "voice" && frameOutput != "music") return
+    val strong = playbackFrames >= 8 && voice &&
+      rms >= maxOf(700.0, playbackFloor * 2.6) && peak >= maxOf(2200.0, playbackFloor * 6.0)
+    if (!strong) playbackFloor = playbackFloor * 0.94 + rms * 0.06
+    playbackFrames++
+    nearEndSpeech = nearEndWindow.accept(strong)
+  }
+  @Synchronized fun noteNativeLevel(voice: Boolean, output: String, now: Long) {
+    if (sealed) return
+    val previous = lastQuietLevelAt
+    val quiet = voice && output == "quiet"
+    lastQuietLevelAt = now.takeIf { quiet }
+    if (!quiet || previous == null || now - previous !in 1L..160L) recordQuietVoice(false, 0)
+    else recordQuietVoice(true, now - previous)
+  }
+  private fun recordQuietVoice(voice: Boolean, durationMs: Long) {
+    if (quietSpeech) return
+    quietVoiceMs = if (voice) quietVoiceMs + durationMs else 0
+    quietSpeech = quietVoiceMs >= 60L
+  }
+  @Synchronized fun note(texts: List<String>) { if (!sealed) sources.addAll(texts.filter { it.isNotBlank() }) }
+  @Synchronized fun notePlayback(snapshot: VoiceAlarmPlaybackReference.Snapshot) {
+    if (sealed) return
+    sources.addAll(snapshot.active)
+    recentSources.addAll(snapshot.recent)
+  }
+  @Synchronized fun isPlaybackDraft(text: String, current: VoiceAlarmPlaybackReference.Snapshot): Boolean {
+    val references = (sources + recentSources + current.active + current.recent).distinct()
+    return VoiceAlarmSpeechPolicy.isEcho(text, references, references.isNotEmpty(), partial = true)
+  }
+  @Synchronized fun hasUnmaskedAudio() = quietSpeech || (!spokenPlayback && !mixed && sources.isEmpty())
+  @Synchronized fun hasNearEndSpeech() = nearEndSpeech
+  @Synchronized fun finish(epoch: Long, audible: Boolean, output: String = if (audible) "active" else "quiet",
+                           spokenEpoch: Long? = null, recentSpokenOutput: Boolean = false): Evidence {
+    if (!sealed) {
+      if (!acceptedFramesOnly) {
+        if (!mixed) cause = when { audible -> "end_" + output; epoch != initialEpoch -> "output_changed"; else -> "none" }
+        mixed = mixed || epoch != initialEpoch || audible
+        spokenPlayback = spokenPlayback || recentSpokenOutput || (initialSpokenEpoch != null && spokenEpoch != initialSpokenEpoch)
+      }
+      sealed = true
+    }
+    return Evidence(sources.toList(), mixed, cause, windowId, quietSpeech, confirmedCue, nearEndSpeech, spokenPlayback,
+      recentSources.toList())
   }
 }
 

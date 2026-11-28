@@ -67,8 +67,16 @@
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
-    <!-- Allow url_launcher to resolve external browser handlers for https links. -->
+    <!-- Resolve external links, user-selected launcher apps, and platform media services. -->
     <queries>
+        <package android:name="com.openai.chatgpt" />
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
         <!-- Allow detecting the Health Connect provider package on Android 11+. -->
         <package android:name="com.google.android.apps.healthdata" />
         <intent>

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../data/kv_dao.dart';
@@ -14,6 +15,7 @@ import '../voice_lab/voice_lab_dao.dart';
 import '../voice_lab/voice_lab_models.dart';
 import '../services/unified_ai_service.dart';
 import '../services/global_ai_settings.dart';
+import 'wakeup_history_page.dart';
 
 class VoiceAlarmPage extends StatefulWidget {
   const VoiceAlarmPage({super.key});
@@ -61,9 +63,10 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   final _aiSettings = GlobalAiSettings();
   static const _native = MethodChannel('com.example.quote_app/voice_alarm');
   TimeOfDay _time = TimeOfDay.now();
-  String _provider = 'microsoft';
-  String _sttProvider = 'microsoft';
+  String _provider = 'native';
+  String _sttProvider = 'native';
   String _sttMode = 'realtime';
+  String get _effectiveSttMode => _sttProvider == 'native' ? 'realtime' : _sttMode;
   bool _batchAutoSubmit = true;
   double _batchAutoSubmitSilenceMs = 1200;
   double _batchMaxRecordMs = 60000;
@@ -88,10 +91,12 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   Set<int> _weekdays = {1, 2, 3, 4, 5, 6, 7};
   double _voiceVolume = 1.0;
   double _musicVolume = 0.4;
+  int _musicIntroSeconds = 5;
   double _stability = 0.55;
   double _styleStrength = 0.25;
   double _pitch = 0;
   int _replayIntervalSeconds = 60;
+  String? _historyReplayDate;
   bool _resembleHd = true;
   List<Map<String, String>> _savedVoices = [];
   List<VoiceProfile> _voiceProfiles = [];
@@ -105,6 +110,9 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   List<Map<String, dynamic>> _scheduledAlarms = <Map<String, dynamic>>[];
   bool _showAdvanced = false;
   bool _aiWakeupEnabled = false;
+  bool _aiWebSearchEnabled = true;
+  bool _adaptiveWakeupEnabled = true;
+  final _azureSearchDeployment = TextEditingController();
   bool _testingWakeup = false;
   bool _hasWakeupDeviceToken = false;
   bool _hasWakeupServiceToken = false;
@@ -215,6 +223,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
 
   @override
   void dispose() {
+    _azureSearchDeployment.dispose();
     _text.dispose();
     _voiceId.dispose();
     _wakeupUrl.dispose();
@@ -269,11 +278,15 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     setState(() {
       _voiceProfiles = profiles;
       _aiWakeupEnabled = data['aiWakeupEnabled'] == true;
+      _aiWebSearchEnabled = data['aiWebSearchEnabled'] != false;
+      _adaptiveWakeupEnabled = data['adaptiveWakeupEnabled'] as bool? ?? mode != 'night';
+      _azureSearchDeployment.text = (data['azureSearchDeployment'] ?? '').toString();
       _generatedVoice = data['voicePath']?.toString();
       _text.text = (data['text'] ?? (mode == 'morning' ? _morningDefault : _nightDefault)).toString();
-      _provider = (data['provider'] ?? 'microsoft').toString();
-      final loadedSttProvider = (data['sttProvider'] ?? 'microsoft').toString();
-      _sttProvider = ['microsoft', 'iflytek', 'xai'].contains(loadedSttProvider) ? loadedSttProvider : 'microsoft';
+      final loadedProvider = (data['provider'] ?? 'native').toString();
+      _provider = ['microsoft', 'iflytek', 'elevenlabs', 'resemble', 'minimax'].contains(loadedProvider) ? loadedProvider : 'native';
+      final loadedSttProvider = (data['sttProvider'] ?? 'native').toString();
+      _sttProvider = ['microsoft', 'iflytek', 'xai'].contains(loadedSttProvider) ? loadedSttProvider : 'native';
       final loadedSttMode = (data['sttMode'] ?? 'realtime').toString();
       _sttMode = ['realtime', 'batch'].contains(loadedSttMode) ? loadedSttMode : 'realtime';
       final batchStt = data['batchStt'] is Map ? Map<String, dynamic>.from(data['batchStt'] as Map) : <String, dynamic>{};
@@ -291,10 +304,14 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       _weekdays = (data['weekdays'] is List ? (data['weekdays'] as List).map((e) => (e as num).toInt()).toSet() : {1, 2, 3, 4, 5, 6, 7});
       _voiceVolume = ((data['voiceVolume'] as num?)?.toDouble() ?? 1).clamp(0.0, 1.0);
       _musicVolume = ((data['musicVolume'] as num?)?.toDouble() ?? 0.4).clamp(0.0, 1.0);
+      _musicIntroSeconds = ((data['musicIntroSeconds'] as num?)?.toInt() ?? 5)
+          .clamp(0, 60).toInt();
       _stability = (data['stability'] as num?)?.toDouble() ?? 0.55;
       _styleStrength = (data['styleStrength'] as num?)?.toDouble() ?? 0.25;
       _pitch = (data['pitch'] as num?)?.toDouble() ?? 0;
       _replayIntervalSeconds = (data['replayIntervalSeconds'] as num?)?.toInt() ?? 60;
+      final replayDate = data['historyReplayDate'];
+      _historyReplayDate = replayDate is String && replayDate.isNotEmpty ? replayDate : null;
       final endpointing = data['voiceEndpointing'] is Map ? Map<String, dynamic>.from(data['voiceEndpointing'] as Map) : <String, dynamic>{};
       _speechPreset = ['fast', 'balanced', 'complete', 'long'].contains((endpointing['preset'] ?? 'balanced').toString()) ? (endpointing['preset'] ?? 'balanced').toString() : 'balanced';
       _speechCompleteSilenceMs = (endpointing['completeSilenceMs'] as num?)?.toDouble() ?? 1400;
@@ -406,14 +423,42 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   }
 
   Future<void> _pickBackground() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: true);
-    final paths = result?.files.map((file) => file.path).whereType<String>().where((path) => path.isNotEmpty).toList() ?? const <String>[];
-    if (paths.isEmpty || !mounted) return;
-    setState(() {
-      _backgroundImages = <String>{..._backgroundImages, ...paths}.toList();
-      _backgroundImage = (_backgroundImages.isEmpty ? null : _backgroundImages.first);
-    });
-    await _persistDraftConfig();
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'heic', 'heif', 'gif', 'mp4', 'm4v', 'webm', '3gp', 'mov', 'mkv'],
+      allowMultiple: true,
+    );
+    if (result == null || !mounted) return;
+    final paths = <String>[];
+    final mode = _mode;
+    final support = await getApplicationSupportDirectory();
+    final backgrounds = await Directory('${support.path}/voice_alarm_backgrounds').create(recursive: true);
+    var failed = 0;
+    for (final file in result.files) {
+      final source = file.path;
+      if (source == null || source.isEmpty) {
+        failed++;
+        continue;
+      }
+      final target = await backgrounds.createTemp('media_');
+      try {
+        final name = file.name.split(RegExp(r'[/\\]')).last;
+        final copy = await File(source).copy('${target.path}/$name');
+        paths.add(copy.path);
+      } on FileSystemException {
+        await target.delete(recursive: true);
+        failed++;
+      }
+    }
+    if (!mounted || mode != _mode) return;
+    if (paths.isNotEmpty) {
+      setState(() {
+        _backgroundImages = [..._backgroundImages, ...paths];
+        _backgroundImage = _backgroundImages.first;
+      });
+      await _persistDraftConfig();
+    }
+    if (failed > 0 && mounted) _toast('有 $failed 个背景文件未能导入');
   }
 
   Future<void> _persistDraftConfig() async {
@@ -449,6 +494,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
           : await _aiSettings.getVoiceAlarmMorningAssistantPrompt();
       _alarmAiConfig = <String, dynamic>{
         'provider': cfg.provider,
+        'searchDeployment': _azureSearchDeployment.text.trim(),
         // Azure 的请求体要下发部署名，而 cfg.model 是设置页展示用的“资源名/部署名”。
         'model': cfg.deployment,
         'displayModel': cfg.displayModel,
@@ -616,7 +662,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     // 长句不等到 maxRecord 才提交；但不要切得太碎，否则短片段更容易被服务商识别成残句。
     final segmentMax = maxRecord < 30000 ? maxRecord : 30000;
     return {
-      'mode': _sttMode,
+      'mode': _effectiveSttMode,
       'autoSubmit': _batchAutoSubmit,
       'autoSubmitSilenceMs': silence,
       'manualSubmit': true,
@@ -629,7 +675,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
 
   Future<void> _schedule() async {
     if (_saving || _loading) return;
-    if (_text.text.trim().isEmpty) {
+    if (_historyReplayDate == null && _text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
       return;
     }
@@ -668,17 +714,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       }
       if (!await _ensureVoiceInteractionReady()) return;
       await _refreshAlarmAiConfig();
-      try {
-        _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-        if (_selectedSavedVoicePath == null && _generatedVoice != null) await _rememberGeneratedVoice(_generatedVoice!);
-      } catch (e) {
-        // Voice file generation depends on third-party TTS credentials/network.
-        // Do not let that prevent the native alarm from being registered; the
-        // ringing service can read the alarm text with platform TTS as fallback.
-        _generatedVoice = null;
-        _toast('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟：$e');
-      }
-      final text = _text.text.trim();
+      await _prepareAlarmVoice('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟');
+      final text = _alarmText;
       final when = _nextTime();
       // 用“模式+时间”作为闹钟 id（不再追加时间戳），这样对同一时间点重复保存会“更新”而不是
       // 不断新增重复闹钟；不同时间自然是不同闹钟。
@@ -689,7 +726,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         'payload': payload,
       });
       await _kv.setString('voice_alarm.time', when.toIso8601String());
-      await _kv.setString('voice_alarm.text', _text.text.trim());
+      await _kv.setString('voice_alarm.text', text);
       await _kv.setString('voice_alarm.provider', _provider);
       await _kv.setString('voice_alarm.voice_file', _generatedVoice ?? '');
       await _kv.setString('voice_alarm.music_file', _customMusic ?? '');
@@ -798,7 +835,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   // （沿用每个闹钟各自的时间与重复规则，只更新语音、音乐、音量等设置）。
   Future<void> _saveSettings() async {
     if (_saving || _loading) return;
-    if (_text.text.trim().isEmpty) {
+    if (_historyReplayDate == null && _text.text.trim().isEmpty) {
       _toast('请输入闹钟朗读内容');
       return;
     }
@@ -813,13 +850,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         if (!exactGranted || !mounted) return;
       }
       await _refreshAlarmAiConfig();
-      try {
-        _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-        if (_selectedSavedVoicePath == null && _generatedVoice != null) await _rememberGeneratedVoice(_generatedVoice!);
-      } catch (e) {
-        _generatedVoice = null;
-        _toast('语音文件生成失败，将用系统兜底播报：$e');
-      }
+      await _prepareAlarmVoice('语音文件生成失败，将用系统兜底播报');
       await _persistDraftConfig();
       final targets = _scheduledAlarms.where((a) => (a['mode'] ?? 'morning').toString() == _mode).toList();
       final savedTime = _time;
@@ -869,6 +900,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   }
 
   Future<String> _generateVoiceFile() async {
+    if (_provider == 'native' || _adaptiveWakeupEnabled) return '';
     final text = _text.text.trim();
     if (_provider == 'microsoft') {
       return _tts.synthesizeMicrosoftToFile(
@@ -878,6 +910,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
         pitch: _pitch,
         pauseSeconds: _pauseSeconds,
         style: _emotion == 'none' ? '' : _emotion,
+        requestBudget: const Duration(seconds: 5),
       );
     }
     if (_provider == 'resemble') {
@@ -970,16 +1003,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     try {
       if (!await _ensureVoiceInteractionReady()) return;
       await _refreshAlarmAiConfig();
-      try {
-        _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
-        if (_selectedSavedVoicePath == null && _generatedVoice != null) await _rememberGeneratedVoice(_generatedVoice!);
-      } catch (e) {
-        // Voice file generation depends on third-party TTS credentials/network.
-        // Do not let that prevent the native alarm from being registered; the
-        // ringing service can read the alarm text with platform TTS as fallback.
-        _generatedVoice = null;
-        _toast('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟：$e');
-      }
+      await _prepareAlarmVoice('语音文件生成失败，将使用系统语音兜底播报并继续保存闹钟');
       await _native.invokeMethod<void>('testRing', {'payload': _payload()});
     } catch (e) {
       _toast('测试失败：$e');
@@ -992,14 +1016,41 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     return jsonEncode(_payloadMap(alarmId: alarmId));
   }
 
+  Future<void> _prepareAlarmVoice(String failureMessage) async {
+    if (_historyReplayDate != null) return;
+    final microsoft = _alarmTtsConfig['microsoft'] as Map<String, dynamic>?;
+    if (_provider == 'microsoft' &&
+        _selectedSavedVoicePath == null &&
+        (microsoft?['apiKey'] as String? ?? '').trim().isEmpty) {
+      _generatedVoice = null;
+      return;
+    }
+    try {
+      _generatedVoice = _selectedSavedVoicePath ?? await _generateVoiceFile();
+      if (_selectedSavedVoicePath == null && _generatedVoice?.isNotEmpty == true) {
+        await _rememberGeneratedVoice(_generatedVoice!);
+      }
+    } catch (e) {
+      _generatedVoice = null;
+      _toast(_provider == 'microsoft' ? failureMessage : '$failureMessage：$e');
+    }
+  }
+
+  String get _alarmText {
+    final text = _text.text.trim();
+    if (text.isNotEmpty || _historyReplayDate == null) return text;
+    return _mode == 'morning' ? _morningDefault : _nightDefault;
+  }
+
   Map<String, dynamic> _payloadMap({String? alarmId}) {
+    final voicePath = _historyReplayDate == null ? _generatedVoice : _selectedSavedVoicePath;
     return {
-      'text': _text.text.trim(),
+      'text': _alarmText,
       'provider': _provider,
       'sttProvider': _sttProvider,
-      'sttMode': _sttMode,
+      'sttMode': _effectiveSttMode,
       'batchStt': _batchSttMap(),
-      'voicePath': _generatedVoice ?? '',
+      'voicePath': _provider == 'native' ? '' : (voicePath ?? ''),
       'alarmId': alarmId ?? '',
       'musicPath': (_customMusics.isEmpty ? null : _customMusics.first) ?? _customMusic ?? '',
       'musicPaths': _customMusics,
@@ -1020,13 +1071,18 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
       'weekdays': _effectiveWeekdays().toList()..sort(),
       // Credentials live only in the Android Keystore-backed connection store.
       'aiWakeupEnabled': _aiWakeupEnabled,
+      'aiWebSearchEnabled': _aiWebSearchEnabled,
+      'adaptiveWakeupEnabled': _adaptiveWakeupEnabled,
+      'azureSearchDeployment': _azureSearchDeployment.text.trim(),
       'voiceVolume': _voiceVolume,
       'musicVolume': _musicVolume,
+      'musicIntroSeconds': _musicIntroSeconds,
       'stability': _stability,
       'styleStrength': _styleStrength,
       'pitch': _pitch,
       'resembleHd': _resembleHd,
       'replayIntervalSeconds': _replayIntervalSeconds,
+      'historyReplayDate': _historyReplayDate ?? '',
       'aiConfig': _alarmAiConfig,
       'aiSystemPrompt': _alarmAiSystemPrompt,
       'sttConfig': _alarmSttConfig,
@@ -1076,12 +1132,29 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
     }
   }
 
+  Future<void> _openWakeupHistory() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const WakeupHistoryPage(channel: _native)),
+    );
+  }
+
+  Future<void> _chooseHistoryReplayDate() async {
+    final date = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(builder: (_) => WakeupHistoryPage(
+        channel: _native,
+        chooseReplayDate: true,
+        initialDate: _historyReplayDate,
+      )),
+    );
+    if (mounted && date != null) setState(() => _historyReplayDate = date);
+  }
+
   Widget _wakeupConnectionCard() => Card(
     child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
         title: const Text('使用 AI Wakeup 云端提醒'),
-        subtitle: const Text('关闭时完全使用原闹钟模式。开启后到点读取今日正式提醒并用系统语音播报；连接失败使用原闹钟内容。保存设置后同步到当前模式的已有闹钟。'),
+        subtitle: const Text('当天已同步的定时任务优先从本机读取，每轮播报一条。可在「同步历史」里点「同步今天」刷新。任务播完后由 AI 结合任务生成新的提醒。'),
         value: _aiWakeupEnabled,
         onChanged: _saving ? null : (value) => setState(() => _aiWakeupEnabled = value),
       ),
@@ -1127,7 +1200,17 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('语音闹钟')),
+      appBar: AppBar(
+        title: const Text('语音闹钟'),
+        actions: [
+          TextButton.icon(
+            onPressed: _openWakeupHistory,
+            icon: const Icon(Icons.history),
+            label: const Text('同步历史'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: AbsorbPointer(
         absorbing: _saving,
         child: _loading
@@ -1232,7 +1315,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   value: _provider,
                   decoration: const InputDecoration(labelText: '文字转语音服务商', border: OutlineInputBorder()),
                   items: const [
-                    DropdownMenuItem(value: 'microsoft', child: Text('Microsoft Azure Speech（默认）')),
+                    DropdownMenuItem(value: 'native', child: Text('系统默认语音（无需服务商）')),
+                    DropdownMenuItem(value: 'microsoft', child: Text('Microsoft Azure Speech')),
                     DropdownMenuItem(value: 'elevenlabs', child: Text('ElevenLabs')),
                     DropdownMenuItem(value: 'resemble', child: Text('Resemble AI')),
                     DropdownMenuItem(value: 'minimax', child: Text('MiniMax')),
@@ -1240,7 +1324,8 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                   ],
                   onChanged: (value) {
                     setState(() {
-                      _provider = value ?? 'microsoft';
+                      _provider = value ?? 'native';
+                      _generatedVoice = null;
                       final recommendations = _recommendedVoices(_provider, _mode);
                       _voiceId.text = recommendations.isEmpty ? '' : recommendations.first['id'] ?? '';
                       _selectedSavedVoicePath = null;
@@ -1251,17 +1336,19 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 const SizedBox(height: 8),
                 const Text('服务商参数复用“设置 → 语音与美好的祝福配置”。支持 Microsoft、ElevenLabs、Resemble、MiniMax 与讯飞语音预生成闹钟语音。', style: TextStyle(color: Colors.black54)),
                 const SizedBox(height: 12),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'microsoft', label: Text('微软识别'), icon: Icon(Icons.cloud_outlined)),
-                    ButtonSegment(value: 'iflytek', label: Text('讯飞识别'), icon: Icon(Icons.record_voice_over_outlined)),
-                    ButtonSegment(value: 'xai', label: Text('xAI 识别'), icon: Icon(Icons.auto_awesome_outlined)),
+                DropdownButtonFormField<String>(
+                  value: _sttProvider,
+                  decoration: const InputDecoration(labelText: '语音识别服务', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'native', child: Text('系统默认识别（无需服务商）')),
+                    DropdownMenuItem(value: 'microsoft', child: Text('Microsoft Speech')),
+                    DropdownMenuItem(value: 'iflytek', child: Text('讯飞识别')),
+                    DropdownMenuItem(value: 'xai', child: Text('xAI 识别')),
                   ],
-                  selected: {_sttProvider},
-                  onSelectionChanged: (value) => setState(() => _sttProvider = value.first),
+                  onChanged: (value) => setState(() => _sttProvider = value ?? 'native'),
                 ),
                 const SizedBox(height: 8),
-                SegmentedButton<String>(
+                if (_sttProvider != 'native') SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'realtime', label: Text('实时识别'), icon: Icon(Icons.graphic_eq_outlined)),
                     ButtonSegment(value: 'batch', label: Text('非实时录音识别'), icon: Icon(Icons.upload_file_outlined)),
@@ -1271,13 +1358,15 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _sttMode == 'batch'
+                  _sttProvider == 'native'
+                      ? '使用手机系统的实时中文识别。重新聆听时会暂时静音背景音乐。设备需要可用的中文系统识别。'
+                      : _sttMode == 'batch'
                       ? '非实时模式采用自动待命的聊天输入框逻辑：无需手动开启录音，空闲时自动监听；确认你开始说话后才保存本轮 utterance，说完静音或手动发送后只上传这一条完整录音。'
                       : '实时模式会持续收音并边识别边显示候选文本；xAI 使用 WebSocket 流式 STT，讯飞支持动态修正，微软使用短句连续识别。',
                   style: const TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                if (_sttProvider != 'native') Text(
                   _sttProvider == 'iflytek'
                       ? '讯飞实时模式支持动态修正；非实时模式会录完整段后走 IAT 引擎，并使用 eos 后端点参数避免服务端在自然停顿处提前结束。'
                       : _sttProvider == 'xai'
@@ -1293,7 +1382,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     label: Text(_showAdvanced ? '收起自动提交/句段微调' : '自动提交与句段微调（高级，可选）'),
                   ),
                 ),
-                if (_showAdvanced && _sttMode == 'batch') ...[
+                if (_showAdvanced && _effectiveSttMode == 'batch') ...[
                   const SizedBox(height: 12),
                   Card(
                     color: Colors.amber.withOpacity(0.08),
@@ -1312,7 +1401,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                         Slider(value: _batchAutoSubmitSilenceMs, min: 1000, max: 15000, divisions: 28, onChanged: (value) => setState(() => _batchAutoSubmitSilenceMs = value)),
                         Text('兜底最长录音 ${(_batchMaxRecordMs / 1000).round()} 秒'),
                         Slider(value: _batchMaxRecordMs, min: 10000, max: 180000, divisions: 34, onChanged: (value) => setState(() => _batchMaxRecordMs = value)),
-                        const Text('严格单轮：不再滚动转写、不再后台排队、不再多段合并。用户说话前只保留很短预录音，确认开口后才建立本轮音频；说完静音后自动提交。', style: TextStyle(color: Colors.black54)),
+                        const Text('录音先转成文字。短暂停顿后继续说，前后转写会合并后提交给 AI。', style: TextStyle(color: Colors.black54)),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('返回最佳结果并自动纠错'),
@@ -1327,7 +1416,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                     ),
                   ),
                 ],
-                if (_showAdvanced && _sttMode == 'realtime') ...[
+                if (_showAdvanced && _effectiveSttMode == 'realtime') ...[
                 const SizedBox(height: 12),
                 Card(
                   color: Colors.blueGrey.withOpacity(0.06),
@@ -1372,7 +1461,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                       Text('单段最长等待 ${(_speechMaxUtteranceMs / 1000).round()} 秒'),
                       Slider(value: _speechMaxUtteranceMs, min: 8000, max: 60000, divisions: 52, onChanged: (value) => setState(() => _speechMaxUtteranceMs = value)),
                       const Text('极短噪声过滤：1～2 个无意义语气词会被忽略，正常短句不会被字数拦截。', style: TextStyle(color: Colors.black54)),
-                      const Text('调大“自动提交静音 / 文本稳定等待 / AI提交等待”可减少碎片提交；调小则响应更快。实时模式会自动提交，不要求用户点击确认。', style: TextStyle(color: Colors.black54)),
+                      const Text('转写后留至少 5 秒给你继续说，6 字以内至少等 6 秒。可以调长「AI 提交等待」。关闭闹钟等明确指令会立即处理。', style: TextStyle(color: Colors.black54)),
                     ]),
                   ),
                 ),
@@ -1496,9 +1585,29 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                       ),
                     )),
               ListTile(
+                title: Text(_musicIntroSeconds == 0
+                    ? '背景音乐前奏已关闭'
+                    : '背景音乐前奏 $_musicIntroSeconds 秒'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Slider(
+                      value: _musicIntroSeconds.toDouble(),
+                      min: 0,
+                      max: 60,
+                      divisions: 60,
+                      label: '$_musicIntroSeconds 秒',
+                      semanticFormatterCallback: (value) => '${value.round()} 秒',
+                      onChanged: (value) => setState(() => _musicIntroSeconds = value.round()),
+                    ),
+                    const Text('到点先播放背景音乐，前奏结束后开始朗读。设为 0 秒可立即朗读。'),
+                  ],
+                ),
+              ),
+              ListTile(
                 leading: const Icon(Icons.image_outlined),
-                title: const Text('全屏闹钟背景图片（多选，响铃时随机轮播）'),
-                subtitle: Text(_backgroundImages.isEmpty ? '未选择，使用默认渐变背景' : '已选择 ${_backgroundImages.length} 张：${_backgroundImages.first.split('/').last}'),
+                title: const Text('全屏闹钟背景'),
+                subtitle: Text(_backgroundImages.isEmpty ? '可多选图片、GIF 和视频。视频静音循环' : '已选择 ${_backgroundImages.length} 个文件，响铃时随机选用一个'),
                 trailing: const Icon(Icons.add),
                 onTap: _pickBackground,
               ),
@@ -1508,7 +1617,7 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                       contentPadding: const EdgeInsets.only(left: 56, right: 16),
                       title: Text(path.split('/').last, overflow: TextOverflow.ellipsis),
                       trailing: IconButton(
-                        tooltip: '删除背景图片',
+                        tooltip: '移除背景文件',
                         icon: const Icon(Icons.delete_outline),
                         onPressed: () async {
                           setState(() {
@@ -1519,9 +1628,48 @@ class _VoiceAlarmPageState extends State<VoiceAlarmPage> {
                         },
                       ),
                     )),
+              SwitchListTile(
+                title: const Text('语音 AI 联网搜索'),
+                subtitle: const Text('按需查询实时资料并显示来源。支持 Azure／Microsoft Foundry、官方 OpenAI、xAI 和 OpenRouter；实际能力取决于部署。沿用全局 AI 配置；服务商可能收取搜索费用。保存后同步当前模式的已有闹钟。'),
+                value: _aiWebSearchEnabled,
+                onChanged: (value) => setState(() => _aiWebSearchEnabled = value),
+              ),
+              TextField(
+                controller: _azureSearchDeployment,
+                decoration: const InputDecoration(
+                  labelText: 'Azure 搜索部署名（可选）',
+                  helperText: '其他模型不支持搜索时，填写同一资源内支持 web_search 的 GPT 部署；搜索结果再交给当前模型回答。',
+                  helperMaxLines: 3,
+                ),
+              ),
+              SwitchListTile(
+                title: const Text('逐轮调整起床提醒'),
+                subtitle: const Text('固定朗读＋近期目标/待办＋本轮提醒。同步任务可用时逐条播报原文，暂无任务时沿用 AI 起床提醒策略。未关闭按规则推定未起床；关闭即停止。最多读取3条近期未完成目标或待办，随本轮上下文交给已配置的 AI。动态提醒使用系统语音。'),
+                value: _adaptiveWakeupEnabled,
+                onChanged: (value) => setState(() => _adaptiveWakeupEnabled = value),
+              ),
+              const ListTile(
+                title: Text('支持说“关闭背景音乐”或“播放背景音乐”'),
+                subtitle: Text('播报时可直接插话，也可点击全屏页的“打断播报，我来说”。识别失败的录音可重试。'),
+              ),
               ListTile(
                 title: Text('闹钟语音重播间隔 $_replayIntervalSeconds 秒'),
                 subtitle: Slider(value: _replayIntervalSeconds.toDouble(), min: 15, max: 300, divisions: 19, onChanged: (value) => setState(() => _replayIntervalSeconds = value.round())),
+              ),
+              ListTile(
+                leading: const Icon(Icons.event_note_outlined),
+                title: const Text('闹钟语音重播内容'),
+                subtitle: Text(_historyReplayDate == null
+                    ? '使用原闹钟朗读设置 · 点击可选本机历史任务'
+                    : '$_historyReplayDate（北京时间）\n每轮读一项本机任务，全部播完后停止语音重播'),
+                onTap: _chooseHistoryReplayDate,
+                trailing: _historyReplayDate == null
+                    ? const Icon(Icons.chevron_right)
+                    : IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: '清除日期，恢复原闹钟朗读',
+                        onPressed: () => setState(() => _historyReplayDate = null),
+                      ),
               ),
               ListTile(
                 title: Text('语音音量 ${(_voiceVolume * 100).round()}%'),

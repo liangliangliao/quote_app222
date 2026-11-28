@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -313,6 +314,7 @@ class MultiProviderTtsService {
     double volume = 1,
     double pauseSeconds = 0,
     String style = '',
+    Duration? requestBudget,
   }) async {
     final key = (apiKey ?? await _kvDao.getString(VoiceProviderSettings.microsoftApiKey) ?? '').trim();
     final location = (region ?? await _kvDao.getString(VoiceProviderSettings.microsoftRegion) ?? VoiceProviderSettings.defaultMicrosoftRegion).trim();
@@ -333,22 +335,38 @@ class MultiProviderTtsService {
     final styled = style.trim().isEmpty ? prosody : '<mstts:express-as style="${const HtmlEscape().convert(style.trim())}">$prosody</mstts:express-as>';
     String buildSsml(String content) =>
         '<speak version="1.0" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="$locale"><voice name="$selectedVoice">$content</voice></speak>';
-    Future<http.Response> send(Uri target, String body) => http.post(target, headers: {
-      'Ocp-Apim-Subscription-Key': key,
-      'Content-Type': 'application/ssml+xml',
-      'X-Microsoft-OutputFormat': format,
-      'User-Agent': 'quote_app',
-    }, body: body).timeout(const Duration(seconds: 90));
-    var response = await send(uri, buildSsml(styled));
-    if ((response.statusCode < 200 || response.statusCode >= 300) && style.trim().isNotEmpty) {
-      response = await send(uri, buildSsml(prosody));
+    final client = http.Client();
+    final elapsed = Stopwatch()..start();
+    Future<http.Response> send(Uri target, String body) {
+      final timeout = requestBudget == null
+          ? const Duration(seconds: 90)
+          : requestBudget - elapsed.elapsed;
+      if (timeout <= Duration.zero) throw TimeoutException('Microsoft TTS 请求超时');
+      return client.post(target, headers: {
+        'Ocp-Apim-Subscription-Key': key,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': format,
+        'User-Agent': 'quote_app',
+      }, body: body).timeout(timeout);
     }
-    final regionalUri = Uri.parse(microsoftTtsEndpoint(location, ''));
-    if (response.statusCode >= 200 &&
-        response.statusCode < 300 &&
-        response.bodyBytes.isEmpty &&
-        uri != regionalUri) {
-      response = await send(regionalUri, buildSsml(prosody));
+    late http.Response response;
+    try {
+      response = await send(uri, buildSsml(styled));
+      final retryWithoutStyle = requestBudget == null
+          ? (response.statusCode < 200 || response.statusCode >= 300)
+          : response.statusCode == 400;
+      if (retryWithoutStyle && style.trim().isNotEmpty) {
+        response = await send(uri, buildSsml(prosody));
+      }
+      final regionalUri = Uri.parse(microsoftTtsEndpoint(location, ''));
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          response.bodyBytes.isEmpty &&
+          uri != regionalUri) {
+        response = await send(regionalUri, buildSsml(prosody));
+      }
+    } finally {
+      client.close();
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('Microsoft TTS 失败：HTTP ${response.statusCode} ${response.body}');

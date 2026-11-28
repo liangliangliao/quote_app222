@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'conscious_change_dao.dart';
 import 'conscious_change_import_parser.dart';
+import 'interactive_image/interactive_image_home_page.dart';
 import 'remote_ebook_download_page.dart';
 
 enum _CcLibraryMode { courses, books }
@@ -79,6 +80,36 @@ class ConsciousChangeHomePage extends StatelessWidget {
               ),
             ),
           ),
+            const SizedBox(height: 12),
+            Card(
+              margin: EdgeInsets.zero,
+              color: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              child: ListTile(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                leading: const Icon(Icons.touch_app_outlined, color: Color(0xFF4F46E5)),
+                title: const Text(
+                  'AI 智能图片交互',
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: Color(0xFF111827)),
+                ),
+                subtitle: const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text('上传图片 · 识别区域 · 设置触摸反馈', style: TextStyle(color: Color(0xFF6B7280), fontSize: 13.5)),
+                ),
+                trailing: const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF)),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => InteractiveImageHomePage(
+                    learningPage: (_) => const ConsciousChangeLearningPage(),
+                    booksPage: (_) => const RemoteEbookDownloadPage(),
+                  ),
+                )),
+              ),
+            ),
           ],
         ),
       ),
